@@ -1,4 +1,4 @@
-module units {
+module microtome.units {
   enum LengthUnit { MILLIMETER, CENTIMETER, INCH }
 
   export function lengthUnitToAbbrev(unit: LengthUnit): String {
