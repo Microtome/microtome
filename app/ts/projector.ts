@@ -1,4 +1,6 @@
 
+/// Setup projector display page and handle resize.
+
 var canvas: HTMLCanvasElement = <HTMLCanvasElement>document.querySelector('#slice');
 
 var resizeHandler = function(){
