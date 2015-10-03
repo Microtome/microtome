@@ -21,6 +21,7 @@
     "page": true,
     "app": true,
     "chrome": true,
-    "Q": true
+    "Q": true,
+    "THREE": true
   }
 }
