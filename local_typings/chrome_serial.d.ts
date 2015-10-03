@@ -7,9 +7,9 @@ declare module chrome.serial {
   interface ConnectionOptions {
     persistent?: boolean;
     name?: String;
-    // Should be int
+    /** Size of buffer in bytes, integer */
     bufferSize?: number;
-    // Should be int
+    /** Bit rate, integer */
     bitRate?: number;
     /**
       "seven"
@@ -27,10 +27,11 @@ declare module chrome.serial {
       "two"
     */
     stopBits?: string;
+    /** Use CTS Flow control? */
     ctsFlowControl?: boolean;
-    // Milliseconds, should be int
+    /** Milliseconds, should be int */
     receiveTimeout?: number;
-    // Milliseconds, should be int
+    /** Milliseconds, should be int */
     sendTimeout?: number;
   }
 
