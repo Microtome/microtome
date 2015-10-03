@@ -34,11 +34,11 @@ module microtome.three_d {
     constructor(public scene: THREE.Scene, public sliceThickness: number, public maxZ: number = 0.0, public recalcZ: boolean = true) {
       this.scene.children.forEach((child) => {
         if (child instanceof PrintVolume) {
-          // print("Got children!");
+          // print('Got children!');
           this._printVolume = child;
         }
-        if (child.name == "PrintObjects") {
-          // print("Got print objects!");
+        if (child.name === 'PrintObjects') {
+          // print('Got print objects!');
           this._printObjectsContainer = child;
           // window.console.log(_printObjectsContainer);
         }
@@ -48,11 +48,13 @@ module microtome.three_d {
     }
 
     _recalcZ() {
-      if (this.maxZ == 0.0 || this.recalcZ) {
+      if (this.maxZ === 0.0 || this.recalcZ) {
         var z: number = 0.0;
         this.printObjects.forEach((o3d: THREE.Mesh) => {
           var o3dz = o3d.geometry.boundingBox.max.z;
-          if (o3dz > z) z = o3dz;
+          if (o3dz > z) {
+            z = o3dz;
+          }
         });
         this.maxZ = z;
       }
@@ -93,14 +95,14 @@ module microtome.three_d {
     // _handleKeyboardEventDown(KeyboardEvent kbe) {
     //   KeyEvent ke = new KeyEvent.wrap(kbe);
     //   // ke.repeat currently stupidly unimplemented...
-    //   if (ke.shiftKey && (ke.keyCode == KeyCode.UP || ke.keyCode == KeyCode.DOWN)) {
-    //     if (!kbe.repeat && _zoomActiveKeyCode == null) {
-    //       //print("Zoom START");
+    //   if (ke.shiftKey && (ke.keyCode ===KeyCode.UP || ke.keyCode ===KeyCode.DOWN)) {
+    //     if (!kbe.repeat && _zoomActiveKeyCode ===null) {
+    //       //print('Zoom START');
     //       _zoomActiveKeyCode = ke.keyCode;
     //       _zoomStartTime = kbe.timeStamp;
     //     }
     //     var sign = -1.0;
-    //     if (ke.keyCode == KeyCode.DOWN) {
+    //     if (ke.keyCode ===KeyCode.DOWN) {
     //       sign = 1.0;
     //     }
     //     var t = (kbe.timeStamp - _zoomStartTime) / 1000.0 + 0.25;
@@ -109,20 +111,20 @@ module microtome.three_d {
     //     //      var zoomDistance = sign * _currZoomSpeed * t;
     //     //      var zoomDelta = zoomDistance - _zoomTotalDistance;
     //     //      _zoomTotalDistance = zoomDistance;
-    //     //print("${kbe.repeat} ${t}: zooming ${zoomDelta} total ${_zoomTotalDistance}");
+    //     //print('${kbe.repeat} ${t}: zooming ${zoomDelta} total ${_zoomTotalDistance}');
     //     sliceZ -= sign * sliceThickness;
     //     if (sliceZ < 0.0) sliceZ = 0.0;
     //     if (sliceZ > maxZ - sliceThickness) sliceZ = maxZ;
     //     _slicer.sliceAt(sliceZ);
-    //     print("SLICE: ${minZ} ${sliceZ} ${maxZ}");
+    //     print('SLICE: ${minZ} ${sliceZ} ${maxZ}');
     //   }
     // }
     //
     // _handleKeyboardEventUp(KeyboardEvent kbe) {
     //   KeyEvent ke = new KeyEvent.wrap(kbe);
     //   //window.console.log(kbe);
-    //   if (ke.shiftKey && (ke.keyCode == _zoomActiveKeyCode)) {
-    //     //print("Zoom Stop");
+    //   if (ke.shiftKey && (ke.keyCode ===_zoomActiveKeyCode)) {
+    //     //print('Zoom Stop');
     //     _zoomActiveKeyCode = null;
     //     _currZoomSpeed = 0.0;
     //     _zoomStartTime = 0;

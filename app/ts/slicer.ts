@@ -19,11 +19,11 @@ module microtome.slicer {
 
     // 3D
     _sliceMaterialUniforms = {
-      "cutoff": { type: 'f', value: 0.0 },
-      "epsilon": { type: 'f', value: 0.0 },
-      "dTex": { type: 't', value: <THREE.WebGLRenderTarget>null },
-      "viewWidth": { type: 'i', value: 0.0 },
-      "viewHeight": { type: 'i', value: 0.0 }
+      'cutoff': { type: 'f', value: 0.0 },
+      'epsilon': { type: 'f', value: 0.0 },
+      'dTex': { type: 't', value: <THREE.WebGLRenderTarget>null },
+      'viewWidth': { type: 'i', value: 0.0 },
+      'viewHeight': { type: 'i', value: 0.0 }
     };
     _depthTexRenderTarget: THREE.WebGLRenderTarget = null;
     // List<Object3D> printObjects = [];
@@ -32,7 +32,7 @@ module microtome.slicer {
     _slicingParamsDirty: boolean = true;
     _slicerMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
 
-    constructor(public scene: THREE.Scene, public renderer: THREE.WebGLRenderer, public printVolumeBB: THREE.Box3, public printObjects: [THREE.Object3D] = THREE.Object3D[0],
+    constructor(public scene: THREE.Scene, public renderer: THREE.WebGLRenderer, public printVolumeBB: THREE.Box3, public printObjects: THREE.Object3D[] = [],
       public targetZ: number = 100, public sliceEpsilon: number = 0.012) {
       this._oCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this._slicerMaterial.uniforms = this._sliceMaterialUniforms;
@@ -46,8 +46,8 @@ module microtome.slicer {
     sliceAt(z: number) {
       //var zPad = FAR_Z_PADDING / targetZ;
       var sliceZ = (z + FAR_Z_PADDING) / (FAR_Z_PADDING + this.targetZ);
-      window.console.log("Slicing at ${z}");
-      this._sliceMaterialUniforms["cutoff"].value = sliceZ;
+      window.console.log('Slicing at ${z}');
+      this._sliceMaterialUniforms['cutoff'].value = sliceZ;
       var width = this.renderer.domElement.width;
       var height = this.renderer.domElement.height;
 
@@ -56,8 +56,8 @@ module microtome.slicer {
         this._slicingParamsDirty = false;
       }
 
-      if (this._depthTexRenderTarget == null ||
-        (width != this._depthTexRenderTarget.width || height != this._depthTexRenderTarget.height)) {
+      if (this._depthTexRenderTarget === null ||
+        (width !== this._depthTexRenderTarget.width || height !== this._depthTexRenderTarget.height)) {
         this._depthTexRenderTarget.dispose();
 
         this._depthTexRenderTarget = new THREE.WebGLRenderTarget(width, height,
@@ -79,15 +79,15 @@ module microtome.slicer {
       this.renderer.setClearColor(new THREE.Color(0x000000), 1.0);
 
       this.scene.overrideMaterial = this._slicerMaterial;
-      this._sliceMaterialUniforms["dTex"].value = this._depthTexRenderTarget;
-      this._sliceMaterialUniforms["viewWidth"].value = width;
-      this._sliceMaterialUniforms["viewHeight"].value = height;
+      this._sliceMaterialUniforms['dTex'].value = this._depthTexRenderTarget;
+      this._sliceMaterialUniforms['viewWidth'].value = width;
+      this._sliceMaterialUniforms['viewHeight'].value = height;
       this.renderer.render(this.scene, this._oCamera);
 
     }
 
     clear() {
-      var context = (this.renderer.domElement as HTMLCanvasElement).getContext("2D") as CanvasRenderingContext2D;
+      var context = this.renderer.domElement.getContext('2d')
       context.fillStyle = 'rgba(0,0,0,1)';
       context.clearRect(0, 0, this.renderer.domElement.width, this.renderer.domElement.height);
     }
@@ -119,7 +119,7 @@ module microtome.slicer {
       // we draw in the colors and textures we don't get ambiguity
       this._oCamera.far = FAR_Z_PADDING + this.targetZ;
       this._oCamera.lookAt(new THREE.Vector3(0, 0, 0));
-      this._sliceMaterialUniforms["epsilon"].value = this.sliceEpsilon;
+      this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
 
       var widthRatio: number = Math.abs(this.printVolumeBB.max.x - this.printVolumeBB.min.x) / newWidth;
       var heightRatio: number = Math.abs(this.printVolumeBB.max.y - this.printVolumeBB.min.y) / newHeight;
@@ -132,13 +132,13 @@ module microtome.slicer {
     }
 
     // dispose() {
-      // Only deallocates material entirely if this is last used instance.
-      // microtomeSharedRenderer.withRenderer((renderer) {
-      //   renderer.deallocateMaterial(_materials.sliceMaterial);
-      //   renderer.deallocateMaterial(_materials.depthMaterial);
-      //   if (_depthTexRenderTarget != null) renderer.deallocateRenderTarget(_depthTexRenderTarget);
-      //   _depthTexRenderTarget = null;
-      // });
+    // Only deallocates material entirely if this is last used instance.
+    // microtomeSharedRenderer.withRenderer((renderer) {
+    //   renderer.deallocateMaterial(_materials.sliceMaterial);
+    //   renderer.deallocateMaterial(_materials.depthMaterial);
+    //   if (_depthTexRenderTarget !== null) renderer.deallocateRenderTarget(_depthTexRenderTarget);
+    //   _depthTexRenderTarget = null;
+    // });
     // }
   }
 

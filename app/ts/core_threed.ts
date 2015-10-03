@@ -1,16 +1,9 @@
 module microtome.three_d {
 
-  // part "camera_nav.dart";
-  // part "slicer_camera_nav.dart";
-  // part "print_volume.dart";
-  // part "shared_renderer.dart";
-
-  /// promote material reuse in a context
-  /// A new material factory should be created and used
-  /// for each webgl renderer or binding errors may occur
-  ///
-  /// Properly encoding 32 bit float in rgba from here:
-  /// http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
+  /**
+    * Properly encoding 32 bit float in rgba from here:
+    * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
+    */
   export class CoreMaterialsFactory {
     static _basicVertex = `
 void main(void) {
@@ -123,7 +116,7 @@ void main(void) {
   export class CameraNav {
     _sceneDomElement: HTMLElement;
     _camera: THREE.Camera;
-    //   final Logger log = new Logger("camera_nav");
+    //   final Logger log = new Logger('camera_nav');
     //
     /// Camera nav enabled?
     _enabled: boolean;
@@ -210,17 +203,16 @@ void main(void) {
       if (!this.enabled) return;
       if (this.target instanceof THREE.Vector3 || this._camera instanceof THREE.OrthographicCamera) {
         this.lookAtTarget();
-      }
-      else if (this._target instanceof THREE.Mesh) {
+      } else if (this._target instanceof THREE.Mesh) {
         // TODO, with orthographic camera we could 'zoom in'
         // by recalculating scene bounds but we have no handle
-        // to scene...
-        var mesh = this._target as THREE.Mesh
-        if (mesh.geometry.boundingBox == null) {
+        /** to scene... */
+        var mesh = <THREE.Mesh>this._target;
+        if (mesh.geometry.boundingBox === null) {
           mesh.geometry.computeBoundingBox();
         }
-        var pCamera = this._camera as THREE.PerspectiveCamera;
-        var bb = (this._target as THREE.Mesh).geometry.boundingBox.clone();
+        var pCamera = <THREE.PerspectiveCamera>this._camera;
+        var bb = mesh.geometry.boundingBox.clone();
         var min = bb.min;
         var max = bb.max;
         var len = Math.abs(max.x - min.x);
@@ -379,10 +371,10 @@ void main(void) {
 
     _targetPosition(): THREE.Vector3 {
       if (this._target instanceof THREE.Vector3) {
-        return (this._target as THREE.Vector3);
+        return <THREE.Vector3>this._target;
       }
       if (this._target instanceof THREE.Mesh) {
-        return (this._target as THREE.Mesh).position;
+        return (<THREE.Mesh>this._target).position;
       }
       return new THREE.Vector3(0, 0, 0);
     }
@@ -393,12 +385,12 @@ void main(void) {
     //   if (kbe.shiftKey &&
     //     (kbe.keyCode == KeyCode.UP || kbe.keyCode == KeyCode.DOWN)) {
     //     if (!kbe.repeat && this._zoomActiveKeyCode == null) {
-    //       //print("Zoom START");
+    //       //print('Zoom START');
     //       this._zoomActiveKeyCode = kbe.kbeyCode;
     //       this._zoomStartTime = kbe.timeStamp;
     //     }
     //     var sign = 1.0;
-    //     if (kbe.keyCode == "") {
+    //     if (kbe.keyCode == '') {
     //       sign = -1.0;
     //     }
     //     var t = (kbe.timeStamp - this._zoomStartTime) / 1000.0 + 0.25;
@@ -407,7 +399,7 @@ void main(void) {
     //     var zoomDistance = sign * this._currZoomSpeed * t;
     //     var zoomDelta = zoomDistance - this._zoomTotalDistance;
     //     this._zoomTotalDistance = zoomDistance;
-    //     //print("${kbe.repeat} ${t}: zooming ${zoomDelta} total ${this._zoomTotalDistance}");
+    //     //print('${kbe.repeat} ${t}: zooming ${zoomDelta} total ${this._zoomTotalDistance}');
     //     this.zoomToTarget(zoomDelta);
     //   }
     // }
@@ -415,7 +407,7 @@ void main(void) {
     // handleKeyboardEventUp(kbe: KeyboardEvent) {
     //   //window.console.log(kbe);
     //   if (ke.shiftKey && (ke.keyCode == _zoomActiveKeyCode)) {
-    //     //print("Zoom Stop");
+    //     //print('Zoom Stop');
     //     this._zoomActiveKeyCode = null;
     //     this._currZoomSpeed = 0.0;
     //     this._zoomStartTime = 0;
@@ -449,19 +441,19 @@ void main(void) {
 
   /// All dimensions are in mm
   export class PrintVolume extends THREE.Object3D {
-    _width:number = 100.0;
-    _depth:number = 100.0;
-    _height:number = 100.0;
+    _width: number = 100.0;
+    _depth: number = 100.0;
+    _height: number = 100.0;
 
-    constructor(width:number, depth:number, height:number) {
+    constructor(width: number, depth: number, height: number) {
       super();
       this._width = width;
       this._height = height;
       this._depth = depth;
-      var planeGeom:THREE.PlaneGeometry  = new THREE.PlaneGeometry(1.0, 1.0);
+      var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
 
       var planeMaterial = CoreMaterialsFactory.whiteMaterial.clone();
-      planeMaterial.side=THREE.DoubleSide;
+      planeMaterial.side = THREE.DoubleSide;
 
       var plane = new THREE.Mesh(planeGeom, planeMaterial);
       this.add(plane);
@@ -475,10 +467,10 @@ void main(void) {
       var xlineGeometry = new THREE.Geometry();
       xlineGeometry.vertices = xlinesPts;
       var xLines1 = new THREE.Line(xlineGeometry.clone(),
-          CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
       this.add(xLines1);
       var xLines2 = new THREE.Line(xlineGeometry.clone(),
-          CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
       xLines2.position.set(0.0, 0.0, 1.0);
       this.add(xLines2);
 
@@ -491,10 +483,10 @@ void main(void) {
       var ylineGeometry = new THREE.Geometry();
       ylineGeometry.vertices = ylinesPts;
       var yLines1 = new THREE.Line(ylineGeometry.clone(),
-          CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
       this.add(yLines1);
       var yLines2 = new THREE.Line(ylineGeometry.clone(),
-          CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
       yLines2.position.set(0.0, 0.0, 1.0);
       this.add(yLines2);
 
@@ -507,26 +499,26 @@ void main(void) {
       var zlineGeometry = new THREE.Geometry();
       zlineGeometry.vertices = zlinesPts;
       var zLines1 = new THREE.Line(zlineGeometry.clone(),
-          CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
       this.add(zLines1);
       var zLines2 = new THREE.Line(zlineGeometry.clone(),
-          CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
+        CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
       zLines2.position.set(0.0, -1.0, 0.0);
       this.add(zLines2);
       this.scale.set(this._width, this._depth, this._height);
     }
 
-    resize(width:number, depth:number, height:number) {
+    resize(width: number, depth: number, height: number) {
       this.scale.set(width, depth, height);
     }
 
     /// Hides the printer volume including all its component parts
-    set visible(visible:boolean) {
+    set visible(visible: boolean) {
       visible = visible;
       this.children.forEach((child) => child.visible = visible);
     }
 
-    get boundingBox():THREE.Box3  {
+    get boundingBox(): THREE.Box3 {
       /// TODO Cache better
       var halfWidth = this._width / 2.0;
       var halfDepth = this._depth / 2.0;
