@@ -87,8 +87,8 @@ gulp.task('typescript', function() {
     .pipe(sourcemaps.init())
     .pipe(ts(tsProject))
     .js
-    .pipe(sourcemaps.write())
-    .pipe(gulp.dest('app/scripts'));
+    .pipe(sourcemaps.write('.'))
+    .pipe(gulp.dest('app/scripts/gen'));
 });
 
 // Optimize Images
@@ -216,7 +216,7 @@ gulp.task('precache', function(callback) {
 });
 
 // Clean Output Directory
-gulp.task('clean', del.bind(null, ['.tmp', 'dist']));
+gulp.task('clean', del.bind(null, ['.tmp', 'dist', 'app/scripts/gen']));
 
 // Watch Files For Changes & Reload
 gulp.task('serve', ['styles', 'elements', 'images', 'typescript'], function() {
