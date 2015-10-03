@@ -8,7 +8,7 @@
   "manifest_version": 2,
   "app": {
     "background": {
-      "scripts": ["scripts/background.js"]
+      "scripts": ["scripts/gen/background.js"]
     }
   },
 
