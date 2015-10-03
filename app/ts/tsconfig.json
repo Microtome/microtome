@@ -4,7 +4,8 @@
         "removeComments": true,
         "preserveConstEnums": true,
         "outDir": "./../scripts/gen",
-        "sourceMap": true
+        "sourceMap": true,
+        "newLine": "LF"
     },
     "filesGlob": [
         "./../../typings/**/*.ts",
@@ -29,6 +30,7 @@
         "./projector.ts",
         "./serial-support.ts",
         "./slicer.ts",
+        "./slicer_camera_nav.ts",
         "./units.ts"
     ]
 }
