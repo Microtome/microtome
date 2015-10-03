@@ -448,7 +448,7 @@ void main(void) {
 
 
   /// All dimensions are in mm
-  class PrintVolume extends THREE.Object3D {
+  export class PrintVolume extends THREE.Object3D {
     _width:number = 100.0;
     _depth:number = 100.0;
     _height:number = 100.0;
