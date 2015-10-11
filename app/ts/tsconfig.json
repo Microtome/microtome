@@ -16,22 +16,23 @@
         "!./node_modules/**/*.ts"
     ],
     "files": [
-        "./../../typings/chrome/chrome-app.d.ts",
-        "./../../typings/filesystem/filesystem.d.ts",
-        "./../../typings/filewriter/filewriter.d.ts",
-        "./../../typings/polymer/polymer.d.ts",
-        "./../../typings/q/Q.d.ts",
-        "./../../typings/threejs/three.d.ts",
-        "./../../typings/tsd.d.ts",
-        "./../../typings/webcomponents.js/webcomponents.js.d.ts",
-        "./../../local_typings/chrome_serial.d.ts",
-        "./actions.ts",
-        "./background.ts",
-        "./core_threed.ts",
-        "./projector.ts",
-        "./serial-support.ts",
-        "./slicer.ts",
-        "./slicer_camera_nav.ts",
-        "./units.ts"
-    ]
+        "../../typings/chrome/chrome-app.d.ts",
+        "../../typings/filesystem/filesystem.d.ts",
+        "../../typings/filewriter/filewriter.d.ts",
+        "../../typings/polymer/polymer.d.ts",
+        "../../typings/q/Q.d.ts",
+        "../../typings/threejs/three.d.ts",
+        "../../typings/tsd.d.ts",
+        "../../typings/webcomponents.js/webcomponents.js.d.ts",
+        "../../local_typings/chrome_serial.d.ts",
+        "actions.ts",
+        "background.ts",
+        "core_threed.ts",
+        "projector.ts",
+        "serial-support.ts",
+        "slicer_camera_nav.ts",
+        "slicer.ts",
+        "units.ts"
+    ],
+    "exclude": []
 }
