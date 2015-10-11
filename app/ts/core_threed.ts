@@ -440,7 +440,7 @@ void main(void) {
 
 
   /// All dimensions are in mm
-  export class PrintVolume extends THREE.Object3D {
+  export class PrintVolume extends THREE.Group {
     _width: number = 100.0;
     _depth: number = 100.0;
     _height: number = 100.0;
@@ -513,10 +513,15 @@ void main(void) {
     }
 
     /// Hides the printer volume including all its component parts
-    set visible(visible: boolean) {
-      visible = visible;
-      this.children.forEach((child) => child.visible = visible);
-    }
+    // Not needed anymore in r71, hiding parent hides children
+    // set visible(visible: boolean) {
+    //   this._visible = visible;
+    //   this.children.forEach(function(child){ child.visible = visible});
+    // }
+    //
+    // get visible():boolean {
+    //   return this._visible;
+    // }
 
     get boundingBox(): THREE.Box3 {
       /// TODO Cache better
