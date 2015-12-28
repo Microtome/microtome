@@ -20,7 +20,7 @@ var merge = require('merge-stream');
 var path = require('path');
 var fs = require('fs');
 var glob = require('glob');
-var ts = require('gulp-typescript')
+var ts = require('gulp-typescript');
 var sourcemaps = require('gulp-sourcemaps');
 var historyApiFallback = require('connect-history-api-fallback');
 var crisper = require('gulp-crisper');
@@ -80,7 +80,8 @@ gulp.task('jshint', function() {
     .pipe($.if(!browserSync.active, $.jshint.reporter('fail')));
 });
 
-var tsProject = ts.createProject('app/ts/tsconfig.json');
+// Build ts libs
+var tsProject = ts.createProject('app/tsconfig.json');
 
 gulp.task('typescript', function() {
   var tsResult = tsProject.src()
@@ -88,8 +89,23 @@ gulp.task('typescript', function() {
     .pipe(ts(tsProject))
     .js
     .pipe(sourcemaps.write('.'))
-    .pipe(gulp.dest('app/scripts/gen'));
+    .pipe(gulp.dest('app'));
+  return tsResult;
 });
+
+// // Build ts elements
+// var tseProject = ts.createProject('app/elements/tsconfig.json');
+//
+// gulp.task('typescript-elem', function() {
+//   var tsResult = tseProject.src()
+//     .pipe(sourcemaps.init())
+//     .pipe(ts(tseProject))
+//     .js
+//     .pipe(sourcemaps.write('.'))
+//     .pipe(gulp.dest('app/elements'));
+//
+//   return tsResult;
+// });
 
 // Optimize Images
 gulp.task('images', function() {
@@ -107,10 +123,11 @@ gulp.task('images', function() {
 // Copy All Files At The Root Level (app)
 gulp.task('copy', function() {
   var app = gulp.src([
-    'app/**',
+    'app/**/*',
     '!app/test',
     '!app/precache.json',
     '!app/ts',
+    '!app/**/*.ts',
     '!app/**/*.js.map'
   ], {
     dot: true
@@ -150,14 +167,11 @@ gulp.task('fonts', function() {
 
 // Scan Your HTML For Assets & Optimize Them
 gulp.task('html', function() {
-  var assets = $.useref.assets({
-    searchPath: ['.tmp', 'app', 'dist']
-  });
 
   return gulp.src(['app/**/*.html', '!app/{elements,test}/**/*.html'])
     // Replace path for vulcanized assets
     .pipe($.if('*.html', $.replace('elements/elements.html', 'elements/elements.vulcanized.html')))
-    .pipe(assets)
+    // .pipe(assets)
     // Concatenate And Minify JavaScript
     .pipe($.if('*.js', $.uglify({
       preserveComments: 'some'
@@ -165,8 +179,10 @@ gulp.task('html', function() {
     // Concatenate And Minify Styles
     // In case you are still using useref build blocks
     .pipe($.if('*.css', $.cssmin()))
-    .pipe(assets.restore())
-    .pipe($.useref())
+    // .pipe(assets.restore())
+    .pipe($.useref({
+      searchPath: ['.tmp', 'app', 'dist']
+    }))
     // Minify Any HTML
     .pipe($.if('*.html', $.minifyHtml({
       quotes: true,
@@ -249,7 +265,8 @@ gulp.task('serve', ['styles', 'elements', 'images', 'typescript'], function() {
   gulp.watch(['app/elements/**/*.css'], ['elements', reload]);
   gulp.watch(['app/{scripts,elements}/**/*.js'], ['jshint']);
   gulp.watch(['app/images/**/*'], reload);
-  gulp.watch(['./app/ts/**/*.ts'], ['typescript', reload]);
+  gulp.watch(['./app/**/*.ts'], ['typescript', reload]);
+  // gulp.watch(['./app/elements/**/*.ts'], ['typescript-elem', reload]);
 });
 
 // Build and serve the output from the dist build
@@ -277,8 +294,11 @@ gulp.task('serve:dist', ['default'], function() {
 // Build Production Files, the Default Task
 gulp.task('default', ['clean'], function(cb) {
   runSequence(
-    'typescript', ['copy', 'styles'],
-    'elements', ['jshint', 'images', 'fonts', 'html'],
+    'typescript',
+    'copy',
+    'elements',
+    'html',
+    ['styles','images','fonts','html'],
     'vulcanize',
     cb);
   // Note: add , 'precache' , after 'vulcanize', if your are going to use Service Worker

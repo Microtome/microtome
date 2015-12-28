@@ -5,8 +5,6 @@ module microtme.serial_support{
       return false;
     }
 
-    // export function open_serial_connection():chrome.serial.ConnectionInfo{
-    //
-    // }
+
 
 }

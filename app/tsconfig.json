@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "target": "es5",
+    "outDir": ".",
+    "sourceMap": true,
+    "newLine": "LF"
+  },
+  "filesGlob": [
+    "./../typings/**/*.d.ts",
+    "./../local_typings/**/*.d.ts",
+    "./../bower_components/**/*.d.ts",
+    "./**/*.ts"
+  ],
+  "files": [
+    "./../typings/chrome/chrome-app.d.ts",
+    "./../typings/filesystem/filesystem.d.ts",
+    "./../typings/filewriter/filewriter.d.ts",
+    "./../typings/q/Q.d.ts",
+    "./../typings/threejs/three.d.ts",
+    "./../typings/tsd.d.ts",
+    "./../typings/webcomponents.js/webcomponents.js.d.ts",
+    "./../local_typings/chrome_serial.d.ts",
+    "./../bower_components/polymer-ts/polymer-ts.d.ts",
+    "./elements/my-derpderp/my-derpderp.ts",
+    "./scripts/actions.ts",
+    "./scripts/background.ts",
+    "./scripts/core_threed.ts",
+    "./scripts/projector.ts",
+    "./scripts/serial-support.ts",
+    "./scripts/slicer_camera_nav.ts",
+    "./scripts/slicer.ts",
+    "./scripts/units.ts"
+  ],
+  "exclude": [],
+  "atom": {
+    "rewriteTsconfig": true
+  }
+}

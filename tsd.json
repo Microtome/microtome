@@ -8,9 +8,6 @@
     "threejs/three.d.ts": {
       "commit": "a278148f0ec80f2aa9a2ec22f5089308f74dda47"
     },
-    "polymer/polymer.d.ts": {
-      "commit": "a278148f0ec80f2aa9a2ec22f5089308f74dda47"
-    },
     "webcomponents.js/webcomponents.js.d.ts": {
       "commit": "a278148f0ec80f2aa9a2ec22f5089308f74dda47"
     },
