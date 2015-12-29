@@ -9,6 +9,8 @@
     "sourceMap": true,
     "newLine": "LF"
   },
+  "compileOnSave": false,
+  "buildOnSave": false,
   "filesGlob": [
     "./../typings/**/*.d.ts",
     "./../local_typings/**/*.d.ts",
