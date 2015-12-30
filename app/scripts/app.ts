@@ -65,19 +65,10 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
   // };
 
   app['onMenuActivate'] = function(event: Event, detail: Object) {
-    console.log("CLICK");
-    console.log(event);
-    console.log(detail);
-    console.log(Polymer.dom(event))
     var menu = Polymer.dom(event).localTarget;
     console.log(menu);
     var name = detail['selected'];
-    // var selected = (menu['selectedValues'] || []).indexOf(name) === -1;
-    // console.log(menu['selectedValues'])
     menu.select(-1);
-    // if (name === MY_SPECIAL_INDEX && selected) {
-    //   menu.select(name);
-    // }
   }
 
 })(document);
