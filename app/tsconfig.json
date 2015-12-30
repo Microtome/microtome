@@ -29,6 +29,7 @@
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
     "./elements/my-derpderp/my-derpderp.ts",
     "./scripts/actions.ts",
+    "./scripts/app.ts",
     "./scripts/background.ts",
     "./scripts/core_threed.ts",
     "./scripts/projector.ts",
