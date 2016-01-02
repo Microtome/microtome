@@ -42,8 +42,6 @@ class MyDerpderp extends polymer.Base
    attached() { }
    detached() { }
 
-
-
 }
 
 MyDerpderp.register();

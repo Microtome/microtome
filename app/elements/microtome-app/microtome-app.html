@@ -7,9 +7,13 @@
 <link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
 <link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
 <link rel="import" href="../../bower_components/paper-item/paper-item.html">
+<link rel="import" href="../scene-holder/scene-holder.html">
+<link rel="import" href="../threejs/threejs.html">
 
 <dom-module id="microtome-app">
   <template>
+    <scene-holder id="microtome-scene"></scene-holder>
+    <pv-view scene="{{$['microtome-scene'].scene}}"></pv-view>
     <paper-header-panel class="layout vertical fit">
       <paper-toolbar class="paper-header">
         <paper-menu-button>

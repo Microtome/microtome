@@ -6,7 +6,7 @@ class MicrotomeApp extends polymer.Base{
       var menu = Polymer.dom(event).localTarget;
       menu.select(-1);
     }
-    
+
     ready()
     {
       console.log( this['is'], "ready!")

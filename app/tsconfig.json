@@ -7,7 +7,8 @@
     "target": "es5",
     "outDir": ".",
     "sourceMap": true,
-    "newLine": "LF"
+    "newLine": "LF",
+    "module": "umd"
   },
   "compileOnSave": false,
   "buildOnSave": false,
@@ -29,6 +30,8 @@
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
     "./elements/microtome-app/microtome-app.ts",
     "./elements/my-derpderp/my-derpderp.ts",
+    "./elements/pv-view/pv-view.ts",
+    "./elements/scene-holder/scene-holder.ts",
     "./scripts/actions.ts",
     "./scripts/app.ts",
     "./scripts/background.ts",
