@@ -11,7 +11,8 @@
     "paper-menu": "PolymerElements/paper-menu#4fecb43601",
     "polymer-ts": "~0.1.21",
     "paper-styles": "PolymerElements/paper-styles#^1.0.0",
-    "font-roboto": "PolymerElements/font-roboto-local#^1.0.1"
+    "font-roboto": "PolymerElements/font-roboto-local#^1.0.1",
+    "three.js": "threejs#*"
   },
   "devDependencies": {
     "web-component-tester": "*"
