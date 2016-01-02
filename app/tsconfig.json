@@ -27,6 +27,7 @@
     "./../typings/webcomponents.js/webcomponents.js.d.ts",
     "./../local_typings/chrome_serial.d.ts",
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
+    "./elements/microtome-app/microtome-app.ts",
     "./elements/my-derpderp/my-derpderp.ts",
     "./scripts/actions.ts",
     "./scripts/app.ts",
