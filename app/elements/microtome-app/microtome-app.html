@@ -7,14 +7,31 @@
 <link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
 <link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
 <link rel="import" href="../../bower_components/paper-item/paper-item.html">
-<link rel="import" href="../scene-holder/scene-holder.html">
+<link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
+
+<link rel="import" href="../slice-preview/slice-preview.html">
+<link rel="import" href="../pv-view/pv-view.html">
+<link rel="import" href="../layer-height/layer-height.html">
+
 <link rel="import" href="../threejs/threejs.html">
 
+
 <dom-module id="microtome-app">
+
+  <style>
+    :host #center-content,
+    :host #left-content,
+    :host #right-content {
+      position: relative;
+    }
+    /*Why is this needed? Can't find overflow cause*/
+    :host #main{
+      overflow: hidden;
+    }
+  </style>
+
   <template>
-    <scene-holder id="microtome-scene"></scene-holder>
-    <pv-view scene="{{$['microtome-scene'].scene}}"></pv-view>
-    <paper-header-panel class="layout vertical fit">
+    <paper-header-panel mode="seamed" class="layout vertical fit">
       <paper-toolbar class="paper-header">
         <paper-menu-button>
           <paper-icon-button icon="menu" class="dropdown-trigger"></paper-icon-button>
@@ -26,10 +43,12 @@
         </paper-menu-button>
         <div class="title">Microtome</div>
       </paper-toolbar>
-      <div id="main" class="flex layout horizontal wrap">
+      <div id="main" class="flex layout horizontal fit">
         <div id="left-drawer">LEFT</div>
-        <div id="center-content" class="flex">
-          <my-derpderp></my-derpderp>
+        <div id="center-content" class="flex layout vertical">
+          <pv-view hidden$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
+          <slice-preview hidden$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
+          <!-- <layer-height></layer-height> -->
         </div>
         <div id="right-drawer">RIGHT </div>
       </div>
