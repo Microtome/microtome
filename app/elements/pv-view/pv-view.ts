@@ -25,6 +25,8 @@ class PrinterVolumeView extends polymer.Base {
 
   private _printerVolume: microtome.three_d.PrintVolume = new microtome.three_d.PrintVolume(120,120,120);
 
+  private _camNav: microtome.three_d.CameraNav;
+
   @property({})
   public scene: THREE.Scene = new THREE.Scene();
 
@@ -51,8 +53,7 @@ class PrinterVolumeView extends polymer.Base {
     this.scene.add(this._printerVolume);
     this.scene.add(this._pvCamera);
     this._pvCamera.lookAt(this._printerVolume.position);
-    window.console.log(this._printerVolume.position)
-    // this._resizeCanvas();
+    this._camNav = new microtome.three_d.CameraNav(this._pvCamera, this._canvasElement, true)
     this._startRendering();
   }
 
@@ -91,9 +92,14 @@ class PrinterVolumeView extends polymer.Base {
   @observe("disabled")
   disabledChanged(newValue: boolean, oldValue: boolean) {
     if (!newValue) {
+      // this._camNav.enabled = false;
       this._startRendering();
     } else {
+      // this._camNav.enabled = true;
       this._stopRendering();
+    }
+    if(this._camNav){
+      this._camNav.enabled = !newValue;
     }
   }
 
