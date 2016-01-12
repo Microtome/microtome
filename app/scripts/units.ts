@@ -1,5 +1,5 @@
 module microtome.units {
-  enum LengthUnit { MILLIMETER, CENTIMETER, INCH }
+  export enum LengthUnit { MILLIMETER, CENTIMETER, INCH }
 
   export function lengthUnitToAbbrev(unit: LengthUnit): String {
     switch (unit) {
@@ -57,5 +57,4 @@ module microtome.units {
 
     return conversion;
   }
-
 }
