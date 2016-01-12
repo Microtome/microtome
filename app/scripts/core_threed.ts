@@ -158,15 +158,16 @@ void main(void) {
     _currZoomSpeed = 0.0;
     _zoomStartTime = 0;
     _zoomTotalDistance = 0.0;
-    //
+
     //   List<StreamSubscription> _handlerSubscriptions = [];
-    //
-    /// If thetaMin == thetaMax,then free spinning around the z axis is assumed
-    /// If useWholeWindow is true, then even mouse pointer leaves bounds of sceneDomElement
-    /// camera will still rotate around scene. if set to false, camera navigation stops
-    /// when pointer leaves scene element
-    ///
-    /// By default, camera target is Vector3(0.0, 0.0, 0.0) in global space
+
+    /**
+    * If thetaMin == thetaMax,then free spinning around the z axis is assumed
+    * If useWholeWindow is true, then even mouse pointer leaves bounds of sceneDomElement
+    * camera will still rotate around scene. if set to false, camera navigation stops
+    * when pointer leaves scene element
+    * By default, camera target is Vector3(0.0, 0.0, 0.0) in global space
+    */
     constructor(camera: THREE.Camera, sceneDomElement: HTMLElement, enabled: boolean = true) {
       this._camera = camera;
       this._sceneDomElement = sceneDomElement;
@@ -174,12 +175,13 @@ void main(void) {
       this.enabled = enabled;
     }
 
-    /// Send the camera to the home position and
-    /// have it look at the target
-    ///
-    /// Home position may be set in constructor or using
-    /// property of same name. Default value is Vector3 (0.0,0.0,100.0)
-    ///
+    /**
+    * Send the camera to the home position and
+    * have it look at the target
+    *
+    * Home position may be set in constructor or using
+    * property of same name. Default value is Vector3 (0.0,0.0,100.0)
+    */
     goHome() {
       if (!this.enabled) return;
       this._camera.position = this.homePosition.clone();
@@ -267,43 +269,41 @@ void main(void) {
       this._startRotation();
       this._rotateCamera(0.0, phi);
     }
-    //
-    //   //--------------------------------------------------------------------
-    //   // Handlers
-    //   //--------------------------------------------------------------------
-    //
-    //   _hookHandlers() {
-    //     _handlerSubscriptions.add(
-    //         _sceneDomElement.onMouseEnter.listen(_handleSceneDomElementMouseEnter));
-    //     _handlerSubscriptions.add(
-    //         _sceneDomElement.onMouseLeave.listen(_handleSceneDomElementMouseLeave));
-    // //    _handlerSubscriptions.add(window.onKeyDown.listen(handleKeyboardEventDown));
-    // //    _handlerSubscriptions.add(window.onKeyUp.listen(handleKeyboardEventUp));
-    //     _handlerSubscriptions
-    //         .add(window.onMouseMove.listen(_handleWindowMouseMove));
-    //     _handlerSubscriptions
-    //         .add(window.onMouseDown.listen(_handleWindowMouseDown));
-    //     _handlerSubscriptions.add(window.onMouseUp.listen(_handleWindowMouseUp));
-    //     _handlerSubscriptions
-    //         .add(window.onMouseWheel.listen(_handleWindowMouseScroll));
-    //   }
-    //
-    //   _unhookHandlers() {
-    //     _handlerSubscriptions.forEach((s) => s.cancel());
-    //   }
-    //
-    // _handleWindowMouseDown(e:MouseEvent ) {
-    //   if (e.button == 0 && this._inSceneDomElement) {
-    //     e.preventDefault();
-    //     this._active = true;
-    //     this._start.set(e.screenX, e.screenY);
-    //     this._screenWidth = window.screen.width;
-    //     this._screenHeight = window.screen.height;
-    //     this._startRotation();
-    //     // Using mathematical spherical coordinates
-    //     //print('Start: ${_startR} ${_startTheta} ${_startPhi}');
-    //   }
-    // }
+
+    //--------------------------------------------------------------------
+    // Handlers
+    //--------------------------------------------------------------------
+
+    private _hookHandlers() {
+      this._sceneDomElement.addEventListener("mouseenter", this._handleSceneDomElementMouseEnter);
+      this._sceneDomElement.addEventListener("mouseleave", this._handleSceneDomElementMouseLeave);
+      window.addEventListener("mousemove", this._handleWindowMouseMove)
+      window.addEventListener("mousedown", this._handleWindowMouseDown)
+      window.addEventListener("mouseup", this._handleWindowMouseUp)
+      window.addEventListener("mousewheel", this._handleWindowMouseScroll)
+    }
+
+    private _unhookHandlers() {
+      this._sceneDomElement.removeEventListener("mouseenter", this._handleSceneDomElementMouseEnter);
+      this._sceneDomElement.removeEventListener("mouseleave", this._handleSceneDomElementMouseLeave);
+      window.removeEventListener("mousemove", this._handleWindowMouseMove)
+      window.removeEventListener("mousedown", this._handleWindowMouseDown)
+      window.removeEventListener("mouseup", this._handleWindowMouseUp)
+      window.removeEventListener("mousewheel", this._handleWindowMouseScroll)
+    }
+
+    _handleWindowMouseDown = (e: MouseEvent) => {
+      if (e.button == 0 && this._inSceneDomElement) {
+        e.preventDefault();
+        this._active = true;
+        this._start.set(e.screenX, e.screenY);
+        this._screenWidth = window.screen.width;
+        this._screenHeight = window.screen.height;
+        this._startRotation();
+        // Using mathematical spherical coordinates
+        //print('Start: ${_startR} ${_startTheta} ${_startPhi}');
+      }
+    }
 
 
 
@@ -312,18 +312,18 @@ void main(void) {
       this._startR = camTargetDelta.length();
       camTargetDelta.normalize();
       this._startTheta = Math.atan2(camTargetDelta.y, camTargetDelta.x);
-      this._startPhi = Math.acos(camTargetDelta.z / this._startR);
+      this._startPhi = Math.acos(camTargetDelta.z);
     }
 
-    _handleSceneDomElementMouseEnter(e: MouseEvent) {
+    _handleSceneDomElementMouseEnter = (e: MouseEvent) => {
       this._inSceneDomElement = true;
     }
 
-    _handleSceneDomElementMouseLeave(e: MouseEvent) {
+    _handleSceneDomElementMouseLeave = (e: MouseEvent) => {
       this._inSceneDomElement = false;
     }
 
-    _handleWindowMouseMove(e: MouseEvent) {
+    _handleWindowMouseMove = (e: MouseEvent) => {
       if (this._active && (this._inSceneDomElement || this.useWholeWindow)) {
         var pos = new THREE.Vector2(e.screenX + 0.0, e.screenY + 0.0);
         var distanceX = -(pos.x - this._start.x);
@@ -335,7 +335,7 @@ void main(void) {
       }
     }
 
-    _handleWindowMouseScroll(e: WheelEvent) {
+    _handleWindowMouseScroll = (e: WheelEvent) => {
       if (!this._inSceneDomElement) return;
       if (e.deltaY > 0) {
         this.zoomToTarget(-10.0);
@@ -363,7 +363,7 @@ void main(void) {
       this.lookAtTarget();
     }
 
-    _handleWindowMouseUp(e: MouseEvent) {
+    _handleWindowMouseUp = (e: MouseEvent) => {
       if (e.button == 0) {
         this._active = false;
       }
@@ -430,16 +430,20 @@ void main(void) {
 
     set enabled(val: boolean) {
       this._enabled = val;
-      // if (this._enabled) {
-      //   this._hookHandlers();
-      // } else {
-      //   this._unhookHandlers();
-      // }
+      if (this._enabled) {
+        this._hookHandlers();
+      } else {
+        this._unhookHandlers();
+      }
     }
   }
 
 
-  /// All dimensions are in mm
+  /**
+  * Utility class for displaying print volume
+  * All dimensions are in mm
+  * R-G-B => X-Y-Z
+  */
   export class PrintVolume extends THREE.Group {
     _width: number = 100.0;
     _depth: number = 100.0;
@@ -466,11 +470,11 @@ void main(void) {
       ];
       var xlineGeometry = new THREE.Geometry();
       xlineGeometry.vertices = xlinesPts;
-      var xLines1 = new THREE.Line(xlineGeometry.clone(),
-        CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
+      var xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
+        CoreMaterialsFactory.xLineMaterial);
       this.add(xLines1);
-      var xLines2 = new THREE.Line(xlineGeometry.clone(),
-        CoreMaterialsFactory.xLineMaterial, THREE.LinePieces);
+      var xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
+        CoreMaterialsFactory.xLineMaterial);
       xLines2.position.set(0.0, 0.0, 1.0);
       this.add(xLines2);
 
@@ -482,11 +486,11 @@ void main(void) {
       ];
       var ylineGeometry = new THREE.Geometry();
       ylineGeometry.vertices = ylinesPts;
-      var yLines1 = new THREE.Line(ylineGeometry.clone(),
-        CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
+      var yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
+        CoreMaterialsFactory.yLineMaterial);
       this.add(yLines1);
-      var yLines2 = new THREE.Line(ylineGeometry.clone(),
-        CoreMaterialsFactory.yLineMaterial, THREE.LinePieces);
+      var yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
+        CoreMaterialsFactory.yLineMaterial);
       yLines2.position.set(0.0, 0.0, 1.0);
       this.add(yLines2);
 
@@ -498,11 +502,11 @@ void main(void) {
       ];
       var zlineGeometry = new THREE.Geometry();
       zlineGeometry.vertices = zlinesPts;
-      var zLines1 = new THREE.Line(zlineGeometry.clone(),
-        CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
+      var zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
+        CoreMaterialsFactory.zLineMaterial);
       this.add(zLines1);
-      var zLines2 = new THREE.Line(zlineGeometry.clone(),
-        CoreMaterialsFactory.zLineMaterial, THREE.LinePieces);
+      var zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
+        CoreMaterialsFactory.zLineMaterial);
       zLines2.position.set(0.0, -1.0, 0.0);
       this.add(zLines2);
       this.scale.set(this._width, this._depth, this._height);
