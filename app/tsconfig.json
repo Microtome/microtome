@@ -30,7 +30,6 @@
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
     "./elements/layer-height/layer-height.ts",
     "./elements/microtome-app/microtome-app.ts",
-    "./elements/my-derpderp/my-derpderp.ts",
     "./elements/pv-view/pv-view.ts",
     "./elements/scene-holder/scene-holder.ts",
     "./elements/slice-preview/slice-preview.ts",
