@@ -445,15 +445,17 @@ void main(void) {
   * R-G-B => X-Y-Z
   */
   export class PrintVolume extends THREE.Group {
-    _width: number = 100.0;
-    _depth: number = 100.0;
-    _height: number = 100.0;
+    private _width: number;
+    private _depth: number;
+    private _height: number;
+    private _bbox: THREE.Box3;
 
     constructor(width: number, depth: number, height: number) {
       super();
       this._width = width;
       this._height = height;
       this._depth = depth;
+      this._recalcBBox();
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
 
       var planeMaterial = CoreMaterialsFactory.whiteMaterial.clone();
@@ -512,28 +514,28 @@ void main(void) {
       this.scale.set(this._width, this._depth, this._height);
     }
 
-    resize(width: number, depth: number, height: number) {
-      this.scale.set(width, depth, height);
+    resize(pv: microtome.printer.PrintVolume): void
+    resize(width: number, depth: number, height: number): void
+    resize(widthOrPv: number | microtome.printer.PrintVolume, depth?: number, height?: number):void {
+      if (typeof widthOrPv == "number") {
+        this.scale.set(widthOrPv as number, depth, height);
+      } else {
+        var pv = widthOrPv as microtome.printer.PrintVolume
+        this.scale.set(pv.width, pv.depth, pv.height)
+      }
+      this._recalcBBox();
     }
 
-    /// Hides the printer volume including all its component parts
-    // Not needed anymore in r71, hiding parent hides children
-    // set visible(visible: boolean) {
-    //   this._visible = visible;
-    //   this.children.forEach(function(child){ child.visible = visible});
-    // }
-    //
-    // get visible():boolean {
-    //   return this._visible;
-    // }
-
-    get boundingBox(): THREE.Box3 {
-      /// TODO Cache better
+    private _recalcBBox(): void {
       var halfWidth = this._width / 2.0;
       var halfDepth = this._depth / 2.0;
       var min = new THREE.Vector3(-halfWidth, -halfDepth, 0.0);
       var max = new THREE.Vector3(halfWidth, halfDepth, this._height);
-      return new THREE.Box3(min, max);
+      this._bbox = new THREE.Box3(min, max);
+    }
+
+    get boundingBox(): THREE.Box3 {
+      return this._bbox;
     }
   }
 
