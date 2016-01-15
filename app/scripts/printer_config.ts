@@ -13,12 +13,18 @@ module microtome.printer {
   export interface GcodeProtocol {
   }
 
+  /**
+  * Specifies printer volume
+  */
   export interface PrintVolume {
     width: number,
     depth: number,
-    height:number
+    height: number
   }
 
+  /**
+  * Printer configuration class
+  */
   export interface PrinterConfig {
     /** name of printer */
     name: string;
