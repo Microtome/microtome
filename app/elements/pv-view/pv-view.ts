@@ -23,12 +23,12 @@ class PrinterVolumeView extends polymer.Base {
 
   private _reqAnimFrameHandle: number;
 
-  private _printerVolume: microtome.three_d.PrintVolume = new microtome.three_d.PrintVolume(120,120,120);
+  private _printerVolume: microtome.three_d.PrintVolume = new microtome.three_d.PrintVolume(120, 120, 120);
 
   private _camNav: microtome.three_d.CameraNav;
 
   @property({})
-  public scene: THREE.Scene = new THREE.Scene();
+  public scene: microtome.three_d.PrinterScene;
 
   @property({ notify: true, readOnly: false })
   public disabled: boolean = false;
@@ -50,8 +50,7 @@ class PrinterVolumeView extends polymer.Base {
     this._pvCamera.up.set(0, 0, 1);
     this._pvCamera.position.set(0, 350, 250);
     this._configureLighting();
-    this.scene.add(this._printerVolume);
-    this.scene.add(this._pvCamera);
+    // this.scene.add(this._pvCamera);
     this._pvCamera.lookAt(this._printerVolume.position);
     this._camNav = new microtome.three_d.CameraNav(this._pvCamera, this._canvasElement, true)
     this._startRendering();
@@ -98,28 +97,32 @@ class PrinterVolumeView extends polymer.Base {
       // this._camNav.enabled = true;
       this._stopRendering();
     }
-    if(this._camNav){
+    if (this._camNav) {
       this._camNav.enabled = !newValue;
     }
   }
 
   private _stopRendering() {
-    if (this._reqAnimFrameHandle) {
-      window.cancelAnimationFrame(this._reqAnimFrameHandle)
-    }
+    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
   }
 
   private _startRendering() {
-    if (!this._reqAnimFrameHandle) {
-      this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
-    }
+    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle);
+    this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
 
   private _render(timestamp: number) {
+    // TODO Race condition in start/stop rendering setting/unsetting material between
+    // This guy and other scene.
+
+    // TODO Parent app should handle "context switch" of this and slice preview
+    // TODO And remove disabled flag from here and slice-preview.ts
+    this.scene.overrideMaterial = null;
+
     var canvas = this._canvasElement;
-    var div= this._canvasHome
+    var div = this._canvasHome
     // var bounds = this._canvasHome.getBoundingClientRect()
-    if(canvas.height != div.clientHeight || canvas.width != div.clientWidth ){
+    if (canvas.height != div.clientHeight || canvas.width != div.clientWidth) {
       canvas.width = div.clientWidth;
       canvas.height = div.clientHeight;
       this._pvCamera.aspect = div.clientWidth / div.clientHeight;

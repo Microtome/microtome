@@ -9,7 +9,7 @@ module microtome.slicer {
   ///
   /// Not intended for actual slicing.
   export class Slicer {
-    _oCamera: THREE.OrthographicCamera = null;
+    private _oCamera: THREE.OrthographicCamera = null;
     // /// Should be set to a value > max Z build height in mm
     // double targetZ = 100.0;
     // /// Should be 1/2 layer thickness or so
@@ -18,21 +18,21 @@ module microtome.slicer {
     // CanvasElement _target;
 
     // 3D
-    _sliceMaterialUniforms = {
+    private _sliceMaterialUniforms = {
       'cutoff': { type: 'f', value: 0.0 },
       'epsilon': { type: 'f', value: 0.0 },
       'dTex': { type: 't', value: <THREE.WebGLRenderTarget>null },
       'viewWidth': { type: 'i', value: 0.0 },
       'viewHeight': { type: 'i', value: 0.0 }
     };
-    _depthTexRenderTarget: THREE.WebGLRenderTarget = null;
+    private _depthTexRenderTarget: THREE.WebGLRenderTarget = null;
     // List<Object3D> printObjects = [];
     // BoundingBox printVolumeBB;
     // CoreMaterialsFactory _materials = new CoreMaterialsFactory();
-    _slicingParamsDirty: boolean = true;
-    _slicerMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
+    private _slicingParamsDirty: boolean = true;
+    private _slicerMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
 
-    constructor(public scene: THREE.Scene, public renderer: THREE.WebGLRenderer, public printVolumeBB: THREE.Box3, public printObjects: THREE.Object3D[] = [],
+    constructor(public scene: microtome.three_d.PrinterScene, public renderer: THREE.WebGLRenderer,
       public targetZ: number = 100, public sliceEpsilon: number = 0.012) {
       this._oCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this._slicerMaterial.uniforms = this._sliceMaterialUniforms;
@@ -46,19 +46,21 @@ module microtome.slicer {
     sliceAt(z: number) {
       //var zPad = FAR_Z_PADDING / targetZ;
       var sliceZ = (z + FAR_Z_PADDING) / (FAR_Z_PADDING + this.targetZ);
-      window.console.log('Slicing at ${z}');
+      // window.console.log('Slicing at ${z}');
       this._sliceMaterialUniforms['cutoff'].value = sliceZ;
       var width = this.renderer.domElement.width;
       var height = this.renderer.domElement.height;
-
+      if (width + height == 0) return;
       if (this._slicingParamsDirty) {
         this._recalcSlicingParams(width, height);
         this._slicingParamsDirty = false;
       }
-
       if (this._depthTexRenderTarget === null ||
         (width !== this._depthTexRenderTarget.width || height !== this._depthTexRenderTarget.height)) {
-        this._depthTexRenderTarget.dispose();
+
+        if (this._depthTexRenderTarget) {
+          this._depthTexRenderTarget.dispose();
+        }
 
         this._depthTexRenderTarget = new THREE.WebGLRenderTarget(width, height,
           {
@@ -71,11 +73,11 @@ module microtome.slicer {
             wrapS: THREE.ClampToEdgeWrapping,
             wrapT: THREE.ClampToEdgeWrapping
           });
+
         this.scene.overrideMaterial = three_d.CoreMaterialsFactory.depthMaterial;
 
         this.renderer.render(this.scene, this._oCamera, this._depthTexRenderTarget);
       }
-
       this.renderer.setClearColor(new THREE.Color(0x000000), 1.0);
 
       this.scene.overrideMaterial = this._slicerMaterial;
@@ -83,7 +85,6 @@ module microtome.slicer {
       this._sliceMaterialUniforms['viewWidth'].value = width;
       this._sliceMaterialUniforms['viewHeight'].value = height;
       this.renderer.render(this.scene, this._oCamera);
-
     }
 
     clear() {
@@ -94,7 +95,7 @@ module microtome.slicer {
 
     setupSlicerPreview() {
       var maxZ = 0.0;
-      this.printObjects.forEach((mesh: THREE.Mesh) => {
+      this.scene.printObjects.forEach((mesh: THREE.Mesh) => {
         mesh.geometry.computeBoundingBox();
         var meshMaxZ = mesh.localToWorld(mesh.geometry.boundingBox.max).z + mesh.position.z;
         if (meshMaxZ > maxZ) maxZ = meshMaxZ;
@@ -120,9 +121,9 @@ module microtome.slicer {
       this._oCamera.far = FAR_Z_PADDING + this.targetZ;
       this._oCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
-
-      var widthRatio: number = Math.abs(this.printVolumeBB.max.x - this.printVolumeBB.min.x) / newWidth;
-      var heightRatio: number = Math.abs(this.printVolumeBB.max.y - this.printVolumeBB.min.y) / newHeight;
+      var pVolumeBBox = this.scene.printVolume.boundingBox;
+      var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
+      var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
       var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
       this._oCamera.right = (scale * newWidth) / 2.0;
       this._oCamera.left = -this._oCamera.right;
@@ -130,16 +131,6 @@ module microtome.slicer {
       this._oCamera.bottom = -this._oCamera.top;
       this._oCamera.updateProjectionMatrix();
     }
-
-    // dispose() {
-    // Only deallocates material entirely if this is last used instance.
-    // microtomeSharedRenderer.withRenderer((renderer) {
-    //   renderer.deallocateMaterial(_materials.sliceMaterial);
-    //   renderer.deallocateMaterial(_materials.depthMaterial);
-    //   if (_depthTexRenderTarget !== null) renderer.deallocateRenderTarget(_depthTexRenderTarget);
-    //   _depthTexRenderTarget = null;
-    // });
-    // }
   }
 
 

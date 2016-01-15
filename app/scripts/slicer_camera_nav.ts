@@ -5,7 +5,7 @@ module microtome.three_d {
 
   /// Controls a slicer providing a interactive preview
   /// Not intended for actual slicing
-  class InteractiveSlicer {
+  export class InteractiveSlicer {
     _slicer: slicer.Slicer = null;
 
     // Events and interaction
@@ -31,7 +31,7 @@ module microtome.three_d {
     // recalcZ: boolean = false;
     // _target: HTMLCanvasElement = null;
 
-    constructor(public scene: THREE.Scene, public sliceThickness: number, public maxZ: number = 0.0, public recalcZ: boolean = true) {
+    constructor(public scene: THREE.Scene, public sliceThickness: number, public maxZ: number = -1.0, public recalcZ: boolean = true) {
       this.scene.children.forEach((child) => {
         if (child instanceof PrintVolume) {
           // print('Got children!');
@@ -44,11 +44,11 @@ module microtome.three_d {
         }
       });
       this._recalcZ();
-      //this._slicer = new slicer.Slicer(this.scene, this.renderer, this._printVolume, this.printObjects);
+      // this._slicer = new slicer.Slicer(this.scene, this.renderer, this._printVolume, this.printObjects);
     }
 
     _recalcZ() {
-      if (this.maxZ === 0.0 || this.recalcZ) {
+      if (this.maxZ === -1.0 || this.recalcZ) {
         var z: number = 0.0;
         this.printObjects.forEach((o3d: THREE.Mesh) => {
           var o3dz = o3d.geometry.boundingBox.max.z;

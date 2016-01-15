@@ -8,6 +8,10 @@
 <link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
 <link rel="import" href="../../bower_components/paper-item/paper-item.html">
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
+<link rel="import" href="../../bower_components/iron-icons/maps-icons.html">
+<link rel="import" href="../../bower_components/paper-fab/paper-fab.html">
+
 
 <link rel="import" href="../slice-preview/slice-preview.html">
 <link rel="import" href="../pv-view/pv-view.html">
@@ -19,39 +23,68 @@
 <dom-module id="microtome-app">
 
   <style>
-    :host #center-content,
-    :host #left-content,
-    :host #right-content {
+    :host #center-content {
       position: relative;
     }
+
+    :host {
+      background: linear-gradient(#777, #111);
+      box-shadow: inset 0 0 25px #000000;
+    }
     /*Why is this needed? Can't find overflow cause*/
-    :host #main{
+
+    :host #main {
       overflow: hidden;
+    }
+
+    :host #header-overlay {
+      position: absolute;
+      height: 100px;
+      top: 0px;
+      left: 0px;
+      right: 0px;
+      pointer-events: none;
+      font-size: 50px;
+      /*color: #afafaf;*/
+      margin: 25px;
+      z-index: 10;
+    }
+
+    :host #right-toolbar-overlay {
+      position: absolute;
+      width: 100px;
+      top: 0px;
+      right: 0px;
+      bottom: 0px;
+      pointer-events: none;
+      /*color: #afafaf;*/
+      margin: 25px;
+      z-index: 10;
+    }
+
+    :host #right-toolbar-overlay > paper-fab {
+      pointer-events: auto;
     }
   </style>
 
   <template>
-    <paper-header-panel mode="seamed" class="layout vertical fit">
-      <paper-toolbar class="paper-header">
-        <paper-menu-button>
-          <paper-icon-button icon="menu" class="dropdown-trigger"></paper-icon-button>
-          <paper-menu class="dropdown-content" class="vertical layout" on-iron-select="onMenuActivate">
-            <paper-item>New Project</paper-item>
-            <paper-item>Save Project</paper-item>
-            <paper-item>Help</paper-item>
-          </paper-menu>
-        </paper-menu-button>
-        <div class="title">Microtome</div>
-      </paper-toolbar>
-      <div id="main" class="flex layout horizontal fit">
-        <div id="left-drawer">LEFT</div>
-        <div id="center-content" class="flex layout vertical">
-          <pv-view hidden$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
-          <slice-preview hidden$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
-          <!-- <layer-height></layer-height> -->
-        </div>
-        <div id="right-drawer">RIGHT </div>
+    <div id="header-overlay">
+      Microtom3D
+    </div>
+    <div id="right-toolbar-overlay" class="vertical layout around-justified end">
+      <paper-fab icon="add" title="Add model"></paper-fab>
+      <paper-fab icon="delete" title="Delete model"></paper-fab>
+      <paper-fab icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
+      <paper-fab icon="settings" title="Microtom3D settings"></paper-fab>
+      <paper-fab icon="file-download" title="Save project"></paper-fab>
+    </div>
+    <div id="main" class="flex layout horizontal fit">
+      <div id="center-content" class="flex layout vertical">
+        <pv-view hidden$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
+        <slice-preview hidden$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
+        <!-- <layer-height></layer-height> -->
       </div>
+    </div>
     </paper-header-panel>
   </template>
 </dom-module>

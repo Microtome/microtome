@@ -516,7 +516,7 @@ void main(void) {
 
     resize(pv: microtome.printer.PrintVolume): void
     resize(width: number, depth: number, height: number): void
-    resize(widthOrPv: number | microtome.printer.PrintVolume, depth?: number, height?: number):void {
+    resize(widthOrPv: number | microtome.printer.PrintVolume, depth?: number, height?: number): void {
       if (typeof widthOrPv == "number") {
         this.scale.set(widthOrPv as number, depth, height);
       } else {
@@ -537,7 +537,47 @@ void main(void) {
     get boundingBox(): THREE.Box3 {
       return this._bbox;
     }
+
+    get width(): number {
+      return this._width;
+    }
+
+    get depth(): number {
+      return this._depth;
+    }
+
+    get height(): number {
+      return this._height;
+    }
+
   }
 
+
+  /**
+  * Subclass of THREE.Scene with several convenience methods
+  */
+  export class PrinterScene extends THREE.Scene {
+
+    private _printVolume: PrintVolume;
+    private _printObjectsHolder: THREE.Group;
+    private _printObjects: THREE.Mesh[];
+
+    constructor() {
+      super();
+      this._printVolume = new PrintVolume(100, 100, 100);
+      this.add(this._printVolume);
+      this._printObjectsHolder = new THREE.Group();
+      this.add(this._printObjectsHolder);
+      this._printObjects = this._printObjectsHolder.children as THREE.Mesh[];
+    }
+
+    get printObjects(): THREE.Mesh[] {
+      return this._printObjects;
+    }
+
+    get printVolume(): PrintVolume {
+      return this._printVolume;
+    }
+  }
 
 }

@@ -37,6 +37,7 @@
     "./scripts/app.ts",
     "./scripts/background.ts",
     "./scripts/core_threed.ts",
+    "./scripts/printer_config.ts",
     "./scripts/projector.ts",
     "./scripts/serial-support.ts",
     "./scripts/slicer_camera_nav.ts",

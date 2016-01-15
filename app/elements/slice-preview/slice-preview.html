@@ -1,28 +1,32 @@
 <link rel="import" href="../threejs/threejs.html">
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
-<link rel="import" href="../microtome-lib/microtome-lib.html">
 
 
-<dom-module id="pv-view">
+<dom-module id="slice-preview">
   <style>
     :host {
       position: relative;
     }
 
-    :host #pv-canvas-home {
+    :host #slice-canvas-home {
       scroll: none;
-      background:none;
+      margin: 25px;
     }
 
     :host > ::content canvas {
-      width: 100%;
-      height: 100%;
+      margin: auto;
+      position: absolute;
+      top: 0px;
+      bottom:0px;
+      left:0px;
+      right:0px;
     }
+
   </style>
   <template>
-    <div id="pv-canvas-home" class="fit">
+    <div id="slice-canvas-home" class="fit">
     </div>
   </template>
 </dom-module>
 
-<script src="pv-view.js"></script>
+<script src="slice-preview.js"></script>
