@@ -31,7 +31,7 @@ class PrinterVolumeView extends polymer.Base {
   public scene: microtome.three_d.PrinterScene;
 
   @property({ notify: true, readOnly: false })
-  public disabled: boolean = false;
+  public hidden: boolean = false;
 
   @property({ notify: true, readOnly: false })
   public scatterColor: string = "#777777"
@@ -88,7 +88,7 @@ class PrinterVolumeView extends polymer.Base {
   //   }
   // }
 
-  @observe("disabled")
+  @observe("hidden")
   disabledChanged(newValue: boolean, oldValue: boolean) {
     if (!newValue) {
       // this._camNav.enabled = false;
