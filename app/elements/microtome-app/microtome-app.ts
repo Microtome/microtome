@@ -36,7 +36,7 @@ class MicrotomeApp extends polymer.Base {
     var sphere = new THREE.SphereGeometry(10);
     var mesh = new THREE.Mesh(sphere, microtome.three_d.CoreMaterialsFactory.objectMaterial);
     mesh.position.z = 10;
-    this.scene.add(mesh);
+    this.scene.printObjects.push(mesh);
     // this.scene.add(new PrinterVolumeView(120,12,120))
     console.log(this['is'], "ready!")
   }
