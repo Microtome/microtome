@@ -127,7 +127,7 @@ void main(void) {
     /// Is zooming enabled?
     allowZoom = false;
     /// Minimum distance to zoom in to
-    minZoomDistance = 0.0;
+    minZoomDistance = 5.0;
     /// Maximum distance to zoom out to
     maxZoomDistance = 1000.0;
     /// Restrict rotation in x-y plane
