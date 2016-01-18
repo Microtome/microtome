@@ -30,7 +30,7 @@ class PrinterVolumeView extends polymer.Base {
   @property({})
   public scene: microtome.three_d.PrinterScene;
 
-  @property({ notify: true, readOnly: false })
+  @property({ notify: true, readOnly: false, reflectToAttribute: true, type: Boolean })
   public hidden: boolean = false;
 
   @property({ notify: true, readOnly: false })
@@ -43,14 +43,11 @@ class PrinterVolumeView extends polymer.Base {
   public groundColor: string = "#775533"
 
   public attached() {
-    // this._canvasElement.className += " fit"
     this._canvasHome = this.$["pv-canvas-home"] as HTMLDivElement;
     this._canvasHome.appendChild(this._canvasElement);
-    // window.addEventListener("resize", (event) => this._resizeCanvas());
     this._pvCamera.up.set(0, 0, 1);
     this._pvCamera.position.set(0, 350, 250);
     this._configureLighting();
-    // this.scene.add(this._pvCamera);
     this._pvCamera.lookAt(this._printerVolume.position);
     this._camNav = new microtome.three_d.CameraNav(this._pvCamera, this._canvasElement, true)
     this._startRendering();
@@ -73,28 +70,12 @@ class PrinterVolumeView extends polymer.Base {
     this.scene.add(this._groundLight);
   }
 
-  // private _resizeCanvas() {
-  //   var canvas = this._canvasElement;
-  //   if (this._canvasHome) {
-  //     console.log("RESIZE!")
-  //     var div = this._canvasHome;
-  //     canvas.width = div.clientWidth;
-  //     canvas.height = div.clientHeight;
-  //     // canvas.style.width = "${canvas.width}";
-  //     // canvas.style.height = "${canvas.height}";
-  //     this._pvCamera.aspect = canvas.clientWidth / canvas.clientHeight;
-  //     window.console.log(this._pvCamera.aspect);
-  //     this._pvCamera.updateProjectionMatrix();
-  //   }
-  // }
 
   @observe("hidden")
   disabledChanged(newValue: boolean, oldValue: boolean) {
     if (!newValue) {
-      // this._camNav.enabled = false;
-      this._startRendering();
+      this.async(this._startRendering.bind(this), 100)
     } else {
-      // this._camNav.enabled = true;
       this._stopRendering();
     }
     if (this._camNav) {
@@ -112,16 +93,8 @@ class PrinterVolumeView extends polymer.Base {
   }
 
   private _render(timestamp: number) {
-    // TODO Race condition in start/stop rendering setting/unsetting material between
-    // This guy and other scene.
-
-    // TODO Parent app should handle "context switch" of this and slice preview
-    // TODO And remove disabled flag from here and slice-preview.ts
-    this.scene.overrideMaterial = null;
-
     var canvas = this._canvasElement;
     var div = this._canvasHome
-    // var bounds = this._canvasHome.getBoundingClientRect()
     if (canvas.height != div.clientHeight || canvas.width != div.clientWidth) {
       canvas.width = div.clientWidth;
       canvas.height = div.clientHeight;

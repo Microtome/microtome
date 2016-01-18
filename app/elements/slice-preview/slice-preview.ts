@@ -19,30 +19,27 @@ class SlicePreview extends polymer.Base {
   @property({})
   public scene: microtome.three_d.PrinterScene;
 
-  @property({ notify: true, readOnly: false })
-  public hidden: boolean;
-
-  private _ready = false;
+  @property({ notify: true, readOnly: false, reflectToAttribute: true, type: Boolean })
+  public hidden: boolean = false;
 
   public attached() {
     // this._canvasElement.className += " fit"
     this._canvasHome = this.$["slice-canvas-home"] as HTMLDivElement;
     this._canvasHome.appendChild(this._canvasElement);
     this._startRendering();
-    this._ready = true;
   }
 
   public detached() {
     this._slicer.teardownSlicerPreview();
     this._stopRendering();
-    this._ready = false;
   }
 
   @observe("hidden")
   hiddenChanged(newValue: boolean, oldValue: boolean) {
-    window.console.log("DISABLED1");
-    if (this._ready && !newValue) {
+     if (!newValue) {
       this._startRendering();
+    } else {
+      this._stopRendering();
     }
   }
 
