@@ -13,18 +13,24 @@
       margin: 25px;
     }
 
-    :host > ::content canvas {
+    :host #background {
+      scroll: none;
+      
+    }
+
+    :host >::content canvas {
       margin: auto;
       position: absolute;
       top: 0px;
-      bottom:0px;
-      left:0px;
-      right:0px;
+      bottom: 0px;
+      left: 0px;
+      right: 0px;
     }
-
   </style>
   <template>
-    <div id="slice-canvas-home" class="fit">
+    <div id="background" class="fit">
+      <div id="slice-canvas-home" class="fit">
+      </div>
     </div>
   </template>
 </dom-module>
