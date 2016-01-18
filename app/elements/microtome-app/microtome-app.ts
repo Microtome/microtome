@@ -25,8 +25,8 @@ class MicrotomeApp extends polymer.Base {
   // @property({ notify: true, value: () => false })
   // public hidePvView: boolean;
 
-  @property({ notify: true, value: () => true })
-  public hideSlicePreview: boolean;
+  @property({ notify: true})
+  public hideSlicePreview: boolean = true;
 
   public toggleSlicePreview() {
     this.hideSlicePreview = !this.hideSlicePreview;
