@@ -61,11 +61,11 @@ class PrinterVolumeView extends polymer.Base {
     this._scatterLight.color.setStyle(this.scatterColor);
     this.scene.add(this._scatterLight);
     this._skyLight.color.setStyle(this.skyColor);
-    this._skyLight.intensity = 0.55;
+    this._skyLight.intensity = 0.65;
     this._skyLight.position.set(0, 0, 1000);
     this.scene.add(this._skyLight);
     this._groundLight.color.setStyle(this.groundColor);
-    this._groundLight.intensity = 0.15;
+    this._groundLight.intensity = 0.45;
     this._groundLight.position.set(0, 0, -1000);
     this.scene.add(this._groundLight);
   }
