@@ -41,7 +41,7 @@
       left: 0px;
       right: 0px;
       pointer-events: none;
-      font-size: 50px;
+      font-size: var(--paper-font-title);
       /*color: #afafaf;*/
       margin: 25px;
       z-index: 10;
@@ -66,13 +66,13 @@
 
   <template>
     <div id="header-overlay">
-      Microtom3D
+      Microtome
     </div>
     <div id="right-toolbar-overlay" class="vertical layout around-justified end">
       <paper-fab icon="add" title="Add model"></paper-fab>
       <paper-fab icon="delete" title="Delete model"></paper-fab>
       <paper-fab icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-      <paper-fab icon="settings" title="Microtom3D settings"></paper-fab>
+      <paper-fab icon="settings" title="Microtome settings"></paper-fab>
       <paper-fab icon="file-download" title="Save project"></paper-fab>
     </div>
     <div id="main" class="flex layout horizontal fit">
