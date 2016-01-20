@@ -10,6 +10,7 @@
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
 <link rel="import" href="../../bower_components/iron-icons/maps-icons.html">
+<link rel="import" href="../../bower_components/iron-icons/av-icons.html">
 <link rel="import" href="../../bower_components/paper-fab/paper-fab.html">
 <link rel="import" href="../../bower_components/neon-animation/neon-animated-pages.html">
 <link rel="import" href="../../bower_components/neon-animation/animations/hero-animation.html">
@@ -22,17 +23,17 @@
 <link rel="import" href="../layer-height/layer-height.html">
 <link rel="import" href="../shared-animatable/shared-animatable.html">
 
+<link rel="import" href="../../styles/shared-styles.html">
+
 <link rel="import" href="../threejs/threejs.html">
 
 
 <dom-module id="microtome-app">
 
-  <style>
+  <style include="shared-styles">
     :host #center-content {
       position: relative;
     }
-
-    :host {}
 
     :host #main {
       overflow: hidden;
@@ -96,6 +97,11 @@
           <shared-animatable id="sa-sp" class="fit">
             <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
               <paper-fab icon="close" title="Exit slice preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab class="icon-rotate-270" icon="av:skip-next" title="To End"></paper-fab>
+              <paper-fab class="icon-rotate-270" icon="av:play-arrow" title="Slice Up"></paper-fab>
+              <paper-fab icon="av:play-circle-outline" title="Animate"></paper-fab>
+              <paper-fab class="icon-rotate-90" icon="av:play-arrow" title="Slice Down"></paper-fab>
+              <paper-fab class="icon-rotate-270" icon="av:skip-previous" title="To Start"></paper-fab>
             </div>
             <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
           </shared-animatable>
