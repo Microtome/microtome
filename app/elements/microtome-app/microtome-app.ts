@@ -46,8 +46,6 @@ class MicrotomeApp extends polymer.Base {
   }
 
   attached() {
-    window.console.log(this.$['sa-pv'])
-    window.console.log(this.$['sa-sp'])
     this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
     this.$['sa-pv'].animationConfig = {
       'entry': [
