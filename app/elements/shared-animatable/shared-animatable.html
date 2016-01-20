@@ -1,0 +1,42 @@
+<!--
+Copyright (c) 2015 The Polymer Project Authors. All rights reserved.
+This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
+The complete set of authors may be found at http://polymer.github.io/AUTHORS.txt
+The complete set of contributors may be found at http://polymer.github.io/CONTRIBUTORS.txt
+Code distributed by Google as part of the polymer project is also
+subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
+-->
+
+<link rel="import" href="../../bower_components/polymer/polymer.html">
+<link rel="import" href="../../bower_components/neon-animation/neon-shared-element-animatable-behavior.html">
+
+<!--
+`<shared-animatable>` is a simple container element implementing `Polymer.NeonSharedAnimatableBehavior`. This is a convenience element for use with `<neon-animated-pages>`.
+
+```
+<neon-animated-pages selected="0"
+                     entry-animation="slide-from-right-animation"
+                     exit-animation="slide-left-animation">
+  <shared-animatable>1</shared-animatable>
+  <shared-animatable>2</shared-animatable>
+</neon-animated-pages>
+```
+-->
+
+<dom-module id="shared-animatable">
+
+  <style>
+
+    :host {
+      display: block;
+    }
+
+  </style>
+
+  <template>
+    <content></content>
+  </template>
+
+</dom-module>
+
+<script src="shared-animatable.js"></script>

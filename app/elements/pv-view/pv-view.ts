@@ -31,7 +31,7 @@ class PrinterVolumeView extends polymer.Base {
   public scene: microtome.three_d.PrinterScene;
 
   @property({ notify: true, readOnly: false, reflectToAttribute: true, type: Boolean })
-  public hidden: boolean = false;
+  public disabled: boolean = false;
 
   @property({ notify: true, readOnly: false })
   public scatterColor: string = "#777777"
@@ -71,7 +71,7 @@ class PrinterVolumeView extends polymer.Base {
   }
 
 
-  @observe("hidden")
+  @observe("disabled")
   disabledChanged(newValue: boolean, oldValue: boolean) {
     if (!newValue) {
       this.async(this._startRendering.bind(this), 100)

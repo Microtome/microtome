@@ -11,11 +11,16 @@
 <link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
 <link rel="import" href="../../bower_components/iron-icons/maps-icons.html">
 <link rel="import" href="../../bower_components/paper-fab/paper-fab.html">
+<link rel="import" href="../../bower_components/neon-animation/neon-animated-pages.html">
+<link rel="import" href="../../bower_components/neon-animation/animations/hero-animation.html">
+<link rel="import" href="../../bower_components/neon-animation/animations/fade-in-animation.html">
+<!-- <link rel="import" href="../../bower_components/neon-animation/neon-animation.html"> -->
 
 
 <link rel="import" href="../slice-preview/slice-preview.html">
 <link rel="import" href="../pv-view/pv-view.html">
 <link rel="import" href="../layer-height/layer-height.html">
+<link rel="import" href="../shared-animatable/shared-animatable.html">
 
 <link rel="import" href="../threejs/threejs.html">
 
@@ -27,8 +32,7 @@
       position: relative;
     }
 
-    :host {
-    }
+    :host {}
 
     :host #main {
       overflow: hidden;
@@ -47,7 +51,13 @@
       z-index: 10;
     }
 
-    :host #right-toolbar-overlay {
+    :host neon-animated-pages,
+    :host shared-animatable {
+      /*position: relative;*/
+    }
+
+    :host #pv-toolbar-overlay,
+    :host #sp-toolbar-overlay {
       position: absolute;
       width: 100px;
       top: 0px;
@@ -59,8 +69,10 @@
       z-index: 10;
     }
 
-    :host #right-toolbar-overlay > paper-fab {
+    :host #pv-toolbar-overlay > *,
+    :host #sp-toolbar-overlay > * {
       pointer-events: auto;
+      margin: 10px;
     }
   </style>
 
@@ -68,17 +80,26 @@
     <div id="header-overlay">
       Microtome
     </div>
-    <div id="right-toolbar-overlay" class="vertical layout around-justified end">
-      <paper-fab icon="add" title="Add model"></paper-fab>
-      <paper-fab icon="delete" title="Delete model"></paper-fab>
-      <paper-fab icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-      <paper-fab icon="settings" title="Microtome settings"></paper-fab>
-      <paper-fab icon="file-download" title="Save project"></paper-fab>
-    </div>
     <div id="main" class="flex layout horizontal fit">
       <div id="center-content" class="flex layout vertical">
-        <pv-view hidden$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
-        <slice-preview hidden$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
+        <neon-animated-pages id="main-pages" selected="0" class="fit">
+          <shared-animatable id="sa-pv" class="fit">
+            <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
+              <paper-fab icon="add" title="Add model"></paper-fab>
+              <paper-fab icon="delete" title="Delete model"></paper-fab>
+              <paper-fab id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab icon="settings" title="Microtome settings"></paper-fab>
+              <paper-fab icon="file-download" title="Save project"></paper-fab>
+            </div>
+            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
+          </shared-animatable>
+          <shared-animatable id="sa-sp" class="fit">
+            <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
+              <paper-fab icon="close" title="Exit slice preview" on-click="toggleSlicePreview"></paper-fab>
+            </div>
+            <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
+          </shared-animatable>
+        </neon-animated-pages>
         <!-- <layer-height></layer-height> -->
       </div>
     </div>

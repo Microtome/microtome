@@ -20,7 +20,7 @@ class SlicePreview extends polymer.Base {
   public scene: microtome.three_d.PrinterScene;
 
   @property({ notify: true, readOnly: false, reflectToAttribute: true, type: Boolean })
-  public hidden: boolean = false;
+  public disabled: boolean = false;
 
   public attached() {
     // this._canvasElement.className += " fit"
@@ -34,8 +34,8 @@ class SlicePreview extends polymer.Base {
     this._stopRendering();
   }
 
-  @observe("hidden")
-  hiddenChanged(newValue: boolean, oldValue: boolean) {
+  @observe("disabled")
+  disabledChanged(newValue: boolean, oldValue: boolean) {
      if (!newValue) {
       this._startRendering();
     } else {
@@ -56,7 +56,7 @@ class SlicePreview extends polymer.Base {
 
 
   private _render(timestamp: number) {
-    if (this.hidden) {
+    if (this.disabled) {
       this._stopRendering();
       return;
     }
