@@ -1,32 +1,45 @@
 module microtome.printer {
 
-  export enum GpioPinUse {
-
-  }
+  // export enum GpioPinUse {
+  //
+  // }
 
   /**
   * For printers driven directly via GPIO, descrbes what each pin does
   */
   export interface GpioProtocol {
 
-  }
+  };
 
   /**
   * Configuration for GCode driven printers
   */
   export interface GcodeProtocol {
-  }
+  };
 
+  /**
+  * Unit of measure for threads
+  */
   export enum ThreadUnits {
-    TPI, PITCH_MM, PITCH_IN
-  }
+    /** Threads per Inch*/
+    TPI,
+    /** Thread pitch mm */
+    PITCH_MM,
+    /** Thread pitch inches */
+    PITCH_IN
+  };
 
   export interface ZStage {
     threadMeasure: number,
     threadUnits: ThreadUnits,
     stepsPerRev: number,
     microsteps: number
-  }
+  };
+
+  export interface Projector {
+    xRes: number,
+    yRes: number
+  };
 
   /**
   * Specifies printer volume
@@ -35,30 +48,31 @@ module microtome.printer {
     width: number,
     depth: number,
     height: number
-  }
+  };
 
   /**
   * Printer configuration class
   */
   export interface PrinterConfig {
     /** name of printer */
-    name: string;
+    name: string,
     /** description of printer */
-    description: string;
+    description: string,
     /** ms since epoch */
-    lastModified: number;
+    lastModified: number,
     /**
     * Print volume
     * x = width
     * y = depth
     * z = height
     */
-    volume: PrintVolume;
+    volume: PrintVolume,
 
-    // zStage: ZStage
+    zStage: ZStage,
 
+    projector: Projector
     // protocol: GpioProtocol | GcodeProtocol
-  }
+  };
 
   /**
   * Print job settings
@@ -76,6 +90,6 @@ module microtome.printer {
     blankTime: number;
     /** Retract distance, distance platforms move to peel print, mm */
     retractDistance: number
-  }
-  
+  };
+
 }

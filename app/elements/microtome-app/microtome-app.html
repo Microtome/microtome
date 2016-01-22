@@ -17,7 +17,6 @@
 <link rel="import" href="../../bower_components/neon-animation/animations/fade-in-animation.html">
 <!-- <link rel="import" href="../../bower_components/neon-animation/neon-animation.html"> -->
 
-
 <link rel="import" href="../slice-preview/slice-preview.html">
 <link rel="import" href="../pv-view/pv-view.html">
 <link rel="import" href="../layer-height/layer-height.html">
@@ -86,27 +85,26 @@
         <neon-animated-pages id="main-pages" selected="0" class="fit">
           <shared-animatable id="sa-pv" class="fit">
             <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
-              <paper-fab icon="add" title="Add model"></paper-fab>
-              <paper-fab icon="delete" title="Delete model"></paper-fab>
-              <paper-fab id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab icon="settings" title="Microtome settings"></paper-fab>
-              <paper-fab icon="file-download" title="Save project"></paper-fab>
+              <paper-fab mini icon="add" title="Add model"></paper-fab>
+              <paper-fab mini icon="delete" title="Delete model"></paper-fab>
+              <paper-fab mini id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab mini icon="settings" title="Microtome settings"></paper-fab>
+              <paper-fab mini icon="file-download" title="Save project"></paper-fab>
             </div>
             <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
           </shared-animatable>
           <shared-animatable id="sa-sp" class="fit">
             <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
-              <paper-fab icon="close" title="Exit slice preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab class="icon-rotate-270" icon="av:skip-next" title="To End"></paper-fab>
-              <paper-fab class="icon-rotate-270" icon="av:play-arrow" title="Slice Up"></paper-fab>
-              <paper-fab icon="av:play-circle-outline" title="Animate"></paper-fab>
-              <paper-fab class="icon-rotate-90" icon="av:play-arrow" title="Slice Down"></paper-fab>
-              <paper-fab class="icon-rotate-270" icon="av:skip-previous" title="To Start"></paper-fab>
+              <paper-fab mini icon="close" title="Exit slice preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab mini class="icon-rotate-270" icon="av:skip-next" title="To End" on-click="sliceEnd"></paper-fab>
+              <paper-fab mini class="icon-rotate-270" icon="av:play-arrow" title="Slice Up" on-click="sliceUp"></paper-fab>
+              <paper-fab mini icon="av:play-circle-outline" title="Animate"></paper-fab>
+              <paper-fab mini class="icon-rotate-90" icon="av:play-arrow" title="Slice Down" on-click="sliceDown"></paper-fab>
+              <paper-fab mini class="icon-rotate-270" icon="av:skip-previous" title="To Start" on-click="sliceStart"></paper-fab>
             </div>
-            <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" class="fit" scene="[[scene]]"></slice-preview>
+            <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" xres="{{printerConfig.projector.xRes}}" yres="{{printerConfig.projector.yRes}}" slice-at="[[sliceAt]]" class="fit" scene="[[scene]]"></slice-preview>
           </shared-animatable>
         </neon-animated-pages>
-        <!-- <layer-height></layer-height> -->
       </div>
     </div>
     </paper-header-panel>

@@ -16,11 +16,20 @@ class SlicePreview extends polymer.Base {
 
   private _slicer: microtome.slicer.Slicer = new microtome.slicer.Slicer(this.scene, this._renderer);
 
-  @property({})
+  @property({ notify: false, readOnly: false })
   public scene: microtome.three_d.PrinterScene;
 
   @property({ notify: true, readOnly: false, reflectToAttribute: true, type: Boolean })
   public disabled: boolean = false;
+
+  @property({ notify: false, readOnly: false, type: Number })
+  public xres: number;
+
+  @property({ notify: false, readOnly: false, type: Number })
+  public yres: number;
+
+  @property({ notify: false, readOnly: false, type: Number })
+  public sliceAt: number;
 
   public attached() {
     // this._canvasElement.className += " fit"
@@ -36,12 +45,13 @@ class SlicePreview extends polymer.Base {
 
   @observe("disabled")
   disabledChanged(newValue: boolean, oldValue: boolean) {
-     if (!newValue) {
+    if (!newValue) {
       this._startRendering();
     } else {
       this._stopRendering();
     }
   }
+
 
   private _stopRendering() {
     if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
@@ -67,10 +77,12 @@ class SlicePreview extends polymer.Base {
     var scaleh = div.clientHeight / pvd;
     var scalew = div.clientWidth / pvw;
     var scale = scaleh < scalew ? scaleh : scalew;
-    this._renderer.setSize(pvw * scale, pvd * scale);
+    this._renderer.setSize(this.xres, this.yres);
+    canvas.style.width = "" + pvw * scale + "px";
+    canvas.style.height = "" + pvd * scale + "px";
     // TODO fix NEED dirty check on div resize
     this._slicer.resize();
-    this._slicer.sliceAt(7);
+    this._slicer.sliceAt(this.sliceAt);
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
 }

@@ -111,7 +111,7 @@ void main(void) {
   }
 
 
-  type CameraTarget = THREE.Vector3 | THREE.Mesh;
+  type CameraTarget = THREE.Vector3 | THREE.Mesh | PrintVolume;
 
   export class CameraNav {
     _sceneDomElement: HTMLElement;
@@ -205,6 +205,23 @@ void main(void) {
       if (!this.enabled) return;
       if (this.target instanceof THREE.Vector3 || this._camera instanceof THREE.OrthographicCamera) {
         this.lookAtTarget();
+      }
+      else if (this._target instanceof PrintVolume) {
+        var pv = <PrintVolume>this._target;
+        var pCamera = <THREE.PerspectiveCamera>this._camera;
+        var bb = pv.boundingBox.clone();
+        var min = bb.min;
+        var max = bb.max;
+        var len = Math.abs(max.x - min.x);
+        var ylen = Math.abs(max.y - min.y);
+        if (ylen > len) len = ylen;
+        var zlen = Math.abs(max.z - min.z);
+        if (zlen > len) len = zlen;
+        var angle = (pCamera.fov / 360.0) * 2.0 * Math.PI;
+        var frameDist =
+          ((len / 2.0) / Math.sin(angle / 2.0)) * Math.cos(angle / 2.0);
+        this.zoomToTarget(frameDist, true);
+
       } else if (this._target instanceof THREE.Mesh) {
         // TODO, with orthographic camera we could 'zoom in'
         // by recalculating scene bounds but we have no handle
@@ -519,9 +536,15 @@ void main(void) {
     resize(widthOrPv: number | microtome.printer.PrintVolume, depth?: number, height?: number): void {
       if (typeof widthOrPv == "number") {
         this.scale.set(widthOrPv as number, depth, height);
+        this._width = widthOrPv as number;
+        this._height = height;
+        this._depth = depth;
       } else {
         var pv = widthOrPv as microtome.printer.PrintVolume
         this.scale.set(pv.width, pv.depth, pv.height)
+        this._width = pv.width;
+        this._height = pv.height;
+        this._depth = pv.depth;
       }
       this._recalcBBox();
     }

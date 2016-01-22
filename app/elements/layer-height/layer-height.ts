@@ -2,9 +2,9 @@
 @component("layer-height")
 class LayerHeight extends polymer.Base {
 
-  public INCH = microtome.units.LengthUnit.INCH
-  public MM = microtome.units.LengthUnit.MILLIMETER
-  public convertLengthUnit = microtome.units.convertLengthUnit
+  public INCH = microtome.units.LengthUnit.INCH;
+  public MM = microtome.units.LengthUnit.MILLIMETER;
+  public convertLengthUnit = microtome.units.convertLengthUnit;
 
   /**
   * Layer Height in mm
@@ -47,10 +47,10 @@ class LayerHeight extends polymer.Base {
     if (!newValue) this.recalcLayerHeight(this.steps, this.microsteps, this.threadStep, this.threadLabel);
   }
 
-  @observe("steps, microsteps,threadStep,threadLabel")
+  @observe("steps,microsteps,threadStep,threadLabel")
   recalcLayerHeight(newSteps: number, newMicrosteps: number, newThreadStep: number, newThreadLabel: string) {
     if (this.manualOverride) return;
-    if (this.threadLabel && newThreadStep > 0 && this.microsteps > 0)
+    if (this.threadLabel && newThreadStep > 0 && this.microsteps > 0) {
       if (this.threadLabel.indexOf("tpi") > -1) {
         this.layerHeight = (this.convertLengthUnit(1, this.INCH, this.MM) / newThreadStep) / (this.microsteps * this.steps);
       } else if (this.threadLabel.indexOf("in") > -1) {
@@ -58,8 +58,8 @@ class LayerHeight extends polymer.Base {
       } else if (this.threadLabel.indexOf("mm") > -1) {
         this.layerHeight = newThreadStep / (this.microsteps * this.steps);
       }
+    }
   }
-
 }
 
 LayerHeight.register();

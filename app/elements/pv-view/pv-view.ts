@@ -50,6 +50,8 @@ class PrinterVolumeView extends polymer.Base {
     this._configureLighting();
     this._pvCamera.lookAt(this._printerVolume.position);
     this._camNav = new microtome.three_d.CameraNav(this._pvCamera, this._canvasElement, true)
+    this._camNav.target = this._printerVolume;
+    this._camNav.frameTarget();
     this._startRendering();
   }
 

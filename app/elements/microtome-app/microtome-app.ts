@@ -7,26 +7,48 @@
 @component('microtome-app')
 class MicrotomeApp extends polymer.Base {
 
-  @property({ readOnly: true, value: () => new microtome.three_d.PrinterScene })
+  // Convenience imports
+  _TPI = microtome.printer.ThreadUnits.TPI;
+  _PITCH_MM = microtome.printer.ThreadUnits.PITCH_MM;
+  _PITCH_IN = microtome.printer.ThreadUnits.PITCH_IN;
+  _INCH = microtome.units.LengthUnit.INCH;
+  _MM = microtome.units.LengthUnit.MILLIMETER;
+  _CM = microtome.units.LengthUnit.CENTIMETER;
+  private _convertLengthUnit = microtome.units.convertLengthUnit
+
+  @property({ readOnly: false, notify: true, type: Object, value: () => new microtome.three_d.PrinterScene })
   public scene: microtome.three_d.PrinterScene;
 
-  @property({ readOnly: false, notify: true })
+  @property({ readOnly: false, notify: true, type: Object })
   public printerConfig: microtome.printer.PrinterConfig = {
     name: 'unknown',
     description: 'none',
     lastModified: null,
     volume: {
-      width: 120,
-      depth: 120,
-      height: 120
+      width: 36,
+      depth: 24,
+      height: 50
+    },
+    zStage: {
+      threadMeasure: 20,
+      threadUnits: microtome.printer.ThreadUnits.TPI,
+      stepsPerRev: 1024,
+      microsteps: 1
+    },
+    projector: {
+      xRes: 360,
+      yRes: 240
     }
   };
 
-  // @property({ notify: true, value: () => false })
-  // public hidePvView: boolean;
-
   @property({ notify: true })
   public hideSlicePreview: boolean = true;
+
+  @property({ readOnly: false, notify: false })
+  public sliceAt: number = 1;
+
+  @property({ readOnly: false, notify: true })
+  public layerThickness: number;
 
   public toggleSlicePreview(e: Event) {
     this.hideSlicePreview = !this.hideSlicePreview
@@ -37,15 +59,16 @@ class MicrotomeApp extends polymer.Base {
     }
   }
 
-  ready() {
-    var sphere = new THREE.SphereGeometry(10);
-    var mesh = new THREE.Mesh(sphere, microtome.three_d.CoreMaterialsFactory.objectMaterial);
-    mesh.position.z = 10;
+  public ready() {
+    var geom = new THREE.BoxGeometry(10,10,10);
+    // var geom = new THREE.SphereGeometry(10);
+    var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
+    mesh.position.z = 6;
     this.scene.printObjects.push(mesh);
     console.log(this['is'], 'ready!')
   }
 
-  attached() {
+  public attached() {
     this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
     this.$['sa-pv'].animationConfig = {
       'entry': [
@@ -99,6 +122,44 @@ class MicrotomeApp extends polymer.Base {
     }
   }
 
+  @observe("printerConfig.volume.width,printerConfig.volume.depth,printerConfig.volume.height")
+  printVolumeChanged(newWidth: number, newDepth: number, newHeight: number) {
+    this.scene.printVolume.resize(newWidth, newDepth, newHeight);
+  }
+
+  @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
+  zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
+    if (newThreadUnits == this._TPI) {
+      this.layerThickness = (this._convertLengthUnit(1 / newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM)) ;
+    } else if (newThreadUnits == this._PITCH_IN) {
+      this.layerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
+    } else if (newThreadUnits == this._PITCH_MM) {
+      this.layerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
+    }
+    window.console.log(this.layerThickness);
+  }
+
+  public sliceUp() {
+    this.sliceAt += this.layerThickness
+    if (this.sliceAt > this.scene.printVolume.height) this.sliceAt = this.scene.printVolume.height
+    window.console.log(this.sliceAt);
+  }
+
+  public sliceDown() {
+    this.sliceAt -= this.layerThickness
+    if (this.sliceAt < 0) this.sliceAt = 0;
+    window.console.log(this.sliceAt);
+  }
+
+  public sliceStart() {
+    this.sliceAt = 0;
+    window.console.log(this.sliceAt);
+  }
+
+  public sliceEnd() {
+    this.sliceAt = this.scene.printVolume.height
+    window.console.log(this.sliceAt);
+  }
 }
 
 MicrotomeApp.register();

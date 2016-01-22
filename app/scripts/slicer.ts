@@ -2,12 +2,11 @@ module microtome.slicer {
 
   var three_d = microtome.three_d;
 
-  const FAR_Z_PADDING: number = 1.1;
+  const FAR_Z_PADDING: number = 1.0;
 
-  /// Slicing preview camera nav
-  /// Provides a preview of the slicing operation.
-  ///
-  /// Not intended for actual slicing.
+  /**
+  * GPU based dlp slicer
+  */
   export class Slicer {
     private _oCamera: THREE.OrthographicCamera = null;
     // /// Should be set to a value > max Z build height in mm
@@ -33,7 +32,7 @@ module microtome.slicer {
     private _slicerMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
 
     constructor(public scene: microtome.three_d.PrinterScene, public renderer: THREE.WebGLRenderer,
-      public targetZ: number = 100, public sliceEpsilon: number = 0.012) {
+      public targetZ: number = 100, public sliceEpsilon: number = 0.00001) {
       this._oCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this._slicerMaterial.uniforms = this._sliceMaterialUniforms;
     }
@@ -94,13 +93,13 @@ module microtome.slicer {
     }
 
     setupSlicerPreview() {
-      var maxZ = 0.0;
-      this.scene.printObjects.forEach((mesh: THREE.Mesh) => {
-        mesh.geometry.computeBoundingBox();
-        var meshMaxZ = mesh.localToWorld(mesh.geometry.boundingBox.max).z + mesh.position.z;
-        if (meshMaxZ > maxZ) maxZ = meshMaxZ;
-      });
-      this.targetZ = maxZ;
+      // var maxZ = 0.0;
+      // this.scene.printObjects.forEach((mesh: THREE.Mesh) => {
+      //   mesh.geometry.computeBoundingBox();
+      //   var meshMaxZ = mesh.localToWorld(mesh.geometry.boundingBox.max).z + mesh.position.z;
+      //   if (meshMaxZ > maxZ) maxZ = meshMaxZ;
+      // });
+      this.targetZ = this.scene.printVolume.height;
     }
 
     teardownSlicerPreview() {
@@ -132,6 +131,4 @@ module microtome.slicer {
       this._oCamera.updateProjectionMatrix();
     }
   }
-
-
 }

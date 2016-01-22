@@ -24,7 +24,7 @@ module microtome.units {
   export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUnit): number {
     // mm
     var conversion = 0.0;
-    if (from == to) {
+    if (from === to) {
       return value;
     }
 
