@@ -165,7 +165,14 @@ class MicrotomeApp extends polymer.Base {
 
   _handleWindowMouseScroll = (e: WheelEvent) => {
     if (this.hideSlicePreview) return;
-    var numSlices = e.shiftKey ? 10 : 1
+    var numSlices = 1;
+    if (e.shiftKey) {
+      if (e.altKey) {
+        numSlices = 100;
+      } else {
+        numSlices = 10;
+      }
+    }
     // Shiftkey changes axis of scroll in chrome...
     if (e.deltaY > 0 || e.deltaX > 0) {
       this.sliceDown(numSlices);
