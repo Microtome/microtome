@@ -466,6 +466,7 @@ void main(void) {
     private _depth: number;
     private _height: number;
     private _bbox: THREE.Box3;
+    private _lines: THREE.Group = new THREE.Group();
 
     constructor(width: number, depth: number, height: number) {
       super();
@@ -473,6 +474,7 @@ void main(void) {
       this._height = height;
       this._depth = depth;
       this._recalcBBox();
+      this.add(this._lines);
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
 
       var planeMaterial = CoreMaterialsFactory.whiteMaterial.clone();
@@ -491,11 +493,11 @@ void main(void) {
       xlineGeometry.vertices = xlinesPts;
       var xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
         CoreMaterialsFactory.xLineMaterial);
-      this.add(xLines1);
+      this._lines.add(xLines1);
       var xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
         CoreMaterialsFactory.xLineMaterial);
       xLines2.position.set(0.0, 0.0, 1.0);
-      this.add(xLines2);
+      this._lines.add(xLines2);
 
       var ylinesPts = [
         new THREE.Vector3(0.5, 0.5, 0.0),
@@ -507,11 +509,11 @@ void main(void) {
       ylineGeometry.vertices = ylinesPts;
       var yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
         CoreMaterialsFactory.yLineMaterial);
-      this.add(yLines1);
+      this._lines.add(yLines1);
       var yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
         CoreMaterialsFactory.yLineMaterial);
       yLines2.position.set(0.0, 0.0, 1.0);
-      this.add(yLines2);
+      this._lines.add(yLines2);
 
       var zlinesPts = [
         new THREE.Vector3(0.5, 0.5, 0.0),
@@ -523,11 +525,11 @@ void main(void) {
       zlineGeometry.vertices = zlinesPts;
       var zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
         CoreMaterialsFactory.zLineMaterial);
-      this.add(zLines1);
+      this._lines.add(zLines1);
       var zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
         CoreMaterialsFactory.zLineMaterial);
       zLines2.position.set(0.0, -1.0, 0.0);
-      this.add(zLines2);
+      this._lines.add(zLines2);
       this.scale.set(this._width, this._depth, this._height);
     }
 
@@ -571,6 +573,15 @@ void main(void) {
 
     get height(): number {
       return this._height;
+    }
+
+    /**
+    * The base plane is needed for slicing to work, but
+    * the axis lines should be hidden or they may lead
+    * to slice artifacts
+    */
+    public hideAxisLines(hide: boolean) {
+      this._lines.visible = !hide;
     }
 
   }

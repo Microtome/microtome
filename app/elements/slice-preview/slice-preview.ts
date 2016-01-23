@@ -56,12 +56,14 @@ class SlicePreview extends polymer.Base {
   private _stopRendering() {
     if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
     this._slicer.teardownSlicerPreview();
+    this.scene.printVolume.hideAxisLines(false);
   }
 
   private _startRendering() {
     if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle);
     this._slicer.setupSlicerPreview();
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
+    this.scene.printVolume.hideAxisLines(true);
   }
 
 
