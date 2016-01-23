@@ -297,7 +297,7 @@ void main(void) {
       window.addEventListener("mousemove", this._handleWindowMouseMove)
       window.addEventListener("mousedown", this._handleWindowMouseDown)
       window.addEventListener("mouseup", this._handleWindowMouseUp)
-      window.addEventListener("mousewheel", this._handleWindowMouseScroll)
+      window.addEventListener("wheel", this._handleWindowMouseScroll)
     }
 
     private _unhookHandlers() {
@@ -306,7 +306,7 @@ void main(void) {
       window.removeEventListener("mousemove", this._handleWindowMouseMove)
       window.removeEventListener("mousedown", this._handleWindowMouseDown)
       window.removeEventListener("mouseup", this._handleWindowMouseUp)
-      window.removeEventListener("mousewheel", this._handleWindowMouseScroll)
+      window.removeEventListener("wheel", this._handleWindowMouseScroll)
     }
 
     _handleWindowMouseDown = (e: MouseEvent) => {
@@ -354,9 +354,10 @@ void main(void) {
 
     _handleWindowMouseScroll = (e: WheelEvent) => {
       if (!this._inSceneDomElement) return;
-      if (e.deltaY > 0) {
+      // Shift key changes scroll axis in chrome
+      if (e.deltaY > 0 || e.deltaX > 0) {
         this.zoomToTarget(-10.0);
-      } else if (e.deltaY < 0) {
+      } else if (e.deltaY < 0 || e.deltaX < 0) {
         this.zoomToTarget(10.0);
       }
     }
