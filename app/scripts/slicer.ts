@@ -3,6 +3,7 @@ module microtome.slicer {
   var three_d = microtome.three_d;
 
   const FAR_Z_PADDING: number = 1.0;
+  const CAMERA_NEAR: number = 1.0;
 
   /**
   * GPU based dlp slicer
@@ -112,12 +113,12 @@ module microtome.slicer {
     }
 
     _recalcSlicingParams(newWidth: number, newHeight: number) {
-      this._oCamera.position.z = this.targetZ + 1.0;
-      this._oCamera.near = 1.0;
+      this._oCamera.position.z = this.targetZ + CAMERA_NEAR;
+      this._oCamera.near = CAMERA_NEAR;
       // We add a little padding to the camera far so that if
       // slice geometry is right on the 0 xy plane, when
       // we draw in the colors and textures we don't get ambiguity
-      this._oCamera.far = FAR_Z_PADDING + this.targetZ;
+      this._oCamera.far = FAR_Z_PADDING + this.targetZ + CAMERA_NEAR;
       this._oCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
       var pVolumeBBox = this.scene.printVolume.boundingBox;

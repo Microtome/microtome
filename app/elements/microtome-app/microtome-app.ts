@@ -45,7 +45,7 @@ class MicrotomeApp extends polymer.Base {
   public hideSlicePreview: boolean = true;
 
   @property({ readOnly: false, notify: false })
-  public sliceAt: number = 1;
+  public sliceAt: number = 0;
 
   @property({ readOnly: false, notify: true })
   public layerThickness: number;
