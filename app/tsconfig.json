@@ -31,7 +31,6 @@
     "./elements/layer-height/layer-height.ts",
     "./elements/microtome-app/microtome-app.ts",
     "./elements/pv-view/pv-view.ts",
-    "./elements/scene-holder/scene-holder.ts",
     "./elements/shared-animatable/shared-animatable.ts",
     "./elements/slice-preview/slice-preview.ts",
     "./scripts/actions.ts",
