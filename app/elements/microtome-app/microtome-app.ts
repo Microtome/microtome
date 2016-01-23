@@ -60,10 +60,10 @@ class MicrotomeApp extends polymer.Base {
   }
 
   public ready() {
-    var geom = new THREE.BoxGeometry(10,10,10);
-    // var geom = new THREE.SphereGeometry(10);
+    // var geom = new THREE.BoxGeometry(10, 10, 10);
+    var geom = new THREE.SphereGeometry(10);
     var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
-    mesh.position.z = 6;
+    mesh.position.z = 11;
     this.scene.printObjects.push(mesh);
     console.log(this['is'], 'ready!')
   }
@@ -120,6 +120,7 @@ class MicrotomeApp extends polymer.Base {
         }
       ]
     }
+    window.addEventListener("wheel", this._handleWindowMouseScroll)
   }
 
   @observe("printerConfig.volume.width,printerConfig.volume.depth,printerConfig.volume.height")
@@ -130,7 +131,7 @@ class MicrotomeApp extends polymer.Base {
   @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
   zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
     if (newThreadUnits == this._TPI) {
-      this.layerThickness = (this._convertLengthUnit(1 / newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM)) ;
+      this.layerThickness = (this._convertLengthUnit(1 / newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM));
     } else if (newThreadUnits == this._PITCH_IN) {
       this.layerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
     } else if (newThreadUnits == this._PITCH_MM) {
@@ -139,14 +140,15 @@ class MicrotomeApp extends polymer.Base {
     window.console.log(this.layerThickness);
   }
 
-  public sliceUp() {
-    this.sliceAt += this.layerThickness
-    if (this.sliceAt > this.scene.printVolume.height) this.sliceAt = this.scene.printVolume.height
+  public sliceUp(numSlices: number = 1) {
+    window.console.log(numSlices);
+    this.sliceAt += this.layerThickness * numSlices;
+    if (this.sliceAt > this.scene.printVolume.height) this.sliceAt = this.scene.printVolume.height;
     window.console.log(this.sliceAt);
   }
 
-  public sliceDown() {
-    this.sliceAt -= this.layerThickness
+  public sliceDown(numSlices: number = 1) {
+    this.sliceAt -= this.layerThickness * numSlices;
     if (this.sliceAt < 0) this.sliceAt = 0;
     window.console.log(this.sliceAt);
   }
@@ -157,8 +159,19 @@ class MicrotomeApp extends polymer.Base {
   }
 
   public sliceEnd() {
-    this.sliceAt = this.scene.printVolume.height
+    this.sliceAt = this.scene.printVolume.height;
     window.console.log(this.sliceAt);
+  }
+
+  _handleWindowMouseScroll = (e: WheelEvent) => {
+    if (this.hideSlicePreview) return;
+    var numSlices = e.shiftKey ? 10 : 1
+    // Shiftkey changes axis of scroll in chrome...
+    if (e.deltaY > 0 || e.deltaX > 0) {
+      this.sliceDown(numSlices);
+    } else if (e.deltaY < 0 || e.deltaX < 0) {
+      this.sliceUp(numSlices);
+    }
   }
 }
 
