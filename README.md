@@ -27,7 +27,8 @@ window communication even inside a self-contained chrome app is severely cripple
   - [ ] Specify thickness of support grind in mm
   - [ ] Specify support cube lattice spacing in mm
   - [ ] Allow rotation of support cube matrix
-  - [ ] Genearate raft
+  - [ ] Generate raft
+  - [ ] Support multi-step layer exposure patterns to reduce heat generation for large slice areas.
 - [ ] Print volume preview
   - [ ] Move
   - [ ] Rotate
