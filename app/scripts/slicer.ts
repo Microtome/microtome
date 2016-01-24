@@ -42,11 +42,11 @@ module microtome.slicer {
       this._slicingParamsDirty = true;
     }
 
-    /// Slice at the given z Height
+  /**
+   * Slice at the given z Height ( in mm)
+   */
     sliceAt(z: number) {
-      //var zPad = FAR_Z_PADDING / targetZ;
       var sliceZ = (z + FAR_Z_PADDING) / (FAR_Z_PADDING + this.targetZ);
-      // window.console.log('Slicing at ${z}');
       this._sliceMaterialUniforms['cutoff'].value = sliceZ;
       var width = this.renderer.domElement.width;
       var height = this.renderer.domElement.height;
