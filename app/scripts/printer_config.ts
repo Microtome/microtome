@@ -21,12 +21,10 @@ module microtome.printer {
   * Unit of measure for threads
   */
   export enum ThreadUnits {
-    /** Threads per Inch*/
-    TPI,
     /** Thread pitch mm */
-    PITCH_MM,
+    LEAD_MM,
     /** Thread pitch inches */
-    PITCH_IN
+    LEAD_IN
   };
 
   export interface ZStage {
@@ -77,19 +75,31 @@ module microtome.printer {
   /**
   * Print job settings
   */
-  export interface PrintJobSettings {
+  export interface PrintJobConfig {
     /** Name of settings */
     name: string;
-    /** Layer thickness, mm */
+    /** Description of job*/
+    decription: string;
+    /** Selected layer thickness, µm */
     layerThickness: number;
-    /** Settle time, seconds */
+    /** Settle time, ms */
     settleTime: number;
     /** Exposure time per layer, ms */
     layerExposureTime: number;
     /** Blank time, ms */
     blankTime: number;
     /** Retract distance, distance platforms move to peel print, mm */
-    retractDistance: number
+    retractDistance: number;
+    /**
+    * Z offset for added objects. This is the amount objects are offset
+    * when they are added to the scene
+    */
+    zOffset: number;
+    /**
+    * Thickness of printed raft, used to 'stick' items to build platform
+    * raftThickness <= zOffset;
+    */
+    raftThickness: number;
   };
 
 }
