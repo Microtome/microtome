@@ -17,9 +17,8 @@
       <paper-input id="thread-measure" type="number" min="0.0" step="any" value="{{threadStep}}" error-message="Must be a number" required auto-validate="true" disabled="[[manualOverride]]">
         <!-- TODO Change to dropdown -->
         <paper-radio-group suffix id="thread-unit" selected="{{threadLabel}}" disabled="[[manualOverride]]">
-          <paper-radio-button name="tpi">tpi</paper-radio-button>
-          <paper-radio-button name="pitch (mm)">pitch (mm)</paper-radio-button>
-          <paper-radio-button name="pitch (in)">pitch (in)</paper-radio-button>
+          <paper-radio-button name="lead (mm)">lead (mm)</paper-radio-button>
+          <paper-radio-button name="lead (in)">lead (in)</paper-radio-button>
         </paper-radio-group>
         <!-- <div prefix>{{threadLabel}}: <div> -->
       </paper-input>

@@ -51,9 +51,7 @@ class LayerHeight extends polymer.Base {
   recalcLayerHeight(newSteps: number, newMicrosteps: number, newThreadStep: number, newThreadLabel: string) {
     if (this.manualOverride) return;
     if (this.threadLabel && newThreadStep > 0 && this.microsteps > 0) {
-      if (this.threadLabel.indexOf("tpi") > -1) {
-        this.layerHeight = (this.convertLengthUnit(1, this.INCH, this.MM) / newThreadStep) / (this.microsteps * this.steps);
-      } else if (this.threadLabel.indexOf("in") > -1) {
+      if (this.threadLabel.indexOf("in") > -1) {
         this.layerHeight = this.convertLengthUnit(newThreadStep / (this.microsteps * this.steps), this.INCH, this.MM);
       } else if (this.threadLabel.indexOf("mm") > -1) {
         this.layerHeight = newThreadStep / (this.microsteps * this.steps);
