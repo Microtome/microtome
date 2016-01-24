@@ -10,18 +10,18 @@ I am currently in the process of porting Microtome from Dart to Typescript. This
 issues with the Dart platform and Chrome Apps; specifically in the mistaken belief to make it more "secure", inter
 window communication even inside a self-contained chrome app is severely crippled.
 
-- [ ] For z axis change pitch to lead as its what really matters
+- [X] For z axis change pitch to lead as its what really matters
 - [ ] Slice to zip file via zipjs and filejs, create a download containing PNG slices
-- [ ] Enable scrollwheel in slice preview
+- [X] Enable scrollwheel in slice preview
 - [ ] Add Job configuration object
   - [ ] Specify slice thickness as multiples of minimum printer slice
-  - [ ] Job name
-  - [ ] Job desc
-  - [ ] Layer exposure times
-  - [ ] Layer blank / move times
+  - [X] Job name
+  - [X] Job desc
+  - [X] Layer exposure times
+  - [X] Layer blank / move times
   - [ ] Job length estimate
-  - [ ] Specify raft thickness
-  - [ ] Specify initial z-offset offset for all loaded meshes
+  - [X] Specify raft thickness
+  - [X] Specify initial z-offset offset for all loaded meshes
   - [ ] Export/Import job spec
 - [ ] Slice shader improvements
   - [ ] Specify thickness of support grind in mm
@@ -41,3 +41,16 @@ window communication even inside a self-contained chrome app is severely cripple
   - [ ] Job settings
   - [ ] Printer config
   - [ ] Current project layout
+- [ ] Support generation improvements
+  - [ ] Find low points that need support
+  - [ ] Find other flat areas requiring support
+  - [ ] Sample randomly, then use s-hull to create dealauny triangulation
+  - [ ] Use delauny triangulation then as support pattern.
+
+## Future Directions
+
+- Generate paths for conventional printers via potracing the slice images?
+  - https://github.com/kilobtye/potrace  
+  - Seems to be a recent port and works well.
+- Mesh union
+- Mesh repair utilities
