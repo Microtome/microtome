@@ -11,8 +11,12 @@
 <link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
 <link rel="import" href="../../bower_components/iron-icons/maps-icons.html">
 <link rel="import" href="../../bower_components/iron-icons/av-icons.html">
+<link rel="import" href="../../bower_components/paper-card/paper-card.html">
 <link rel="import" href="../../bower_components/paper-fab/paper-fab.html">
+<link rel="import" href="../../bower_components/paper-tabs/paper-tabs.html">
+<link rel="import" href="../../bower_components/iron-pages/iron-pages.html">
 <link rel="import" href="../../bower_components/neon-animation/neon-animated-pages.html">
+<link rel="import" href="../../bower_components/neon-animation/neon-animatable.html">
 <link rel="import" href="../../bower_components/neon-animation/animations/hero-animation.html">
 <link rel="import" href="../../bower_components/neon-animation/animations/fade-in-animation.html">
 <!-- <link rel="import" href="../../bower_components/neon-animation/neon-animation.html"> -->
@@ -38,17 +42,12 @@
       overflow: hidden;
     }
 
-    :host #header-overlay {
-      position: absolute;
-      height: 100px;
-      top: 0px;
-      left: 0px;
-      right: 0px;
-      pointer-events: none;
+    .title {
       font-size: var(--paper-font-title);
-      /*color: #afafaf;*/
-      margin: 25px;
-      z-index: 10;
+    }
+
+    .sub-head {
+      font-size: var(--paper-font-subhead);
     }
 
     :host neon-animated-pages,
@@ -69,26 +68,58 @@
       z-index: 10;
     }
 
+    :host #info-overlay {
+      position: absolute;
+      width: 175px;
+      top: 0px;
+      left: 0px;
+      /*bottom: 0px;*/
+      pointer-events: none;
+      /*color: #afafaf;*/
+      margin: 25px;
+      z-index: 10;
+      /*padding:10px;
+      border-radius: 5px;
+      background-color: rgba(255,255,255,0.2);*/
+    }
+
     :host #pv-toolbar-overlay > *,
     :host #sp-toolbar-overlay > * {
       pointer-events: auto;
       margin: 10px;
     }
+
+    :host hr {
+      width: 100%;
+    }
   </style>
 
   <template>
-    <div id="header-overlay">
-      Microtome
+    <div id="info-overlay" hidden$="{{hideInfo}}" class="vertical layout">
+      <span class="title">Microtome</span>
+      <hr>
+      <span class="sub-head">Printer</span>
+      <span>printer: {{printerConfig.name}}</span>
+      <span>min layer: {{minLayerThicknessMicrons}} µm</span>
+      <hr>
+      <span class="sub-head">Job</span>
+      <span>z offset: {{printJobConfig.zOffset}} mm</span>
+      <span>raft thickness: {{printJobConfig.raftThickness}} mm</span>
+      <template is="dom-if" if="{{hideSlicePreview}}">
+        <span>slices:</span>
+      </template>
+      <template is="dom-if" if="{{!hideSlicePreview}}">
+        <span>slice x of y</span>
+      </template>
     </div>
     <div id="main" class="flex layout horizontal fit">
       <div id="center-content" class="flex layout vertical">
-        <neon-animated-pages id="main-pages" selected="0" class="fit">
+        <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit">
           <shared-animatable id="sa-pv" class="fit">
             <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
               <paper-fab mini icon="add" title="Add model"></paper-fab>
-              <paper-fab mini icon="delete" title="Delete model"></paper-fab>
               <paper-fab mini id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab mini icon="settings" title="Microtome settings"></paper-fab>
+              <paper-fab mini icon="settings" title="Microtome settings" on-click="openSettings"></paper-fab>
               <paper-fab mini icon="file-download" title="Save project"></paper-fab>
             </div>
             <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
@@ -103,6 +134,26 @@
               <paper-fab mini class="icon-rotate-270" icon="av:skip-previous" title="To Start" on-click="sliceStart"></paper-fab>
             </div>
             <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" xres="{{printerConfig.projector.xRes}}" yres="{{printerConfig.projector.yRes}}" slice-at="[[sliceAt]]" class="fit" scene="[[scene]]"></slice-preview>
+          </shared-animatable>
+          <shared-animatable>
+            <div class="fit vertical layout">
+              <paper-toolbar justify="middle" bottom-justify="around" class="medium">
+                <div class="title">Microtome Setup</div>
+                <paper-fab mini icon="close" on-tap="closeSettings" title="Close settings"></paper-fab>
+                <paper-tabs class="bottom" style="width:300px" noink selected="{{activeSettingsTab}}">
+                  <paper-tab>Printer</paper-tab>
+                  <paper-tab>Job</paper-tab>
+                </paper-tabs>
+              </paper-toolbar>
+              <neon-animated-pages class="flex layout vertical" selected="{{activeSettingsTab}}" entry-animation="fade-in-animation" exit-animation="fade-out-animation">
+                <neon-animatable>
+                  PRINTER SETTINGS
+                </neon-animatable>
+                <neon-animatable>
+                  JOB SETTINGS
+                </neon-animatable>
+              </neon-animated-pages>
+            </div>
           </shared-animatable>
         </neon-animated-pages>
       </div>

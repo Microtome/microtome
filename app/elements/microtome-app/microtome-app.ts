@@ -1,3 +1,12 @@
+enum ActivePage {
+  PRINT_VOLUME, SLICE_PREVIEW, SETTINGS
+}
+
+enum SettingsTab {
+  PRINTER, JOB
+}
+
+
 /**
 * Main app controller class that manages the behaviors of all sub components
 *
@@ -8,10 +17,10 @@
 class MicrotomeApp extends polymer.Base {
 
   // Convenience imports
-  _TPI = microtome.printer.ThreadUnits.TPI;
-  _PITCH_MM = microtome.printer.ThreadUnits.PITCH_MM;
-  _PITCH_IN = microtome.printer.ThreadUnits.PITCH_IN;
+  _LEAD_MM = microtome.printer.ThreadUnits.LEAD_MM;
+  _LEAD_IN = microtome.printer.ThreadUnits.LEAD_IN;
   _INCH = microtome.units.LengthUnit.INCH;
+  _µM = microtome.units.LengthUnit.MICRON;
   _MM = microtome.units.LengthUnit.MILLIMETER;
   _CM = microtome.units.LengthUnit.CENTIMETER;
   private _convertLengthUnit = microtome.units.convertLengthUnit
@@ -20,9 +29,22 @@ class MicrotomeApp extends polymer.Base {
   public scene: microtome.three_d.PrinterScene;
 
   @property({ readOnly: false, notify: true, type: Object })
+  public printJobConfig: microtome.printer.PrintJobConfig = {
+    name: "Job 1",
+    decription: "",
+    layerThickness: 24.8,
+    settleTime: 1000,
+    layerExposureTime: 500,
+    blankTime: 1000,
+    retractDistance: 5,
+    zOffset: 2,
+    raftThickness: 1.5
+  }
+
+  @property({ readOnly: false, notify: true, type: Object })
   public printerConfig: microtome.printer.PrinterConfig = {
-    name: 'unknown',
-    description: 'none',
+    name: 'Homebrew DLP',
+    description: 'Homebrew DLP printer built from servo city parts and using micro projector',
     lastModified: null,
     volume: {
       width: 36,
@@ -30,8 +52,8 @@ class MicrotomeApp extends polymer.Base {
       height: 50
     },
     zStage: {
-      threadMeasure: 20,
-      threadUnits: microtome.printer.ThreadUnits.TPI,
+      threadMeasure: 0.05,
+      threadUnits: microtome.printer.ThreadUnits.LEAD_IN,
       stepsPerRev: 1024,
       microsteps: 1
     },
@@ -48,27 +70,49 @@ class MicrotomeApp extends polymer.Base {
   public sliceAt: number = 0;
 
   @property({ readOnly: false, notify: true })
-  public layerThickness: number;
+  public minLayerThickness: number;
+
+  @property({ type: Number })
+  public activePage: ActivePage = ActivePage.PRINT_VOLUME;
+
+  @property({ type: Number })
+  public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
+
+  @computed({ type: Boolean })
+  public hideInfo(activePage: ActivePage): boolean {
+    return activePage == ActivePage.SETTINGS
+  }
 
   public toggleSlicePreview(e: Event) {
     this.hideSlicePreview = !this.hideSlicePreview
     if (this.hideSlicePreview) {
-      this.$['main-pages'].selected = 0;
+      this.activePage = ActivePage.PRINT_VOLUME;
     } else {
-      this.$['main-pages'].selected = 1;
+      this.activePage = ActivePage.SLICE_PREVIEW;
     }
   }
 
+  public openSettings(e: Event) {
+    this.activePage = ActivePage.SETTINGS;
+  }
+
+  public closeSettings(e: Event) {
+    this.activePage = ActivePage.PRINT_VOLUME;
+  }
+
+
   public ready() {
     // var geom = new THREE.BoxGeometry(10, 10, 10);
-    var geom = new THREE.SphereGeometry(10);
-    var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
-    mesh.position.z = 11;
-    this.scene.printObjects.push(mesh);
     console.log(this['is'], 'ready!')
   }
 
   public attached() {
+    var geom = new THREE.SphereGeometry(10);
+    var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
+    mesh.rotateX(Math.PI / 2);
+    mesh.position.z = 10 + this.printJobConfig.zOffset;
+    this.scene.printObjects.push(mesh);
+
     this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
     this.$['sa-pv'].animationConfig = {
       'entry': [
@@ -130,27 +174,35 @@ class MicrotomeApp extends polymer.Base {
 
   @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
   zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
-    if (newThreadUnits == this._TPI) {
-      this.layerThickness = (this._convertLengthUnit(1 / newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM));
-    } else if (newThreadUnits == this._PITCH_IN) {
-      this.layerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
-    } else if (newThreadUnits == this._PITCH_MM) {
-      this.layerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
+    if (newThreadUnits == this._LEAD_IN) {
+      this.minLayerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
+    } else if (newThreadUnits == this._LEAD_MM) {
+      this.minLayerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
     }
-    window.console.log(this.layerThickness);
+    // window.console.log(this.minLayerThickness);
+  }
+
+  @computed({ type: Number })
+  minLayerThicknessMicrons(minLayerThickness: number) {
+    return (this._convertLengthUnit(minLayerThickness, this._MM, this._µM)).toFixed(2);
   }
 
   public sliceUp(numSlices: number = 1) {
-    window.console.log(numSlices);
-    this.sliceAt += this.layerThickness * numSlices;
+    if (isNaN(numSlices)) {
+      numSlices = 1
+    }
+    this.sliceAt += this.minLayerThickness * numSlices;
     if (this.sliceAt > this.scene.printVolume.height) this.sliceAt = this.scene.printVolume.height;
-    window.console.log(this.sliceAt);
+    // window.console.log(this.sliceAt);
   }
 
   public sliceDown(numSlices: number = 1) {
-    this.sliceAt -= this.layerThickness * numSlices;
+    if (isNaN(numSlices)) {
+      numSlices = 1
+    }
+    this.sliceAt -= this.minLayerThickness * numSlices;
     if (this.sliceAt < 0) this.sliceAt = 0;
-    window.console.log(this.sliceAt);
+    // window.console.log(this.sliceAt);
   }
 
   public sliceStart() {
