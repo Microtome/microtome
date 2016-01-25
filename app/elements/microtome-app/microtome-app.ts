@@ -158,7 +158,7 @@ class MicrotomeApp extends polymer.Base {
         }
       ]
     }
-    this.$['sa-pc'].sharedElements = { 'hero': this.$['sa-pc'] }
+    this.$['sa-pc'].sharedElements = { 'hero': this.$['settings-toolbar'] }
     this.$['sa-pc'].animationConfig = {
       'entry': [
         {
