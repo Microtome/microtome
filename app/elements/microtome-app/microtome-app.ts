@@ -75,7 +75,7 @@ class MicrotomeApp extends polymer.Base {
   @property({ type: Number })
   public activePage: ActivePage = ActivePage.PRINT_VOLUME;
 
-  @property({ type: Number })
+  @property({ type: Number, readOnly: false, notify: true})
   public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
 
   @computed({ type: Boolean })
@@ -93,6 +93,7 @@ class MicrotomeApp extends polymer.Base {
   }
 
   public openSettings(e: Event) {
+    this.$['config-tabs'].notifyResize();
     this.activePage = ActivePage.SETTINGS;
   }
 
