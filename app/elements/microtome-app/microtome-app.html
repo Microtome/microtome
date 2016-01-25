@@ -119,7 +119,7 @@
             <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
               <paper-fab mini icon="add" title="Add model"></paper-fab>
               <paper-fab mini id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab mini icon="settings" title="Microtome settings" on-click="openSettings"></paper-fab>
+              <paper-fab mini id="settings-button" icon="settings" title="Microtome settings" on-click="openSettings"></paper-fab>
               <paper-fab mini icon="file-download" title="Save project"></paper-fab>
             </div>
             <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
@@ -135,22 +135,22 @@
             </div>
             <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" xres="{{printerConfig.projector.xRes}}" yres="{{printerConfig.projector.yRes}}" slice-at="[[sliceAt]]" class="fit" scene="[[scene]]"></slice-preview>
           </shared-animatable>
-          <shared-animatable>
-            <div class="fit vertical layout">
+          <shared-animatable id="sa-pc">
+            <div id="settings" class="fit vertical layout">
               <paper-toolbar justify="middle" bottom-justify="around" class="medium">
                 <div class="title">Microtome Setup</div>
                 <paper-fab mini icon="close" on-tap="closeSettings" title="Close settings"></paper-fab>
-                <paper-tabs class="bottom" style="width:300px" noink selected="{{activeSettingsTab}}">
+                <paper-tabs id="config-tabs" class="bottom" style="width:300px" noink selected="{{activeSettingsTab}}">
                   <paper-tab>Printer</paper-tab>
                   <paper-tab>Job</paper-tab>
                 </paper-tabs>
               </paper-toolbar>
               <neon-animated-pages class="flex layout vertical" selected="{{activeSettingsTab}}" entry-animation="fade-in-animation" exit-animation="fade-out-animation">
                 <neon-animatable>
-                  PRINTER SETTINGS
+                  <div id="printer-config">PRINTER SETTINGS</div>
                 </neon-animatable>
                 <neon-animatable>
-                  JOB SETTINGS
+                  <div id="job-config">JOB SETTINGS</div>
                 </neon-animatable>
               </neon-animated-pages>
             </div>

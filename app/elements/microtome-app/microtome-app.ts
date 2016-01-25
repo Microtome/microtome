@@ -88,11 +88,13 @@ class MicrotomeApp extends polymer.Base {
     if (this.hideSlicePreview) {
       this.activePage = ActivePage.PRINT_VOLUME;
     } else {
+      this.$['sa-pv'].sharedElements['hero'] = this.$['slice-preview-button']
       this.activePage = ActivePage.SLICE_PREVIEW;
     }
   }
 
   public openSettings(e: Event) {
+    this.$['sa-pv'].sharedElements['hero'] = this.$['settings-button']
     this.$['config-tabs'].notifyResize();
     this.activePage = ActivePage.SETTINGS;
   }
@@ -114,18 +116,13 @@ class MicrotomeApp extends polymer.Base {
     mesh.position.z = 10 + this.printJobConfig.zOffset;
     this.scene.printObjects.push(mesh);
 
-    this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
+    this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button']}
     this.$['sa-pv'].animationConfig = {
       'entry': [
         {
           name: 'fade-in-animation',
           node: this.$['sa-pv'],
         },
-        {
-          name: 'hero-animation',
-          id: 'hero',
-          toPage: this.$['sa-pv']
-        }
       ],
       'exit': [
         {
@@ -155,18 +152,19 @@ class MicrotomeApp extends polymer.Base {
       ],
       'exit': [
         {
-          name: 'hero-animation',
-          id: 'hero',
-          fromPage: this.$['sa-sp']
-        },
-        {
           name: 'fade-out-animation',
           node: this.$['sa-sp'],
         }
       ]
     }
+    this.$['sa-pc'].sharedElements = { 'hero': this.$['sa-pc'] }
     this.$['sa-pc'].animationConfig = {
       'entry': [
+        {
+          name: 'hero-animation',
+          id: 'hero',
+          toPage: this.$['sa-pc']
+        },
         {
           name: 'fade-in-animation',
           node: this.$['sa-pc'],
