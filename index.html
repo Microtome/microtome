@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Microtome by DanielJoyce</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-dark.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="javascripts/respond.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!--[if lt IE 8]>
+    <link rel="stylesheet" href="stylesheets/ie.css">
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+      <div id="header">
+        <nav>
+          <li class="fork"><a href="https://github.com/DanielJoyce/microtome">View On GitHub</a></li>
+          <li class="downloads"><a href="https://github.com/DanielJoyce/microtome/zipball/master">ZIP</a></li>
+          <li class="downloads"><a href="https://github.com/DanielJoyce/microtome/tarball/master">TAR</a></li>
+          <li class="title">DOWNLOADS</li>
+        </nav>
+      </div><!-- end header -->
+
+    <div class="wrapper">
+
+      <section>
+        <div id="title">
+          <h1>Microtome</h1>
+          <p>A browser based GPU accelerated 3D model slicer</p>
+          <hr>
+          <span class="credits left">Project maintained by <a href="https://github.com/DanielJoyce">DanielJoyce</a></span>
+          <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="https://twitter.com/michigangraham">mattgraham</a></span>
+        </div>
+
+        <h1>
+<a id="microtome" class="anchor" href="#microtome" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Microtome</h1>
+
+<p>Microtome is a gpu accelerated model slicer intended for generating slice images for
+use in DLP style 3D printers. Eventually it will be expanded to control 3D printers
+using Chrome App serial port support</p>
+
+<h1>
+<a id="status" class="anchor" href="#status" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Status</h1>
+
+<p>I am currently in the process of porting Microtome from Dart to Typescript. This is being done due to various
+issues with the Dart platform and Chrome Apps; specifically in the mistaken belief to make it more "secure", inter
+window communication even inside a self-contained chrome app is severely crippled.</p>
+
+<ul>
+<li>[X] For z axis change pitch to lead as its what really matters</li>
+<li>[ ] Slice to zip file via zipjs and filejs, create a download containing PNG slices</li>
+<li>[X] Enable scrollwheel in slice preview</li>
+<li>[ ] Add Job configuration object
+
+<ul>
+<li>[ ] Specify slice thickness as multiples of minimum printer slice</li>
+<li>[X] Job name</li>
+<li>[X] Job desc</li>
+<li>[X] Layer exposure times</li>
+<li>[X] Layer blank / move times</li>
+<li>[ ] Job length estimate</li>
+<li>[X] Specify raft thickness</li>
+<li>[X] Specify initial z-offset offset for all loaded meshes</li>
+<li>[ ] Export/Import job spec</li>
+</ul>
+</li>
+<li>[ ] Slice shader improvements
+
+<ul>
+<li>[ ] Specify thickness of support grind in mm</li>
+<li>[ ] Specify support cube lattice spacing in mm</li>
+<li>[ ] Allow rotation of support cube matrix</li>
+<li>[ ] Generate raft</li>
+<li>[ ] Support multi-step layer exposure patterns to reduce heat generation for large slice areas.</li>
+</ul>
+</li>
+<li>[ ] Print volume preview
+
+<ul>
+<li>[ ] Move</li>
+<li>[ ] Rotate</li>
+<li>[ ] Scale</li>
+<li>[ ] Select</li>
+<li>[ ] Add</li>
+<li>[ ] Delete</li>
+<li>[ ] Copy</li>
+</ul>
+</li>
+<li>[ ] Export / Import project
+
+<ul>
+<li>[ ] Job settings</li>
+<li>[ ] Printer config</li>
+<li>[ ] Current project layout</li>
+</ul>
+</li>
+<li>[ ] Support generation improvements
+
+<ul>
+<li>[ ] Find low points that need support</li>
+<li>[ ] Find other flat areas requiring support</li>
+<li>[ ] Sample randomly, then use s-hull to create dealauny triangulation</li>
+<li>[ ] Use delauny triangulation then as support pattern.</li>
+</ul>
+</li>
+</ul>
+
+<h2>
+<a id="future-directions" class="anchor" href="#future-directions" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Future Directions</h2>
+
+<ul>
+<li>Generate paths for conventional printers via potracing the slice images?
+
+<ul>
+<li>
+<a href="https://github.com/kilobtye/potrace">https://github.com/kilobtye/potrace</a><br>
+</li>
+<li>Seems to be a recent port and works well.</li>
+</ul>
+</li>
+<li>Mesh union</li>
+<li>Mesh repair utilities</li>
+</ul>
+      </section>
+
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
