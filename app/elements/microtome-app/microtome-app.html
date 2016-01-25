@@ -92,17 +92,21 @@
     :host hr {
       width: 100%;
     }
+
+    :host #printer-config,
+    :host #job-config {
+      margin: 24px;
+    }
   </style>
 
   <template>
     <div id="info-overlay" hidden$="{{hideInfo}}" class="vertical layout">
       <span class="title">Microtome</span>
       <hr>
-      <span class="sub-head">Printer</span>
-      <span>printer: {{printerConfig.name}}</span>
+      <span class="sub-head">Printer: {{printerConfig.name}}</span>
       <span>min layer: {{minLayerThicknessMicrons}} µm</span>
       <hr>
-      <span class="sub-head">Job</span>
+      <span class="sub-head">Job: {{printJobConfig.name}}</span>
       <span>z offset: {{printJobConfig.zOffset}} mm</span>
       <span>raft thickness: {{printJobConfig.raftThickness}} mm</span>
       <template is="dom-if" if="{{hideSlicePreview}}">

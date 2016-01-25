@@ -80,8 +80,10 @@ module microtome.printer {
     name: string;
     /** Description of job*/
     decription: string;
-    /** Selected layer thickness, µm */
-    layerThickness: number;
+    /** The step distance used when this job was created */
+    stepDistance: number;
+    /** The number of steps per layer */
+    stepsPerLayer:number;
     /** Settle time, ms */
     settleTime: number;
     /** Exposure time per layer, ms */

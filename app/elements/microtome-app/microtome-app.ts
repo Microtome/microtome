@@ -32,7 +32,8 @@ class MicrotomeApp extends polymer.Base {
   public printJobConfig: microtome.printer.PrintJobConfig = {
     name: "Job 1",
     decription: "",
-    layerThickness: 24.8,
+    stepDistance: 1.24,
+    stepsPerLayer: 20,
     settleTime: 1000,
     layerExposureTime: 500,
     blankTime: 1000,
@@ -75,7 +76,7 @@ class MicrotomeApp extends polymer.Base {
   @property({ type: Number })
   public activePage: ActivePage = ActivePage.PRINT_VOLUME;
 
-  @property({ type: Number, readOnly: false, notify: true})
+  @property({ type: Number, readOnly: false, notify: true })
   public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
 
   @computed({ type: Boolean })
