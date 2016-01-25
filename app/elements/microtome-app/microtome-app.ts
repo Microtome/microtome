@@ -165,6 +165,20 @@ class MicrotomeApp extends polymer.Base {
         }
       ]
     }
+    this.$['sa-pc'].animationConfig = {
+      'entry': [
+        {
+          name: 'fade-in-animation',
+          node: this.$['sa-pc'],
+        }
+      ],
+      'exit': [
+        {
+          name: 'fade-out-animation',
+          node: this.$['sa-pc'],
+        }
+      ]
+    }
     window.addEventListener("wheel", this._handleWindowMouseScroll)
   }
 
