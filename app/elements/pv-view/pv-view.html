@@ -22,7 +22,7 @@
     }
   </style>
   <template>
-    <div id="pv-canvas-home" class="fit">
+    <div id="pv-canvas-home" class="fit" on-mousedown="preparePick" on-mousemove="cancelPick" on-mouseup="tryPick">
     </div>
   </template>
 </dom-module>

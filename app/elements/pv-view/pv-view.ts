@@ -5,6 +5,8 @@ class PrinterVolumeView extends polymer.Base {
 
   private _renderer: THREE.Renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, clearColor: 0x000000, clearAlpha: 0 });
 
+  private _raycaster: THREE.Raycaster = new THREE.Raycaster();
+
   private _scatterLight: THREE.AmbientLight = new THREE.AmbientLight();
 
   private _skyLight: THREE.DirectionalLight = new THREE.DirectionalLight();
@@ -41,6 +43,9 @@ class PrinterVolumeView extends polymer.Base {
 
   @property({ notify: true, readOnly: false })
   public groundColor: string = "#775533"
+
+  @property({ notify: true, readOnly: false, type: Object })
+  public pickedMesh: THREE.Mesh = null;
 
   public attached() {
     this._canvasHome = this.$["pv-canvas-home"] as HTMLDivElement;
@@ -121,6 +126,38 @@ class PrinterVolumeView extends polymer.Base {
   @observe("groundColor")
   groundColorChanged(newValue: string, oldValue: string) {
     this._groundLight.color.setStyle(newValue);
+  }
+
+  private _mouseXY = new THREE.Vector2();
+
+  private _doPick = false;
+
+  public preparePick(e: MouseEvent) {
+    this._doPick = true;
+  }
+
+  public cancelPick(e: MouseEvent) {
+    this._doPick = false;
+  }
+
+  public tryPick(e: MouseEvent) {
+    if (this._doPick) {
+      var bounds = this._canvasHome.getBoundingClientRect();
+      var x = (e.clientX / bounds.width) * 2 - 1;
+      var y = - (e.clientY / bounds.height) * 2 + 1;
+      // update the picking ray with the camera and mouse position
+      this._mouseXY.x = x;
+      this._mouseXY.y = y;
+      this._raycaster.setFromCamera(this._mouseXY, this._pvCamera);
+      // calculate objects intersecting the picking ray
+      var intersects = this._raycaster.intersectObjects(this.scene.printObjects);
+      if (intersects.length > 0 ) {
+        this.pickedMesh = intersects[0].object as THREE.Mesh;
+        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
+      } else if (this.pickedMesh != null) {
+        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
+      }
+    }
   }
 }
 
