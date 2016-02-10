@@ -3,7 +3,11 @@ enum ActivePage {
 }
 
 enum SettingsTab {
-  PRINTER, JOB
+  PRINTER, JOB, ABOUT
+}
+
+enum TransformMode {
+  NONE, MOVE, ROTATE, SCALE
 }
 
 
@@ -24,6 +28,10 @@ class MicrotomeApp extends polymer.Base {
   _MM = microtome.units.LengthUnit.MILLIMETER;
   _CM = microtome.units.LengthUnit.CENTIMETER;
   private _convertLengthUnit = microtome.units.convertLengthUnit
+
+  //-----------------------------------------------------------------
+  // Properties
+  //-----------------------------------------------------------------
 
   @property({ readOnly: false, notify: true, type: Object, value: () => new microtome.three_d.PrinterScene })
   public scene: microtome.three_d.PrinterScene;
@@ -79,9 +87,40 @@ class MicrotomeApp extends polymer.Base {
   @property({ type: Number, readOnly: false, notify: true })
   public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
 
+  @property({type: Object, readOnly: false, notify: true})
+  public selectedModel: THREE.Mesh = null;
+
+  //-----------------------------------------------------------------
+  // Computed Properties
+  //-----------------------------------------------------------------
+
+  @computed({ type: Number })
+  minLayerThicknessMicrons(minLayerThickness: number) {
+    return (this._convertLengthUnit(minLayerThickness, this._MM, this._µM)).toFixed(2);
+  }
+
   @computed({ type: Boolean })
   public hideInfo(activePage: ActivePage): boolean {
     return activePage == ActivePage.SETTINGS
+  }
+
+  //---------------------------------------------------------------
+  // Change observers
+  //---------------------------------------------------------------
+
+  @observe("printerConfig.volume.width,printerConfig.volume.depth,printerConfig.volume.height")
+  printVolumeChanged(newWidth: number, newDepth: number, newHeight: number) {
+    this.scene.printVolume.resize(newWidth, newDepth, newHeight);
+  }
+
+  @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
+  zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
+    if (newThreadUnits == this._LEAD_IN) {
+      this.minLayerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
+    } else if (newThreadUnits == this._LEAD_MM) {
+      this.minLayerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
+    }
+    // window.console.log(this.minLayerThickness);
   }
 
   public toggleSlicePreview(e: Event) {
@@ -94,16 +133,9 @@ class MicrotomeApp extends polymer.Base {
     }
   }
 
-  public openSettings(e: Event) {
-    this.$['sa-pv'].sharedElements['hero'] = this.$['settings-button']
-    this.$['config-tabs'].notifyResize();
-    this.activePage = ActivePage.SETTINGS;
-  }
-
-  public closeSettings(e: Event) {
-    this.activePage = ActivePage.PRINT_VOLUME;
-  }
-
+  //------------------------------------------------------------
+  // Lifecycle methods
+  //------------------------------------------------------------
 
   public ready() {
     // var geom = new THREE.BoxGeometry(10, 10, 10);
@@ -181,26 +213,6 @@ class MicrotomeApp extends polymer.Base {
     window.addEventListener("wheel", this._handleWindowMouseScroll)
   }
 
-  @observe("printerConfig.volume.width,printerConfig.volume.depth,printerConfig.volume.height")
-  printVolumeChanged(newWidth: number, newDepth: number, newHeight: number) {
-    this.scene.printVolume.resize(newWidth, newDepth, newHeight);
-  }
-
-  @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
-  zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
-    if (newThreadUnits == this._LEAD_IN) {
-      this.minLayerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
-    } else if (newThreadUnits == this._LEAD_MM) {
-      this.minLayerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
-    }
-    // window.console.log(this.minLayerThickness);
-  }
-
-  @computed({ type: Number })
-  minLayerThicknessMicrons(minLayerThickness: number) {
-    return (this._convertLengthUnit(minLayerThickness, this._MM, this._µM)).toFixed(2);
-  }
-
   public sliceUp(numSlices: number = 1) {
     if (isNaN(numSlices)) {
       numSlices = 1
@@ -229,6 +241,10 @@ class MicrotomeApp extends polymer.Base {
     window.console.log(this.sliceAt);
   }
 
+  //-----------------------------------------------------------------
+  // Event listeners
+  //-----------------------------------------------------------------
+
   _handleWindowMouseScroll = (e: WheelEvent) => {
     if (this.hideSlicePreview) return;
     var numSlices = 1;
@@ -245,6 +261,46 @@ class MicrotomeApp extends polymer.Base {
     } else if (e.deltaY < 0 || e.deltaX < 0) {
       this.sliceUp(numSlices);
     }
+  }
+
+  public openSettings(e: Event) {
+    this.$['sa-pv'].sharedElements['hero'] = this.$['settings-button']
+    this.$['config-tabs'].notifyResize();
+    this.activePage = ActivePage.SETTINGS;
+  }
+
+  public closeSettings(e: Event) {
+    this.activePage = ActivePage.PRINT_VOLUME;
+  }
+
+  onPrintVolumeViewContextMenu(e:MouseEvent):boolean{
+    e.preventDefault();
+    this.$['pv-fab-radial'].open(e.clientX, e.clientY);
+    return false;
+  }
+
+  onRotateClick(e:MouseEvent){
+
+  }
+
+  onMoveClick(e:MouseEvent){
+
+  }
+
+  onScaleClick(e:MouseEvent){
+
+  }
+
+  onAddModelClick(e:MouseEvent){
+
+  }
+
+  onDeleteModelClick(e:MouseEvent){
+
+  }
+
+  onModelPick(){
+
   }
 }
 

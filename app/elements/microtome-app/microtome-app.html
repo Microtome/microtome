@@ -21,10 +21,13 @@
 <link rel="import" href="../../bower_components/neon-animation/animations/hero-animation.html">
 <link rel="import" href="../../bower_components/neon-animation/animations/fade-in-animation.html">
 <link rel="import" href="../../bower_components/font-awesome-polymer-icons/fa-brand.html">
+<link rel="import" href="../../bower_components/font-awesome-polymer-icons/fa-directional.html">
+<link rel="import" href="../../bower_components/font-awesome-polymer-icons/fa-text-editor.html">
 <!-- <link rel="import" href="../../bower_components/neon-animation/neon-animation.html"> -->
 
 <link rel="import" href="../slice-preview/slice-preview.html">
 <link rel="import" href="../pv-view/pv-view.html">
+<link rel="import" href="../fab-radial/fab-radial.html">
 <link rel="import" href="../shared-animatable/shared-animatable.html">
 
 <link rel="import" href="../../styles/shared-styles.html">
@@ -122,12 +125,22 @@
       <div id="center-content" class="flex layout vertical">
         <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit">
           <shared-animatable id="sa-pv" class="fit">
-            <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
+            <!-- <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
               <paper-fab mini icon="add" title="Add model"></paper-fab>
               <paper-fab mini id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
               <paper-fab mini id="settings-button" icon="settings" title="Microtome settings" on-click="openSettings"></paper-fab>
-            </div>
-            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]"></pv-view>
+            </div> -->
+            <fab-radial id="pv-fab-radial">
+              <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model"></paper-fab>
+              <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>
+              <paper-fab mini class="menu-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab mini class="menu-south-east" id="settings-button" icon="settings" title="Microtome Settings" on-click="openSettings"></paper-fab>
+              <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"  ></paper-fab>
+              <paper-fab mini class="menu-south-west" id="scale-model-button" icon="fa-directional:arrows-alt" title="Scale Model"></paper-fab>
+              <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model" ></paper-fab>
+              <paper-fab mini class="menu-north-west" id="move-model-button" icon="fa-directional:arrows" title="Move Model"></paper-fab>
+            </fab-radial>
+            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]" on-contextmenu="onPrintVolumeViewContextMenu"></pv-view>
           </shared-animatable>
           <shared-animatable id="sa-sp" class="fit">
             <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
