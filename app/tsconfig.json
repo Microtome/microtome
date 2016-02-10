@@ -28,6 +28,8 @@
     "./../typings/webcomponents.js/webcomponents.js.d.ts",
     "./../local_typings/chrome_serial.d.ts",
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
+    "./elements/fab-menu/fab-menu.ts",
+    "./elements/fab-radial/fab-radial.ts",
     "./elements/layer-height/layer-height.ts",
     "./elements/microtome-app/microtome-app.ts",
     "./elements/pv-view/pv-view.ts",
