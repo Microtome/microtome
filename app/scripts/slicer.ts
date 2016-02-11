@@ -105,6 +105,7 @@ module microtome.slicer {
 
     teardownSlicerPreview() {
       this.scene.overrideMaterial = null;
+      this._slicingParamsDirty = true;
     }
 
     /// Got back to home position and reset slicing
@@ -130,6 +131,8 @@ module microtome.slicer {
       this._oCamera.top = (scale * newHeight) / 2.0;
       this._oCamera.bottom = -this._oCamera.top;
       this._oCamera.updateProjectionMatrix();
+      this._depthTexRenderTarget.dispose();
+      this._depthTexRenderTarget = null;
     }
   }
 }
