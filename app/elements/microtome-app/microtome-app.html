@@ -1,12 +1,7 @@
 <link rel="import" href="../../bower_components/polymer/polymer.html">
 <link rel="import" href="../../bower_components/polymer-ts/polymer-ts.html">
 
-<link rel="import" href="../../bower_components/paper-header-panel/paper-header-panel.html">
-<link rel="import" href="../../bower_components/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="../../bower_components/paper-toolbar/paper-toolbar.html">
-<link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
-<link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
-<link rel="import" href="../../bower_components/paper-item/paper-item.html">
+<link rel="import" href="../../bower_components/paper-input/paper-input.html">
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="../../bower_components/iron-icon/iron-icon.html">
 <link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
@@ -59,10 +54,21 @@
       /*position: relative;*/
     }
 
-    :host #pv-toolbar-overlay,
     :host #sp-toolbar-overlay {
       position: absolute;
       width: 100px;
+      top: 0px;
+      right: 0px;
+      bottom: 0px;
+      pointer-events: none;
+      /*color: #afafaf;*/
+      margin: 25px;
+      z-index: 10;
+    }
+
+    :host #pv-toolbar-overlay {
+      position: absolute;
+      width: 200px;
       top: 0px;
       right: 0px;
       bottom: 0px;
@@ -87,10 +93,13 @@
       background-color: rgba(255,255,255,0.2);*/
     }
 
-    :host #pv-toolbar-overlay > *,
     :host #sp-toolbar-overlay > * {
       pointer-events: auto;
       margin: 10px;
+    }
+
+    :host #pv-toolbar-overlay > * {
+      pointer-events: auto;
     }
 
     :host hr {
@@ -125,22 +134,46 @@
       <div id="center-content" class="flex layout vertical">
         <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit">
           <shared-animatable id="sa-pv" class="fit">
-            <!-- <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
-              <paper-fab mini icon="add" title="Add model"></paper-fab>
-              <paper-fab mini id="slice-preview-button" icon="maps:layers" title="Preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab mini id="settings-button" icon="settings" title="Microtome settings" on-click="openSettings"></paper-fab>
-            </div> -->
+            <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
+              <div>
+                <span class="sub-head">Position</span>
+                <br/>
+                <div class="horizontal layout">
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X(mm)" value="{{pickedMesh.position.x}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y(mm)" value="{{pickedMesh.position.y}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z(mm)" value="{{pickedMesh.position.z}}" type="number"></paper-input>
+                </div>
+              </div>
+              <div>
+                <span class="sub-head">Rotation</span>
+                <br/>
+                <div class="horizontal layout">
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X" value="{{pickedMesh.rotation.x}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y" value="{{pickedMesh.rotation.y}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z" value="{{pickedMesh.rotation.z}}" type="number"></paper-input>
+                </div>
+              </div>
+              <div>
+                <span class="sub-head">Scale</span>
+                <br/>
+                <div class="horizontal layout">
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X" value="{{pickedMesh.scale.x}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y" value="{{pickedMesh.scale.y}}" type="number"></paper-input>
+                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z" value="{{pickedMesh.scale.z}}" type="number"></paper-input>
+                </div>
+              </div>
+            </div>
             <fab-radial id="pv-fab-radial">
               <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model"></paper-fab>
               <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>
               <paper-fab mini class="menu-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
               <paper-fab mini class="menu-south-east" id="settings-button" icon="settings" title="Microtome Settings" on-click="openSettings"></paper-fab>
-              <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"  ></paper-fab>
+              <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"></paper-fab>
               <paper-fab mini class="menu-south-west" id="scale-model-button" icon="fa-directional:arrows-alt" title="Scale Model"></paper-fab>
-              <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model" ></paper-fab>
+              <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model"></paper-fab>
               <paper-fab mini class="menu-north-west" id="move-model-button" icon="fa-directional:arrows" title="Move Model"></paper-fab>
             </fab-radial>
-            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" class="fit" scene="[[scene]]" on-contextmenu="onPrintVolumeViewContextMenu"></pv-view>
+            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" picked-mesh="{{pickedMesh}}" class="fit" scene="[[scene]]" on-contextmenu="onPrintVolumeViewContextMenu"></pv-view>
           </shared-animatable>
           <shared-animatable id="sa-sp" class="fit">
             <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
@@ -173,10 +206,12 @@
                 </neon-animatable>
                 <neon-animatable>
                   <div id="about">
-                    <span class="title">About Microtome</span><br/>
+                    <span class="title">About Microtome</span>
+                    <br/>
                     <p>Microtome is a GPU accelerated slicer intended for driving DLP based 3D printers.
-                    <p>Microtome is licensed under the Apache License.
-                    <p>You can help with and <a href="https://github.com/DanielJoyce/microtome" target="_blank">follow Microtome development</a> on Github<iron-icon icon="fa-brand:github"></iron-icon>.
+                      <p>Microtome is licensed under the Apache License.
+                        <p>You can help with and <a href="https://github.com/DanielJoyce/microtome" target="_blank">follow Microtome development</a> on Github
+                          <iron-icon icon="fa-brand:github"></iron-icon>.
                   </div>
                 </neon-animatable>
               </neon-animated-pages>

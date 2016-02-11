@@ -87,9 +87,11 @@ class MicrotomeApp extends polymer.Base {
   @property({ type: Number, readOnly: false, notify: true })
   public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
 
-  @property({type: Object, readOnly: false, notify: true})
+  @property({ type: Object, readOnly: false, notify: true })
   public selectedModel: THREE.Mesh = null;
 
+  @property({ notify: true, readOnly: false, type: Object })
+  public pickedMesh: THREE.Mesh = null;
   //-----------------------------------------------------------------
   // Computed Properties
   //-----------------------------------------------------------------
@@ -123,14 +125,9 @@ class MicrotomeApp extends polymer.Base {
     // window.console.log(this.minLayerThickness);
   }
 
-  public toggleSlicePreview(e: Event) {
-    this.hideSlicePreview = !this.hideSlicePreview
-    if (this.hideSlicePreview) {
-      this.activePage = ActivePage.PRINT_VOLUME;
-    } else {
-      this.$['sa-pv'].sharedElements['hero'] = this.$['slice-preview-button']
-      this.activePage = ActivePage.SLICE_PREVIEW;
-    }
+  @observe("pickedMesh")
+  pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
+    
   }
 
   //------------------------------------------------------------
@@ -149,7 +146,7 @@ class MicrotomeApp extends polymer.Base {
     mesh.position.z = 10 + this.printJobConfig.zOffset;
     this.scene.printObjects.push(mesh);
 
-    this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button']}
+    this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
     this.$['sa-pv'].animationConfig = {
       'entry': [
         {
@@ -245,6 +242,16 @@ class MicrotomeApp extends polymer.Base {
   // Event listeners
   //-----------------------------------------------------------------
 
+  public toggleSlicePreview(e: Event) {
+    this.hideSlicePreview = !this.hideSlicePreview
+    if (this.hideSlicePreview) {
+      this.activePage = ActivePage.PRINT_VOLUME;
+    } else {
+      this.$['sa-pv'].sharedElements['hero'] = this.$['slice-preview-button']
+      this.activePage = ActivePage.SLICE_PREVIEW;
+    }
+  }
+
   _handleWindowMouseScroll = (e: WheelEvent) => {
     if (this.hideSlicePreview) return;
     var numSlices = 1;
@@ -273,33 +280,33 @@ class MicrotomeApp extends polymer.Base {
     this.activePage = ActivePage.PRINT_VOLUME;
   }
 
-  onPrintVolumeViewContextMenu(e:MouseEvent):boolean{
+  onPrintVolumeViewContextMenu(e: MouseEvent): boolean {
     e.preventDefault();
     this.$['pv-fab-radial'].open(e.clientX, e.clientY);
     return false;
   }
 
-  onRotateClick(e:MouseEvent){
+  onRotateClick(e: MouseEvent) {
 
   }
 
-  onMoveClick(e:MouseEvent){
+  onMoveClick(e: MouseEvent) {
 
   }
 
-  onScaleClick(e:MouseEvent){
+  onScaleClick(e: MouseEvent) {
 
   }
 
-  onAddModelClick(e:MouseEvent){
+  onAddModelClick(e: MouseEvent) {
 
   }
 
-  onDeleteModelClick(e:MouseEvent){
+  onDeleteModelClick(e: MouseEvent) {
 
   }
 
-  onModelPick(){
+  onModelPick() {
 
   }
 }

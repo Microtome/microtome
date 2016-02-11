@@ -151,11 +151,12 @@ class PrinterVolumeView extends polymer.Base {
       this._raycaster.setFromCamera(this._mouseXY, this._pvCamera);
       // calculate objects intersecting the picking ray
       var intersects = this._raycaster.intersectObjects(this.scene.printObjects);
-      if (intersects.length > 0 ) {
+      if (intersects.length > 0) {
         this.pickedMesh = intersects[0].object as THREE.Mesh;
         this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
       } else if (this.pickedMesh != null) {
         this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
+        this.pickedMesh = null;
       }
     }
   }
