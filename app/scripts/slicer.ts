@@ -42,9 +42,9 @@ module microtome.slicer {
       this._slicingParamsDirty = true;
     }
 
-  /**
-   * Slice at the given z Height ( in mm)
-   */
+    /**
+     * Slice at the given z Height ( in mm)
+     */
     sliceAt(z: number) {
       var sliceZ = (z + FAR_Z_PADDING) / (FAR_Z_PADDING + this.targetZ);
       this._sliceMaterialUniforms['cutoff'].value = sliceZ;
@@ -131,8 +131,10 @@ module microtome.slicer {
       this._oCamera.top = (scale * newHeight) / 2.0;
       this._oCamera.bottom = -this._oCamera.top;
       this._oCamera.updateProjectionMatrix();
-      this._depthTexRenderTarget.dispose();
-      this._depthTexRenderTarget = null;
+      if (this._depthTexRenderTarget) {
+        this._depthTexRenderTarget.dispose();
+        this._depthTexRenderTarget = null;
+      }
     }
   }
 }
