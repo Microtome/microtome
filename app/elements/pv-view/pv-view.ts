@@ -29,6 +29,10 @@ class PrinterVolumeView extends polymer.Base {
 
   private _camNav: microtome.three_d.CameraNav;
 
+  //--------------------------------------------------------
+  // Properties
+  //--------------------------------------------------------
+
   @property({})
   public scene: microtome.three_d.PrinterScene;
 
@@ -46,6 +50,78 @@ class PrinterVolumeView extends polymer.Base {
 
   @property({ notify: true, readOnly: false, type: Object })
   public pickedMesh: THREE.Mesh = null;
+
+  @property({ notify: true, readOnly: false, type: String })
+  public _rotX: string;
+
+  @property({ notify: true, readOnly: false, type: String })
+  public _rotY: string;
+
+  @property({ notify: true, readOnly: false, type: String })
+  public _rotZ: string;
+
+  //-----------------------------------------------------------
+  // Observers
+  //-----------------------------------------------------------
+
+  @observe("disabled")
+  disabledChanged(newValue: boolean, oldValue: boolean) {
+    if (!newValue) {
+      this.async(this._startRendering.bind(this), 100)
+    } else {
+      this._stopRendering();
+    }
+    if (this._camNav) {
+      this._camNav.enabled = !newValue;
+    }
+  }
+
+  @observe("scatterColor")
+  scatterColorChanged(newValue: string, oldValue: string) {
+    this._scatterLight.color.setStyle(newValue);
+  }
+
+  @observe("skyColor")
+  skyColorChanged(newValue: string, oldValue: string) {
+    this._skyLight.color.setStyle(newValue);
+  }
+
+  @observe("groundColor")
+  groundColorChanged(newValue: string, oldValue: string) {
+    this._groundLight.color.setStyle(newValue);
+  }
+
+  @observe("pickedMesh")
+  pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
+    if (newMesh) {
+      var rotation = newMesh.rotation;
+      this._rotX = ((rotation.x / (2 * Math.PI)) * 360).toFixed(0);
+      this._rotY = ((rotation.y / (2 * Math.PI)) * 360).toFixed(0);
+      this._rotZ = ((rotation.z / (2 * Math.PI)) * 360).toFixed(0);
+    } else {
+      this._rotX = null;
+      this._rotY = null;
+      this._rotZ = null;
+    }
+  }
+
+  @observe("_rotX,_rotY,_rotZ")
+  rotationChanged(rotX: string, rotY: string, rotZ: string) {
+    if (!this.pickedMesh) return;
+    if (rotX) {
+      this.pickedMesh.rotation.x = (parseFloat(rotX) / 360) * 2 * Math.PI;
+    }
+    if (rotY) {
+      this.pickedMesh.rotation.y = (parseFloat(rotY) / 360) * 2 * Math.PI;
+    }
+    if (rotZ) {
+      this.pickedMesh.rotation.z = (parseFloat(rotZ) / 360) * 2 * Math.PI;
+    }
+  }
+
+  //----------------------------------------------------------
+  // Lifecycle methods
+  //----------------------------------------------------------
 
   public attached() {
     this._canvasHome = this.$["pv-canvas-home"] as HTMLDivElement;
@@ -77,18 +153,9 @@ class PrinterVolumeView extends polymer.Base {
     this.scene.add(this._groundLight);
   }
 
-
-  @observe("disabled")
-  disabledChanged(newValue: boolean, oldValue: boolean) {
-    if (!newValue) {
-      this.async(this._startRendering.bind(this), 100)
-    } else {
-      this._stopRendering();
-    }
-    if (this._camNav) {
-      this._camNav.enabled = !newValue;
-    }
-  }
+  //---------------------------------------------------------
+  // Rendering lifecycle hooks
+  //---------------------------------------------------------
 
   private _stopRendering() {
     if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
@@ -113,20 +180,9 @@ class PrinterVolumeView extends polymer.Base {
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
 
-  @observe("scatterColor")
-  scatterColorChanged(newValue: string, oldValue: string) {
-    this._scatterLight.color.setStyle(newValue);
-  }
-
-  @observe("skyColor")
-  skyColorChanged(newValue: string, oldValue: string) {
-    this._skyLight.color.setStyle(newValue);
-  }
-
-  @observe("groundColor")
-  groundColorChanged(newValue: string, oldValue: string) {
-    this._groundLight.color.setStyle(newValue);
-  }
+  //---------------------------------------------------------
+  // Picking support
+  //---------------------------------------------------------
 
   private _mouseXY = new THREE.Vector2();
 

@@ -66,18 +66,6 @@
       z-index: 10;
     }
 
-    :host #pv-toolbar-overlay {
-      position: absolute;
-      width: 200px;
-      top: 0px;
-      right: 0px;
-      bottom: 0px;
-      pointer-events: none;
-      /*color: #afafaf;*/
-      margin: 25px;
-      z-index: 10;
-    }
-
     :host #info-overlay {
       position: absolute;
       width: 175px;
@@ -96,10 +84,6 @@
     :host #sp-toolbar-overlay > * {
       pointer-events: auto;
       margin: 10px;
-    }
-
-    :host #pv-toolbar-overlay > * {
-      pointer-events: auto;
     }
 
     :host hr {
@@ -134,35 +118,6 @@
       <div id="center-content" class="flex layout vertical">
         <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit">
           <shared-animatable id="sa-pv" class="fit">
-            <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
-              <div>
-                <span class="sub-head">Position</span>
-                <br/>
-                <div class="horizontal layout">
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X(mm)" value="{{pickedMesh.position.x}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y(mm)" value="{{pickedMesh.position.y}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z(mm)" value="{{pickedMesh.position.z}}" type="number"></paper-input>
-                </div>
-              </div>
-              <div>
-                <span class="sub-head">Rotation</span>
-                <br/>
-                <div class="horizontal layout">
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X" value="{{pickedMesh.rotation.x}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y" value="{{pickedMesh.rotation.y}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z" value="{{pickedMesh.rotation.z}}" type="number"></paper-input>
-                </div>
-              </div>
-              <div>
-                <span class="sub-head">Scale</span>
-                <br/>
-                <div class="horizontal layout">
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="X" value="{{pickedMesh.scale.x}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Y" value="{{pickedMesh.scale.y}}" type="number"></paper-input>
-                  <paper-input disabled="{{!pickedMesh}}" always-float-label label="Z" value="{{pickedMesh.scale.z}}" type="number"></paper-input>
-                </div>
-              </div>
-            </div>
             <fab-radial id="pv-fab-radial">
               <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model"></paper-fab>
               <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>

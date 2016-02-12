@@ -20,8 +20,54 @@
       width: 100%;
       height: 100%;
     }
+
+    :host #pv-toolbar-overlay {
+      position: absolute;
+      width: 200px;
+      top: 0px;
+      right: 0px;
+      bottom: 0px;
+      pointer-events: none;
+      /*color: #afafaf;*/
+      margin: 25px;
+      z-index: 10;
+    }
+
+    :host #pv-toolbar-overlay > * {
+      pointer-events: auto;
+    }
   </style>
   <template>
+    <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
+      <div>
+        <span class="sub-head">Position</span>
+        <br/>
+        <div class="horizontal layout">
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="mX(mm)" value="{{pickedMesh.position.x}}" type="number"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="mY(mm)" value="{{pickedMesh.position.y}}" type="number"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="mZ(mm)" value="{{pickedMesh.position.z}}" type="number"></paper-input>
+        </div>
+      </div>
+      <div>
+        <span class="sub-head">Rotation</span>
+        <br/>
+        <div class="horizontal layout">
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="rX(deg)" value="{{_rotX}}" type="number"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="rY(deg)" value="{{_rotY}}" type="number"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="rZ(deg)" value="{{_rotZ}}" type="number"></paper-input>
+        </div>
+      </div>
+      <div>
+        <span class="sub-head">Scale</span>
+        <br/>
+        <div class="horizontal layout">
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sX" value="{{pickedMesh.scale.x}}" type="number" step="0.05" min="0.0001"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sY" value="{{pickedMesh.scale.y}}" type="number" step="0.05" min="0.0001"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sZ" value="{{pickedMesh.scale.z}}" type="number" step="0.05" min="0.0001"></paper-input>
+        </div>
+      </div>
+    </div>
+
     <div id="pv-canvas-home" class="fit" on-mousedown="preparePick" on-mousemove="cancelPick" on-mouseup="tryPick">
     </div>
   </template>
