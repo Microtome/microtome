@@ -1,5 +1,6 @@
 <link rel="import" href="../threejs/threejs.html">
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="../../bower_components/iron-list/iron-list.html">
 <link rel="import" href="../microtome-lib/microtome-lib.html">
 
 
@@ -36,6 +37,10 @@
     :host #pv-toolbar-overlay > * {
       pointer-events: auto;
     }
+
+    :host #mesh-list {
+      width: 100%;
+    }
   </style>
   <template>
     <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
@@ -61,10 +66,18 @@
         <span class="sub-head">Scale</span>
         <br/>
         <div class="horizontal layout">
-          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sX" value="{{pickedMesh.scale.x}}" type="number" step="0.05" min="0.0001"></paper-input>
-          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sY" value="{{pickedMesh.scale.y}}" type="number" step="0.05" min="0.0001"></paper-input>
-          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sZ" value="{{pickedMesh.scale.z}}" type="number" step="0.05" min="0.0001"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sX" value="{{_sX}}" type="number" step="0.05" min="0.00"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sY" value="{{_sY}}" type="number" step="0.05" min="0.00"></paper-input>
+          <paper-input disabled="{{!pickedMesh}}" always-float-label label="sZ" value="{{_sZ}}" type="number" step="0.05" min="0.00"></paper-input>
         </div>
+      </div>
+      <div id="mesh-list" class="flex vertical layout">
+        <span class="sub-head">Meshes</span>
+        <iron-list class="flex" items="[[scene.printObjects]]" as="item">
+          <template>
+            <div>Id: [[item.id]]</div>
+          </template>
+        </iron-list>
       </div>
     </div>
 

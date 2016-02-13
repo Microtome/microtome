@@ -60,6 +60,15 @@ class PrinterVolumeView extends polymer.Base {
   @property({ notify: true, readOnly: false, type: String })
   public _rotZ: string;
 
+  @property({ notify: true, readOnly: false, type: String })
+  public _sX: string;
+
+  @property({ notify: true, readOnly: false, type: String })
+  public _sY: string;
+
+  @property({ notify: true, readOnly: false, type: String })
+  public _sZ: string;
+
   //-----------------------------------------------------------
   // Observers
   //-----------------------------------------------------------
@@ -95,13 +104,16 @@ class PrinterVolumeView extends polymer.Base {
   pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
     if (newMesh) {
       var rotation = newMesh.rotation;
-      this._rotX = ((rotation.x / (2 * Math.PI)) * 360).toFixed(0);
-      this._rotY = ((rotation.y / (2 * Math.PI)) * 360).toFixed(0);
-      this._rotZ = ((rotation.z / (2 * Math.PI)) * 360).toFixed(0);
+      this._rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      this._rotY = (((rotation.y / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      this._rotZ = (((rotation.z / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      var scale = newMesh.scale;
+      this._sX = scale.x.toFixed(2);
+      this._sY = scale.y.toFixed(2);
+      this._sZ = scale.z.toFixed(2);
     } else {
-      this._rotX = null;
-      this._rotY = null;
-      this._rotZ = null;
+      this._rotX = this._rotY = this._rotZ = null;
+      this._sX = this._sY = this._sZ = null;
     }
   }
 
@@ -116,6 +128,20 @@ class PrinterVolumeView extends polymer.Base {
     }
     if (rotZ) {
       this.pickedMesh.rotation.z = (parseFloat(rotZ) / 360) * 2 * Math.PI;
+    }
+  }
+
+  @observe("_sX,_sY,_sZ")
+  scaleChanged(sX: string, sY: string, sZ: string) {
+    if (!this.pickedMesh) return;
+    if (sX) {
+      this.pickedMesh.scale.x = parseFloat(sX);
+    }
+    if (sY) {
+      this.pickedMesh.scale.y = parseFloat(sY);
+    }
+    if (sZ) {
+      this.pickedMesh.scale.z = parseFloat(sZ);
     }
   }
 
