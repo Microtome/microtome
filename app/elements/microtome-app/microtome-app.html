@@ -56,7 +56,7 @@
 
     :host #sp-toolbar-overlay {
       position: absolute;
-      width: 100px;
+      width: 150px;
       top: 0px;
       right: 0px;
       bottom: 0px;
@@ -81,6 +81,10 @@
       background-color: rgba(255,255,255,0.2);*/
     }
 
+    :host #info-overlay > * {
+      pointer-events: auto;
+    }
+
     :host #sp-toolbar-overlay > * {
       pointer-events: auto;
       margin: 10px;
@@ -99,7 +103,7 @@
 
   <template>
     <div id="info-overlay" hidden$="{{hideInfo}}" class="vertical layout">
-      <span class="title">Microtome</span>
+      <div class="title"><iron-icon icon="settings" id="settings-button" title="Settings" on-click="openSettings"></iron-icon>&nbsp;Microtome</div>
       <hr>
       <span class="sub-head">{{printerConfig.name}}</span>
       <span>min layer: {{minLayerThicknessMicrons}} µm</span>
@@ -116,13 +120,13 @@
     </div>
     <div id="main" class="flex layout horizontal fit">
       <div id="center-content" class="flex layout vertical">
-        <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit">
+        <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit" on-neon-animation-finish="fixTabs">
           <shared-animatable id="sa-pv" class="fit">
             <fab-radial id="pv-fab-radial">
               <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model"></paper-fab>
               <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>
-              <paper-fab mini class="menu-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
-              <paper-fab mini class="menu-south-east" id="settings-button" icon="settings" title="Microtome Settings" on-click="openSettings"></paper-fab>
+              <paper-fab mini class="menu-south-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab mini class="menu-east" id="content-copy-button" icon="content-copy" title="Copy Model"></paper-fab>
               <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"></paper-fab>
               <paper-fab mini class="menu-south-west" id="scale-model-button" icon="fa-directional:arrows-alt" title="Scale Model"></paper-fab>
               <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model"></paper-fab>

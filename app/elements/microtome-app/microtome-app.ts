@@ -127,7 +127,7 @@ class MicrotomeApp extends polymer.Base {
 
   @observe("pickedMesh")
   pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
-    
+
   }
 
   //------------------------------------------------------------
@@ -272,8 +272,13 @@ class MicrotomeApp extends polymer.Base {
 
   public openSettings(e: Event) {
     this.$['sa-pv'].sharedElements['hero'] = this.$['settings-button']
-    this.$['config-tabs'].notifyResize();
     this.activePage = ActivePage.SETTINGS;
+  }
+
+  public fixTabs() {
+    if (this.activePage == ActivePage.SETTINGS) {
+      this.$['config-tabs'].notifyResize();
+    }
   }
 
   public closeSettings(e: Event) {
