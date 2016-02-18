@@ -1,11 +1,15 @@
 <link rel="import" href="../threejs/threejs.html">
 <link rel="import" href="../../bower_components/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="../../bower_components/iron-list/iron-list.html">
+<link rel="import" href="../../bower_components/paper-dialog/paper-dialog.html">
+<link rel="import" href="../../bower_components/paper-button/paper-button.html">
 <link rel="import" href="../microtome-lib/microtome-lib.html">
+<link rel="import" href="../fab-radial/fab-radial.html">
 
+<link rel="import" href="../../styles/shared-styles.html">
 
 <dom-module id="pv-view">
-  <style>
+  <style include="shared-styles">
     :host {
       position: relative;
       background: linear-gradient(var(--gradient-light, --paper-grey-600), var(--gradient-dark, --paper-grey-900));
@@ -41,8 +45,24 @@
     :host #mesh-list {
       width: 100%;
     }
+
+    :host #file-chooser {
+      z-index: 20;
+    }
   </style>
   <template>
+    <fab-radial id="pv-fab-radial">
+      <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model" on-click="showFileChooser"></paper-fab>
+      <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>
+      <paper-fab mini class="menu-south-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
+      <paper-fab mini class="menu-east" id="content-copy-button" icon="content-copy" title="Copy Model"></paper-fab>
+      <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"></paper-fab>
+      <paper-fab mini class="menu-south-west" id="scale-model-button" icon="fa-directional:arrows-alt" title="Scale Model"></paper-fab>
+      <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model"></paper-fab>
+      <paper-fab mini class="menu-north-west" id="move-model-button" icon="fa-directional:arrows" title="Move Model"></paper-fab>
+    </fab-radial>
+
+
     <div id="pv-toolbar-overlay" class="vertical layout start-justified end">
       <div>
         <span class="sub-head">Position</span>
@@ -81,8 +101,17 @@
       </div>
     </div>
 
-    <div id="pv-canvas-home" class="fit" on-mousedown="preparePick" on-mousemove="cancelPick" on-mouseup="tryPick">
+    <div id="pv-canvas-home" class="fit" on-mousedown="preparePick" on-mousemove="cancelPick" on-mouseup="tryPick"  on-contextmenu="onPrintVolumeViewContextMenu">
     </div>
+
+    <paper-dialog id="file-chooser" modal with-backdrop auto-fit-on-attach>
+      <h2>Choose File</h2>
+      <paper-input id="mesh-file" type="file" always-float-label label="Mesh File" value="{{_meshFile}}" accept=".obj,.stl"></paper-input>
+      <div class="buttons">
+        <paper-button dialog-dismiss>Cancel</paper-button>
+        <paper-button dialog-confirm autofocus on-click="loadMesh">Load File</paper-button>
+      </div>
+    </paper-dialog>
   </template>
 </dom-module>
 

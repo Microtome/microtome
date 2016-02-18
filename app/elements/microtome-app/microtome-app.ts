@@ -140,11 +140,11 @@ class MicrotomeApp extends polymer.Base {
   }
 
   public attached() {
-    var geom = new THREE.SphereGeometry(10);
-    var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
-    mesh.rotateX(Math.PI / 2);
-    mesh.position.z = 10 + this.printJobConfig.zOffset;
-    this.scene.printObjects.push(mesh);
+    // var geom = new THREE.SphereGeometry(10);
+    // var mesh = new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial);
+    // mesh.rotateX(Math.PI / 2);
+    // mesh.position.z = 10 + this.printJobConfig.zOffset;
+    // this.scene.printObjects.push(mesh);
 
     this.$['sa-pv'].sharedElements = { 'hero': this.$['slice-preview-button'] }
     this.$['sa-pv'].animationConfig = {
@@ -283,12 +283,6 @@ class MicrotomeApp extends polymer.Base {
 
   public closeSettings(e: Event) {
     this.activePage = ActivePage.PRINT_VOLUME;
-  }
-
-  onPrintVolumeViewContextMenu(e: MouseEvent): boolean {
-    e.preventDefault();
-    this.$['pv-fab-radial'].open(e.clientX, e.clientY);
-    return false;
   }
 
   onRotateClick(e: MouseEvent) {

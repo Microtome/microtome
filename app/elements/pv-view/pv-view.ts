@@ -1,5 +1,4 @@
 
-
 @component("pv-view")
 class PrinterVolumeView extends polymer.Base {
 
@@ -68,6 +67,7 @@ class PrinterVolumeView extends polymer.Base {
 
   @property({ notify: true, readOnly: false, type: String })
   public _sZ: string;
+
 
   //-----------------------------------------------------------
   // Observers
@@ -215,7 +215,9 @@ class PrinterVolumeView extends polymer.Base {
   private _doPick = false;
 
   public preparePick(e: MouseEvent) {
-    this._doPick = true;
+    if (e.buttons === 1) {
+      this._doPick = true;
+    }
   }
 
   public cancelPick(e: MouseEvent) {
@@ -234,13 +236,36 @@ class PrinterVolumeView extends polymer.Base {
       // calculate objects intersecting the picking ray
       var intersects = this._raycaster.intersectObjects(this.scene.printObjects);
       if (intersects.length > 0) {
+        if (this.pickedMesh != null) {
+          this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
+          this.pickedMesh = null;
+        }
         this.pickedMesh = intersects[0].object as THREE.Mesh;
         this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
-      } else if (this.pickedMesh != null) {
-        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
-        this.pickedMesh = null;
       }
     }
+  }
+
+  onPrintVolumeViewContextMenu(e: MouseEvent): boolean {
+    e.preventDefault();
+    this.$['pv-fab-radial'].open(e.clientX, e.clientY);
+    return false;
+  }
+
+  showFileChooser(e: MouseEvent): boolean {
+    this.$['file-chooser']['opened'] = true;
+    return false;
+  }
+
+  loadMesh(e: MouseEvent) {
+    // Can't bind value of paper-input in dialog. Bug?
+    var fl: FileList = this.$['mesh-file']['inputElement'].files;
+    var furl: string = URL.createObjectURL(fl[0]);
+
+    var stlLoader = new THREE.STLLoader();
+    stlLoader.load(furl, (geom: THREE.Geometry) => {
+      this.scene.printObjects.push(new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial))
+    });
   }
 }
 
