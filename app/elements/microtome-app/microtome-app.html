@@ -66,6 +66,10 @@
       z-index: 10;
     }
 
+    :host fab-radial {
+      z-index:20;
+    }
+
     :host #info-overlay {
       position: absolute;
       width: 175px;
@@ -103,7 +107,8 @@
 
   <template>
     <div id="info-overlay" hidden$="{{hideInfo}}" class="vertical layout">
-      <div class="title"><iron-icon icon="settings" id="settings-button" title="Settings" on-click="openSettings"></iron-icon>&nbsp;Microtome</div>
+      <div class="title">
+        <iron-icon icon="settings" id="settings-button" title="Settings" on-click="openSettings"></iron-icon>&nbsp;Microtome</div>
       <hr>
       <span class="sub-head">{{printerConfig.name}}</span>
       <span>min layer: {{minLayerThicknessMicrons}} µm</span>
@@ -122,7 +127,17 @@
       <div id="center-content" class="flex layout vertical">
         <neon-animated-pages id="main-pages" selected="{{activePage}}" class="fit" on-neon-animation-finish="fixTabs">
           <shared-animatable id="sa-pv" class="fit">
-            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" picked-mesh="{{pickedMesh}}" class="fit" scene="[[scene]]"></pv-view>
+            <fab-radial id="pv-fab-radial">
+              <paper-fab mini class="menu-north" icon="add" id="add-model-button" title="Add Model" on-click="showFileChooser"></paper-fab>
+              <paper-fab mini class="menu-north-east" id="delete-model-button" icon="delete" title="Remove Model"></paper-fab>
+              <paper-fab mini class="menu-south-east" id="slice-preview-button" icon="maps:layers" title="Slice Preview" on-click="toggleSlicePreview"></paper-fab>
+              <paper-fab mini class="menu-east" id="content-copy-button" icon="content-copy" title="Copy Model"></paper-fab>
+              <paper-fab mini class="menu-south" id="save-project-button" icon="save" title="Save Scene"></paper-fab>
+              <paper-fab mini class="menu-south-west" id="scale-model-button" icon="fa-directional:arrows-alt" title="Scale Model"></paper-fab>
+              <paper-fab mini class="menu-west" id="rotate-model-button" icon="3d-rotation" title="Rotate Model"></paper-fab>
+              <paper-fab mini class="menu-north-west" id="move-model-button" icon="fa-directional:arrows" title="Move Model"></paper-fab>
+            </fab-radial>
+            <pv-view id="pv-view" disabled$="{{!hideSlicePreview}}" picked-mesh="{{pickedMesh}}" class="fit" scene="[[scene]]" on-contextmenu="onPrintVolumeViewContextMenu"></pv-view>
           </shared-animatable>
           <shared-animatable id="sa-sp" class="fit">
             <div id="sp-toolbar-overlay" class="vertical layout start-justified end">
@@ -169,7 +184,14 @@
         </neon-animated-pages>
       </div>
     </div>
-    </paper-header-panel>
+    <paper-dialog id="file-chooser" modal with-backdrop auto-fit-on-attach>
+      <h2>Choose File</h2>
+      <paper-input id="mesh-file" type="file" always-float-label label="Mesh File" value="{{_meshFile}}" accept=".obj,.stl"></paper-input>
+      <div class="buttons">
+        <paper-button dialog-dismiss>Cancel</paper-button>
+        <paper-button dialog-confirm autofocus on-click="loadMesh">Load File</paper-button>
+      </div>
+    </paper-dialog>
   </template>
 </dom-module>
 <script src="microtome-app.js"></script>

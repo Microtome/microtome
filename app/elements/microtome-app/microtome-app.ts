@@ -285,6 +285,35 @@ class MicrotomeApp extends polymer.Base {
     this.activePage = ActivePage.PRINT_VOLUME;
   }
 
+  onPrintVolumeViewContextMenu(e: MouseEvent): boolean {
+    e.preventDefault();
+    this.$['pv-fab-radial'].open(e.clientX, e.clientY);
+    return false;
+  }
+
+  showFileChooser(e: MouseEvent): boolean {
+    this._resetFileChooser();
+    this.$['file-chooser']['opened'] = true;
+    return false;
+  }
+
+  private _stlLoader = new THREE.STLLoader();
+
+  private _resetFileChooser() {
+    this.$['mesh-file']['inputElement'].files = null;
+    this.$['mesh-file']['inputElement'].value = null;
+  }
+
+  loadMesh(e: MouseEvent) {
+    // Can't bind value of paper-input in dialog. Bug?
+    var fl: FileList = this.$['mesh-file']['inputElement'].files;
+    var furl: string = URL.createObjectURL(fl[0]);
+    this._stlLoader.load(furl, (geom: THREE.Geometry) => {
+      this.scene.printObjects.push(new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial))
+      this.notifyPath("scene.printObjects", this.scene.printObjects.slice());
+    });
+  }
+
   onRotateClick(e: MouseEvent) {
 
   }

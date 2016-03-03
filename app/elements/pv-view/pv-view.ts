@@ -245,28 +245,6 @@ class PrinterVolumeView extends polymer.Base {
       }
     }
   }
-
-  onPrintVolumeViewContextMenu(e: MouseEvent): boolean {
-    e.preventDefault();
-    this.$['pv-fab-radial'].open(e.clientX, e.clientY);
-    return false;
-  }
-
-  showFileChooser(e: MouseEvent): boolean {
-    this.$['file-chooser']['opened'] = true;
-    return false;
-  }
-
-  loadMesh(e: MouseEvent) {
-    // Can't bind value of paper-input in dialog. Bug?
-    var fl: FileList = this.$['mesh-file']['inputElement'].files;
-    var furl: string = URL.createObjectURL(fl[0]);
-
-    var stlLoader = new THREE.STLLoader();
-    stlLoader.load(furl, (geom: THREE.Geometry) => {
-      this.scene.printObjects.push(new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial))
-    });
-  }
 }
 
 PrinterVolumeView.register();
