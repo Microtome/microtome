@@ -591,6 +591,9 @@ void main(void) {
   /**
   * Subclass of THREE.Scene with several convenience methods
   */
+
+  // TODO This is messed up and I don't know why its this way
+
   export class PrinterScene extends THREE.Scene {
 
     private _printVolume: PrintVolume;
@@ -613,6 +616,11 @@ void main(void) {
     get printVolume(): PrintVolume {
       return this._printVolume;
     }
+
+    public remove(child:THREE.Object3D){
+      this._printObjectsHolder.remove(child);
+    }
+
   }
 
 }

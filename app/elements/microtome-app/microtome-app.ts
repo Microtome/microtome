@@ -87,8 +87,8 @@ class MicrotomeApp extends polymer.Base {
   @property({ type: Number, readOnly: false, notify: true })
   public activeSettingsTab: SettingsTab = SettingsTab.PRINTER;
 
-  @property({ type: Object, readOnly: false, notify: true })
-  public selectedModel: THREE.Mesh = null;
+  // @property({ type: Object, readOnly: false, notify: true })
+  // public selectedModel: THREE.Mesh = null;
 
   @property({ notify: true, readOnly: false, type: Object })
   public pickedMesh: THREE.Mesh = null;
@@ -331,11 +331,15 @@ class MicrotomeApp extends polymer.Base {
   }
 
   onDeleteModelClick(e: MouseEvent) {
-
-  }
-
-  onModelPick() {
-
+    if(this.pickedMesh != null){
+      // var idx = this.scene.printObjects.indexOf(this.pickedMesh);
+      // this.scene.printObjects.splice(idx,1);
+      // // this.scene.remove(this.pickedMesh);
+      this.pickedMesh.geometry.dispose();
+      this.pickedMesh.material.dispose();
+      this.scene.remove(this.pickedMesh);
+      this.pickedMesh = null;
+    }
   }
 }
 
