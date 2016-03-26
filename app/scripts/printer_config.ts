@@ -4,6 +4,11 @@ module microtome.printer {
   //
   // }
 
+  export interface spjsConfig {
+    port: number;
+    host: string;
+  }
+
   /**
   * For printers driven directly via GPIO, descrbes what each pin does
   */
@@ -35,9 +40,19 @@ module microtome.printer {
   };
 
   export interface Projector {
-    xRes: number,
-    yRes: number
+    xRes: number;
+    yRes: number;
+    width: number;
+    height: number;
   };
+
+  export interface Resin {
+    manufacturer: string,
+    productName: string,
+    productNumber: string,
+    pricePerUnit: string,
+    unitVolume: string,
+  }
 
   /**
   * Specifies printer volume
