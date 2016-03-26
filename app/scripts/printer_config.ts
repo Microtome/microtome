@@ -42,8 +42,6 @@ module microtome.printer {
   export interface Projector {
     xRes: number;
     yRes: number;
-    width: number;
-    height: number;
   };
 
   export interface Resin {
