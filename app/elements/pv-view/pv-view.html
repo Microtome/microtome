@@ -83,7 +83,7 @@
         <span class="sub-head">Meshes</span>
         <iron-list class="flex" items="{{scene.printObjects}}" as="item">
           <template>
-            <div>Id: [[item.id]]</div>
+            <div>Id: [[item.id]], Vol: [[formatVolume(item.volume)]]cm3</div>
           </template>
         </iron-list>
       </div>

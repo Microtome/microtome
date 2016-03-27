@@ -245,6 +245,10 @@ class PrinterVolumeView extends polymer.Base {
       }
     }
   }
+
+  public formatVolume(vol:number){
+    return (vol/1000).toFixed(1);
+  }
 }
 
 PrinterVolumeView.register();
