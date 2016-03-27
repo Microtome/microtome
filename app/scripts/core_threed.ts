@@ -617,10 +617,67 @@ void main(void) {
       return this._printVolume;
     }
 
-    public remove(child:THREE.Object3D){
+    public remove(child: THREE.Object3D) {
       this._printObjectsHolder.remove(child);
     }
-
   }
 
+
+  export class PrintMesh extends THREE.Mesh {
+
+    private _gvolume: number = null;
+
+    constructor(geometry?: THREE.Geometry, material?: THREE.Material) {
+      super(geometry, material);
+      this._calculateVolume();
+    }
+
+    public static fromMesh(mesh: THREE.Mesh) {
+      var geom: THREE.Geometry;
+      if (mesh.geometry instanceof THREE.BufferGeometry) {
+        geom = new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry>mesh.geometry);
+      } else {
+        geom = <THREE.Geometry>mesh.geometry
+      }
+      return new PrintMesh(geom, mesh.material);
+    }
+
+
+    /**
+    * Gets the volume of the mesh. Only works if Geometry is
+    * PrintGeometry, else returns null;
+    */
+    public get volume(): number {
+      // The true volume is the geom volume multiplied by the scale factors
+      return this._gvolume * (this.scale.x * this.scale.y * this.scale.z);
+    }
+
+
+    private _calculateVolume() {
+      let geom: THREE.Geometry = <THREE.Geometry>this.geometry
+      var faces = geom.faces;
+      var vertices = geom.vertices;
+
+      var face: THREE.Face3;
+      var v1: THREE.Vector3;
+      var v2: THREE.Vector3;
+      var v3: THREE.Vector3;
+
+      for (var i = 0; i < faces.length; i++) {
+        face = faces[i];
+
+        v1 = vertices[face.a];
+        v2 = vertices[face.b];
+        v3 = vertices[face.c];
+        this._gvolume += (
+          -(v3.x * v2.y * v1.z)
+          + (v2.x * v3.y * v1.z)
+          + (v3.x * v1.y * v2.z)
+          - (v1.x * v3.y * v2.z)
+          - (v2.x * v1.y * v3.z)
+          + (v1.x * v2.y * v3.z)
+          ) / 6;
+      }
+    }
+  }
 }
