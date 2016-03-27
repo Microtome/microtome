@@ -68,7 +68,7 @@ class MicrotomeApp extends polymer.Base {
     },
     projector: {
       xRes: 360,
-      yRes: 240
+      yRes: 240,
     }
   };
 
@@ -308,8 +308,15 @@ class MicrotomeApp extends polymer.Base {
     // Can't bind value of paper-input in dialog. Bug?
     var fl: FileList = this.$['mesh-file']['inputElement'].files;
     var furl: string = URL.createObjectURL(fl[0]);
-    this._stlLoader.load(furl, (geom: THREE.Geometry) => {
-      this.scene.printObjects.push(new THREE.Mesh(geom, microtome.three_d.CoreMaterialsFactory.objectMaterial))
+    this._stlLoader.load(furl, (geom: THREE.Geometry | THREE.BufferGeometry) => {
+      var g: THREE.Geometry = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(geom);
+      var mesh = new microtome.three_d.PrintMesh(g, microtome.three_d.CoreMaterialsFactory.objectMaterial);
+      g.computeBoundingBox();
+      var toOriginVector = new THREE.Vector3(0,0,0).sub(g.boundingBox.center());
+      g.translate(toOriginVector.x,toOriginVector.y,toOriginVector.z);
+      g.translate(0,0,(g.boundingBox.max.z-g.boundingBox.min.z)/2);
+      g.computeBoundingBox();
+      this.scene.printObjects.push(mesh);
       this.notifyPath("scene.printObjects", this.scene.printObjects.slice());
     });
   }
@@ -339,6 +346,7 @@ class MicrotomeApp extends polymer.Base {
       this.pickedMesh.material.dispose();
       this.scene.remove(this.pickedMesh);
       this.pickedMesh = null;
+      this.notifyPath("scene.printObjects", this.scene.printObjects.slice());
     }
   }
 }
