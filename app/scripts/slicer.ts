@@ -4,6 +4,7 @@ module microtome.slicer {
 
   const FAR_Z_PADDING: number = 1.0;
   const CAMERA_NEAR: number = 1.0;
+  const SLICER_BACKGROUND_Z = -0.1;
 
   /**
   * GPU based dlp slicer
@@ -16,6 +17,7 @@ module microtome.slicer {
     // /// Default is 0.012 mm or 12 microns
     // double sliceEpsilon = 0.02;
     // CanvasElement _target;
+    private _sliceBackground: THREE.Mesh;
 
     // 3D
     private _sliceMaterialUniforms = {
@@ -36,6 +38,11 @@ module microtome.slicer {
       public targetZ: number = 100, public sliceEpsilon: number = 0.00001) {
       this._oCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this._slicerMaterial.uniforms = this._sliceMaterialUniforms;
+      var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
+      var planeMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial.clone();
+      planeMaterial.side = THREE.DoubleSide;
+      this._sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
+      this._sliceBackground.position.z = SLICER_BACKGROUND_Z;
     }
 
     resize() {
@@ -46,7 +53,7 @@ module microtome.slicer {
      * Slice at the given z Height ( in mm)
      */
     sliceAt(z: number) {
-      var sliceZ = (z + FAR_Z_PADDING) / (FAR_Z_PADDING + this.targetZ);
+      var sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + this.targetZ);
       this._sliceMaterialUniforms['cutoff'].value = sliceZ;
       var width = this.renderer.domElement.width;
       var height = this.renderer.domElement.height;
@@ -94,18 +101,14 @@ module microtome.slicer {
     }
 
     setupSlicerPreview() {
-      // var maxZ = 0.0;
-      // this.scene.printObjects.forEach((mesh: THREE.Mesh) => {
-      //   mesh.geometry.computeBoundingBox();
-      //   var meshMaxZ = mesh.localToWorld(mesh.geometry.boundingBox.max).z + mesh.position.z;
-      //   if (meshMaxZ > maxZ) maxZ = meshMaxZ;
-      // });
       this.targetZ = this.scene.printVolume.height;
+      this.scene.add(this._sliceBackground);
     }
 
     teardownSlicerPreview() {
       this.scene.overrideMaterial = null;
       this._slicingParamsDirty = true;
+      this.scene.remove(this._sliceBackground);
     }
 
     /// Got back to home position and reset slicing
@@ -123,6 +126,7 @@ module microtome.slicer {
       this._oCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
       var pVolumeBBox = this.scene.printVolume.boundingBox;
+      this._sliceBackground.scale.set(this.scene.printVolume.width, this.scene.printVolume.depth, 1);
       var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
       var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
       var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;

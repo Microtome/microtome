@@ -309,7 +309,7 @@ class MicrotomeApp extends polymer.Base {
     var fl: FileList = this.$['mesh-file']['inputElement'].files;
     var furl: string = URL.createObjectURL(fl[0]);
     this._stlLoader.load(furl, (geom: THREE.Geometry | THREE.BufferGeometry) => {
-      var g: THREE.Geometry = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(geom);
+      var g = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry> geom);
       var mesh = new microtome.three_d.PrintMesh(g, microtome.three_d.CoreMaterialsFactory.objectMaterial);
       g.computeBoundingBox();
       var toOriginVector = new THREE.Vector3(0,0,0).sub(g.boundingBox.center());

@@ -463,26 +463,18 @@ void main(void) {
   * R-G-B => X-Y-Z
   */
   export class PrintVolume extends THREE.Group {
-    private _width: number;
-    private _depth: number;
-    private _height: number;
     private _bbox: THREE.Box3;
-    private _lines: THREE.Group = new THREE.Group();
 
     constructor(width: number, depth: number, height: number) {
       super();
-      this._width = width;
-      this._height = height;
-      this._depth = depth;
+      this.scale.set(width, depth, height);
       this._recalcBBox();
-      this.add(this._lines);
+      // this.add(this._pvGroup);
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
-
       var planeMaterial = CoreMaterialsFactory.whiteMaterial.clone();
       planeMaterial.side = THREE.DoubleSide;
-
-      var plane = new THREE.Mesh(planeGeom, planeMaterial);
-      this.add(plane);
+      var bed = new THREE.Mesh(planeGeom, planeMaterial);
+      this.add(bed);
 
       var xlinesPts = [
         new THREE.Vector3(-0.5, 0.5, 0.0),
@@ -494,11 +486,11 @@ void main(void) {
       xlineGeometry.vertices = xlinesPts;
       var xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
         CoreMaterialsFactory.xLineMaterial);
-      this._lines.add(xLines1);
+      this.add(xLines1);
       var xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
         CoreMaterialsFactory.xLineMaterial);
       xLines2.position.set(0.0, 0.0, 1.0);
-      this._lines.add(xLines2);
+      this.add(xLines2);
 
       var ylinesPts = [
         new THREE.Vector3(0.5, 0.5, 0.0),
@@ -510,11 +502,11 @@ void main(void) {
       ylineGeometry.vertices = ylinesPts;
       var yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
         CoreMaterialsFactory.yLineMaterial);
-      this._lines.add(yLines1);
+      this.add(yLines1);
       var yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
         CoreMaterialsFactory.yLineMaterial);
       yLines2.position.set(0.0, 0.0, 1.0);
-      this._lines.add(yLines2);
+      this.add(yLines2);
 
       var zlinesPts = [
         new THREE.Vector3(0.5, 0.5, 0.0),
@@ -526,12 +518,11 @@ void main(void) {
       zlineGeometry.vertices = zlinesPts;
       var zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
         CoreMaterialsFactory.zLineMaterial);
-      this._lines.add(zLines1);
+      this.add(zLines1);
       var zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
         CoreMaterialsFactory.zLineMaterial);
       zLines2.position.set(0.0, -1.0, 0.0);
-      this._lines.add(zLines2);
-      this.scale.set(this._width, this._depth, this._height);
+      this.add(zLines2);
     }
 
     resize(pv: microtome.printer.PrintVolume): void
@@ -539,24 +530,18 @@ void main(void) {
     resize(widthOrPv: number | microtome.printer.PrintVolume, depth?: number, height?: number): void {
       if (typeof widthOrPv == "number") {
         this.scale.set(widthOrPv as number, depth, height);
-        this._width = widthOrPv as number;
-        this._height = height;
-        this._depth = depth;
       } else {
         var pv = widthOrPv as microtome.printer.PrintVolume
         this.scale.set(pv.width, pv.depth, pv.height)
-        this._width = pv.width;
-        this._height = pv.height;
-        this._depth = pv.depth;
       }
       this._recalcBBox();
     }
 
     private _recalcBBox(): void {
-      var halfWidth = this._width / 2.0;
-      var halfDepth = this._depth / 2.0;
+      var halfWidth = this.scale.x / 2.0;
+      var halfDepth = this.scale.y / 2.0;
       var min = new THREE.Vector3(-halfWidth, -halfDepth, 0.0);
-      var max = new THREE.Vector3(halfWidth, halfDepth, this._height);
+      var max = new THREE.Vector3(halfWidth, halfDepth, this.scale.z);
       this._bbox = new THREE.Box3(min, max);
     }
 
@@ -565,25 +550,26 @@ void main(void) {
     }
 
     get width(): number {
-      return this._width;
+      return this.scale.x;
     }
 
     get depth(): number {
-      return this._depth;
+      return this.scale.y;
     }
 
     get height(): number {
-      return this._height;
+      return this.scale.z;
     }
 
-    /**
-    * The base plane is needed for slicing to work, but
-    * the axis lines should be hidden or they may lead
-    * to slice artifacts
-    */
-    public hideAxisLines(hide: boolean) {
-      this._lines.visible = !hide;
-    }
+    // /**
+    // * Set up print volume for slicing if enable is
+    // * true, otherwise set it up to display the printvolume
+    // * normally
+    // */
+    // public prepareForSlicing(enable: boolean) {
+    //   this._pvGroup.visible = !enable;
+    //   this._sliceBackground.visible = enable;
+    // }
 
   }
 
@@ -591,9 +577,6 @@ void main(void) {
   /**
   * Subclass of THREE.Scene with several convenience methods
   */
-
-  // TODO This is messed up and I don't know why its this way
-
   export class PrinterScene extends THREE.Scene {
 
     private _printVolume: PrintVolume;
