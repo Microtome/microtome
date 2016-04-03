@@ -1,0 +1,17 @@
+{
+  "name": "microtome-model-slicer",
+  "version": false,
+  "ambientDependencies": {
+    "Q": "github:DefinitelyTyped/DefinitelyTyped/q/Q.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
+    "chrome-app": "github:DefinitelyTyped/DefinitelyTyped/chrome/chrome-app.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
+    "filesystem": "github:DefinitelyTyped/DefinitelyTyped/filesystem/filesystem.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
+    "filewriter": "github:DefinitelyTyped/DefinitelyTyped/filewriter/filewriter.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
+    "three": "registry:dt/three#0.0.0+20160331065219",
+    "three-copyshader": "registry:dt/three-copyshader#0.0.0+20160317120654",
+    "three-effectcomposer": "registry:dt/three-effectcomposer#0.0.0+20160317120654",
+    "three-maskpass": "registry:dt/three-maskpass#0.0.0+20160317120654",
+    "three-renderpass": "registry:dt/three-renderpass#0.0.0+20160317120654",
+    "three-shaderpass": "registry:dt/three-shaderpass#0.0.0+20160317120654",
+    "webcomponents.js": "github:DefinitelyTyped/DefinitelyTyped/webcomponents.js/webcomponents.js.d.ts#a278148f0ec80f2aa9a2ec22f5089308f74dda47"
+  }
+}
