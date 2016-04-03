@@ -7,3 +7,6 @@
 
 - Distance functions for 3d support textures
   - http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
+- Three.js EffectComposer
+  - https://www.airtightinteractive.com/2013/02/intro-to-pixel-shaders-in-three-js/
