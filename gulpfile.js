@@ -205,7 +205,7 @@ gulp.task('typescript', function() {
     .pipe(ts(tsProject))
     .js
     .pipe(sourcemaps.write('.'))
-    .pipe(gulp.dest('app'));
+    .pipe(gulp.dest('.'));
 });
 
 // Vulcanize granular configuration
