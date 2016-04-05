@@ -37,6 +37,7 @@
     "./elements/shared-animatable/shared-animatable.ts",
     "./elements/slice-preview/slice-preview.ts",
     "./scripts/actions.ts",
+    "./scripts/advanced_slicer.ts",
     "./scripts/app.ts",
     "./scripts/background.ts",
     "./scripts/core_threed.ts",
