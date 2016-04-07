@@ -4,21 +4,22 @@
   "dependencies": {
     "iron-elements": "PolymerElements/iron-elements#1.0.7",
     "neon-elements": "PolymerElements/neon-elements#1.0.0",
-    "paper-elements": "PolymerElements/paper-elements#1.1.0",
+    "paper-elements": "PolymerElements/paper-elements#1.0.7",
     "platinum-elements": "PolymerElements/platinum-elements#1.2.0",
     "polymer": "Polymer/polymer#1.2.4",
-    /*"paper-menu": "PolymerElements/paper-menu#4fecb43601",*/
     "polymer-ts": "0.1.26",
     "paper-styles": "PolymerElements/paper-styles#1.1.1",
     "font-roboto": "PolymerElements/font-roboto-local#1.0.1",
     "three.js": "threejs#r75",
-    "font-awesome-polymer-icons": "vashchenkov/font-awesome-polymer-icons#1.4.5"
+    "font-awesome-polymer-icons": "vashchenkov/font-awesome-polymer-icons#1.4.5",
+    "iron-list": "1.2.7",
+    "neon-animation": "1.0.8"
   },
   "devDependencies": {
     "web-component-tester": "*"
   },
   "ignore": [],
   "resolutions": {
-    /*"paper-menu": "4fecb43601"*/
+    "web-animations-js": "2.1.2"
   }
 }
