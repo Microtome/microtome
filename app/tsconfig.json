@@ -19,13 +19,18 @@
     "./**/*.ts"
   ],
   "files": [
-    "./../typings/chrome/chrome-app.d.ts",
-    "./../typings/filesystem/filesystem.d.ts",
-    "./../typings/filewriter/filewriter.d.ts",
-    "./../typings/q/Q.d.ts",
-    "./../typings/threejs/three.d.ts",
-    "./../typings/tsd.d.ts",
-    "./../typings/webcomponents.js/webcomponents.js.d.ts",
+    "./../typings/browser.d.ts",
+    "./../typings/browser/ambient/chrome-app/index.d.ts",
+    "./../typings/browser/ambient/filesystem/index.d.ts",
+    "./../typings/browser/ambient/filewriter/index.d.ts",
+    "./../typings/browser/ambient/Q/index.d.ts",
+    "./../typings/browser/ambient/three-copyshader/index.d.ts",
+    "./../typings/browser/ambient/three-effectcomposer/index.d.ts",
+    "./../typings/browser/ambient/three-maskpass/index.d.ts",
+    "./../typings/browser/ambient/three-renderpass/index.d.ts",
+    "./../typings/browser/ambient/three-shaderpass/index.d.ts",
+    "./../typings/browser/ambient/three/index.d.ts",
+    "./../typings/browser/ambient/webcomponents.js/index.d.ts",
     "./../local_typings/chrome_serial.d.ts",
     "./../local_typings/threejs-extended.d.ts",
     "./../bower_components/polymer-ts/polymer-ts.d.ts",
@@ -48,7 +53,9 @@
     "./scripts/slicer.ts",
     "./scripts/units.ts"
   ],
-  "exclude": [],
+  "exclude": [
+    "./../typings/main*"
+  ],
   "atom": {
     "rewriteTsconfig": true
   }
