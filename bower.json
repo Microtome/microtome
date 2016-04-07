@@ -2,24 +2,23 @@
   "name": "microtome-model-slicer",
   "private": true,
   "dependencies": {
-    "iron-elements": "PolymerElements/iron-elements#^1.0.0",
-    "neon-elements": "PolymerElements/neon-elements#^1.0.0",
-    "page": "visionmedia/page.js#~1.6.4",
-    "paper-elements": "PolymerElements/paper-elements#^1.0.1",
-    "platinum-elements": "PolymerElements/platinum-elements#^1.1.0",
-    "polymer": "Polymer/polymer#^1.2.0",
-    "paper-menu": "PolymerElements/paper-menu#4fecb43601",
-    "polymer-ts": "~0.1.21",
-    "paper-styles": "PolymerElements/paper-styles#^1.0.0",
-    "font-roboto": "PolymerElements/font-roboto-local#^1.0.1",
-    "three.js": "threejs#*",
-    "font-awesome-polymer-icons": "vashchenkov/font-awesome-polymer-icons#~1.4.5"
+    "iron-elements": "PolymerElements/iron-elements#1.0.7",
+    "neon-elements": "PolymerElements/neon-elements#1.0.0",
+    "paper-elements": "PolymerElements/paper-elements#1.1.0",
+    "platinum-elements": "PolymerElements/platinum-elements#1.2.0",
+    "polymer": "Polymer/polymer#1.2.4",
+    /*"paper-menu": "PolymerElements/paper-menu#4fecb43601",*/
+    "polymer-ts": "0.1.26",
+    "paper-styles": "PolymerElements/paper-styles#1.1.1",
+    "font-roboto": "PolymerElements/font-roboto-local#1.0.1",
+    "three.js": "threejs#r75",
+    "font-awesome-polymer-icons": "vashchenkov/font-awesome-polymer-icons#1.4.5"
   },
   "devDependencies": {
     "web-component-tester": "*"
   },
   "ignore": [],
   "resolutions": {
-    "paper-menu": "4fecb43601"
+    /*"paper-menu": "4fecb43601"*/
   }
 }
