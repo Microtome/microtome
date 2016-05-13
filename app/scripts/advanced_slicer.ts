@@ -47,6 +47,25 @@ module microtome.slicer {
     private _shellSElemSampOffsets: number[] = [];
     //Structuring element sampling offsets for raft outset
     private _raftSElemSampOffsets: number[] = [];
+
+    private _sliceBackground: THREE.Mesh;
+
+    private _erodeDialateMaterialUniforms = {
+      'dialate': { type: 'i', value: 0 },
+      'pixelRadius': { type: 'f', value: AdvancedSlicer._MIN_SHELL_PIXELS },
+      'src': { type: 't', value: <THREE.WebGLRenderTarget>null },
+      'viewWidth': { type: 'i', value: 0.0 },
+      'viewHeight': { type: 'i', value: 0.0 }
+    };
+
+    private _copyMaterialUniforms = {
+      'dialate': { type: 'i', value: 0 },
+      'pixelRadius': { type: 'f', value: AdvancedSlicer._MIN_SHELL_PIXELS },
+      'src': { type: 't', value: <THREE.WebGLRenderTarget>null },
+      'viewWidth': { type: 'i', value: 0.0 },
+      'viewHeight': { type: 'i', value: 0.0 }
+    };
+
     /**
     *
     */
@@ -57,6 +76,11 @@ module microtome.slicer {
       private shellThickness: number,
       private renderer?: THREE.WebGLRenderer,
       private maxZ?: number) {
+      var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
+      var planeMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial.clone();
+      planeMaterial.side = THREE.DoubleSide;
+      this._sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
+      this._sliceBackground.position.z = SLICER_BACKGROUND_Z;
     }
 
     /**
@@ -80,11 +104,15 @@ module microtome.slicer {
     }
 
     private _renderRaftSlice() {
+
       // Set model color to white,
-      // Hide slice background
+      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial
+      // Hide slice background if present
+      this.scene.remove(this._sliceBackground);
       // render to texture
       // Apply dialate filter
       // Show slice background
+      this.scene.add(this._sliceBackground);
       // render.
     }
 
@@ -193,6 +221,16 @@ module microtome.slicer {
         wrapT: THREE.ClampToEdgeWrapping
       });
     }
+
+    // private _preSlice() {
+    //   this.scene.add(this._sliceBackground);
+    //   this.targetZ = this.scene.printVolume.height;
+    // }
+    //
+    // private _postSlice() {
+    //   this.scene.overrideMaterial = null;
+    //   this.scene.remove(this._sliceBackground);
+    // }
 
     /**
     * Dispose of all rendering targets
