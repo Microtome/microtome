@@ -5,29 +5,78 @@ module microtome.three_d {
     * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
     */
   export class CoreMaterialsFactory {
-    static _basicVertex = `
+    private static _basicVertex = `
 void main(void) {
    // compute position
    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-    static _depthShaderFrag = `
+    private static _depthShaderFrag = `
+vec4 pack( const in float depth ) {
+    const float toFixed = 255.0/256.0;
+    vec4 result = vec4(0);
+    result.r = fract(depth*toFixed*1.0);
+    result.g = fract(depth*toFixed*255.0);
+    result.b = fract(depth*toFixed*255.0*255.0);
+    result.a = fract(depth*toFixed*255.0*255.0*255.0);
+    return result;
+}
 
-    vec4 pack( const in float depth ) {
-        const float toFixed = 255.0/256.0;
-        vec4 result = vec4(0);
-        result.r = fract(depth*toFixed*1.0);
-        result.g = fract(depth*toFixed*255.0);
-        result.b = fract(depth*toFixed*255.0*255.0);
-        result.a = fract(depth*toFixed*255.0*255.0*255.0);
-        return result;
+void main() {
+  gl_FragColor = pack(gl_FragCoord.z);
+}`;
+
+    private static _copyShaderFrag = `
+// Texture containing depth info of scene
+// packed into rgba
+// Must be same size as current viewport
+uniform sampler2D src;
+
+// View dimensions
+uniform int viewWidth;
+uniform int viewHeight;
+
+void main(void) {
+  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
+  float smpl = texture2D(src, lookup);
+  gl_FragColor = vec4(smpl);
+}  `;
+
+    private static _erodeOrDialateShaderFrag = `
+// Texture containing depth info of scene
+// packed into rgba
+// Must be same size as current viewport
+uniform sampler2D src;
+
+// View dimensions
+uniform int viewWidth;
+uniform int viewHeight;
+
+// Radius of sampling area
+uniform int pixelRadius;
+// If == 1, dialate, else erode
+uniform int dialate;
+
+void main(void) {
+  float pr2 = pixelRadius * pixelRadius;
+  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
+  float smpl = texture2D(src, lookup);
+  for(int i = -pixelRadius; i <= pixelRadius; i++ ){
+    for(int j = -pixelRadius; j <= pixelRadius; j++ ){
+      if( i*i + j*j <= pr2 ){
+        vec2 offset = vec2(i / viewWidth, j / viewHeight);
+        if(dialate == 1){
+          smpl = max(smpl, texture2D(src, lookup + offset));
+        }else{
+          smpl = min(smpl, texture2D(src, lookup + offset));
+        }
+      }
     }
+  }
+  gl_FragColor = vec4(smpl);
+}  `;
 
-    void main() {
-      gl_FragColor = pack(gl_FragCoord.z);
-    }`;
-
-    static _sliceShaderFrag = `
+    private static _sliceShaderFrag = `
 // current slice height in device coordinates
 uniform float cutoff;
 
@@ -106,7 +155,27 @@ void main(void) {
       vertexShader: CoreMaterialsFactory._basicVertex,
       side: THREE.DoubleSide,
       blending: THREE.NoBlending,
-      uniforms: { 'cutoff': 0.00 }
+      uniforms: { }
+    });
+    /**
+    Material for erode/dialate
+    */
+    static erodeOrDialateMaterial = new THREE.ShaderMaterial({
+      fragmentShader: CoreMaterialsFactory._erodeOrDialateShaderFrag,
+      vertexShader: CoreMaterialsFactory._basicVertex,
+      side: THREE.DoubleSide,
+      blending: THREE.NoBlending,
+      uniforms: { }
+    });
+    /**
+    Material for copy
+    */
+    static copyMaterial = new THREE.ShaderMaterial({
+      fragmentShader: CoreMaterialsFactory._copyShaderFrag,
+      vertexShader: CoreMaterialsFactory._basicVertex,
+      side: THREE.DoubleSide,
+      blending: THREE.NoBlending,
+      uniforms: { }
     });
   }
 
@@ -659,7 +728,7 @@ void main(void) {
           - (v1.x * v3.y * v2.z)
           - (v2.x * v1.y * v3.z)
           + (v1.x * v2.y * v3.z)
-          ) / 6;
+        ) / 6;
       }
     }
   }
