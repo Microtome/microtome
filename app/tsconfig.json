@@ -16,7 +16,9 @@
     "./../typings/**/*.d.ts",
     "./../local_typings/**/*.d.ts",
     "./../bower_components/**/*.d.ts",
-    "./**/*.ts"
+    "./**/*.ts",
+
+
   ],
   "files": [
     "./../typings/browser.d.ts",
@@ -33,14 +35,6 @@
     "./../typings/browser/ambient/webcomponents.js/index.d.ts",
     "./../local_typings/chrome_serial.d.ts",
     "./../local_typings/threejs-extended.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/doctrine.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/dom5.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/escodegen.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/espree.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/estraverse.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/estree.d.ts",
-    "./../bower_components/hydrolysis/custom_typings/main.d.ts",
-    "./../bower_components/polymer-ts/polymer-ts.d.ts",
     "./elements/fab-menu/fab-menu.ts",
     "./elements/fab-radial/fab-radial.ts",
     "./elements/layer-height/layer-height.ts",
