@@ -2,9 +2,9 @@ module microtome.slicer {
 
   var three_d = microtome.three_d;
 
-  const FAR_Z_PADDING: number = 1.0;
-  const CAMERA_NEAR: number = 1.0;
-  const SLICER_BACKGROUND_Z = -0.1;
+  export const FAR_Z_PADDING: number = 1.0;
+  export const CAMERA_NEAR: number = 1.0;
+  export const SLICER_BACKGROUND_Z = -0.1;
 
   /**
   * GPU based dlp slicer
