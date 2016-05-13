@@ -20,6 +20,7 @@
   },
   "ignore": [],
   "resolutions": {
-    "web-animations-js": "2.1.2"
+    "web-animations-js": "2.1.2",
+    "paper-styles": "^1.1.4"
   }
 }
