@@ -43,9 +43,7 @@ void main(void) {
 }  `;
 
     private static _erodeOrDialateShaderFrag = `
-// Texture containing depth info of scene
-// packed into rgba
-// Must be same size as current viewport
+// Image to be dialated/eroded
 uniform sampler2D src;
 
 // View dimensions
@@ -61,6 +59,8 @@ void main(void) {
   float pr2 = pixelRadius * pixelRadius;
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
   float smpl = texture2D(src, lookup);
+  // TODO these offsets should be pre-generated and set as array uniform
+  // to shader
   for(int i = -pixelRadius; i <= pixelRadius; i++ ){
     for(int j = -pixelRadius; j <= pixelRadius; j++ ){
       if( i*i + j*j <= pr2 ){
