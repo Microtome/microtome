@@ -54,14 +54,22 @@ class SlicePreview extends polymer.Base {
 
 
   private _stopRendering() {
-    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
-    this._slicer.teardownSlicerPreview();
-    this.scene.printVolume.visible = true;
+    if (this._slicer) {
+      if (this._reqAnimFrameHandle) {
+        window.cancelAnimationFrame(this._reqAnimFrameHandle)
+        this._slicer.teardownSlicerPreview();
+      }
+      this.scene.printVolume.visible = true;
+    }
   }
-
+  
   private _startRendering() {
-    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle);
-    this._slicer.setupSlicerPreview();
+    if (this._slicer) {
+      if (this._reqAnimFrameHandle) {
+        window.cancelAnimationFrame(this._reqAnimFrameHandle);
+      }
+      this._slicer.setupSlicerPreview();
+    }
     this.scene.printVolume.visible = false;
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
