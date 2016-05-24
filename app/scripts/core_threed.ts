@@ -672,6 +672,14 @@ void main(void) {
     public remove(child: THREE.Object3D) {
       this._printObjectsHolder.remove(child);
     }
+
+    public hidePrintObjects(){
+      this._printObjectsHolder.visible=false;
+    }
+
+    public showPrintObjects(){
+      this._printObjectsHolder.visible=true;
+    }
   }
 
 
