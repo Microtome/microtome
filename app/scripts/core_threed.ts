@@ -1,5 +1,39 @@
 module microtome.three_d {
 
+  interface UniformValue<T> {
+    type: string,
+    value: T,
+  }
+
+  export class FloatUniform implements UniformValue<number>{
+    type: string = 'f'
+    constructor(public value: number) {
+    }
+  }
+
+  export class IntegerUniform implements UniformValue<number>{
+    type: string = 'i'
+    constructor(public value: number) {
+    }
+  }
+
+  export class TextureUniform implements UniformValue<THREE.WebGLRenderTarget>{
+    type: string = 't'
+    constructor(public value: THREE.WebGLRenderTarget) {
+    }
+  }
+
+
+  export class SliceShaderUniforms {
+    constructor(
+      public cutoff: FloatUniform,
+      public epsilon: FloatUniform,
+      public dTex: TextureUniform,
+      public viewWidth: IntegerUniform,
+      public viewHeight: IntegerUniform
+    ){}
+  }
+
   /**
     * Properly encoding 32 bit float in rgba from here:
     * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
@@ -155,7 +189,7 @@ void main(void) {
       vertexShader: CoreMaterialsFactory._basicVertex,
       side: THREE.DoubleSide,
       blending: THREE.NoBlending,
-      uniforms: { }
+      uniforms: {}
     });
     /**
     Material for erode/dialate
@@ -165,7 +199,7 @@ void main(void) {
       vertexShader: CoreMaterialsFactory._basicVertex,
       side: THREE.DoubleSide,
       blending: THREE.NoBlending,
-      uniforms: { }
+      uniforms: {}
     });
     /**
     Material for copy
@@ -175,7 +209,7 @@ void main(void) {
       vertexShader: CoreMaterialsFactory._basicVertex,
       side: THREE.DoubleSide,
       blending: THREE.NoBlending,
-      uniforms: { }
+      uniforms: {}
     });
   }
 
@@ -673,12 +707,12 @@ void main(void) {
       this._printObjectsHolder.remove(child);
     }
 
-    public hidePrintObjects(){
-      this._printObjectsHolder.visible=false;
+    public hidePrintObjects() {
+      this._printObjectsHolder.visible = false;
     }
 
-    public showPrintObjects(){
-      this._printObjectsHolder.visible=true;
+    public showPrintObjects() {
+      this._printObjectsHolder.visible = true;
     }
   }
 

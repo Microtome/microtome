@@ -20,13 +20,14 @@ module microtome.slicer {
     private _sliceBackground: THREE.Mesh;
 
     // 3D
-    private _sliceMaterialUniforms = {
-      'cutoff': { type: 'f', value: 0.0 },
-      'epsilon': { type: 'f', value: 0.0 },
-      'dTex': { type: 't', value: <THREE.WebGLRenderTarget>null },
-      'viewWidth': { type: 'i', value: 0.0 },
-      'viewHeight': { type: 'i', value: 0.0 }
-    };
+    private _sliceMaterialUniforms: three_d.SliceShaderUniforms = new three_d.SliceShaderUniforms(
+      new three_d.FloatUniform(0),
+      new three_d.FloatUniform(0),
+      new three_d.TextureUniform(null),
+      new three_d.IntegerUniform(0),
+      new three_d.IntegerUniform(0)
+    );
+
     private _depthTexRenderTarget: THREE.WebGLRenderTarget = null;
     // List<Object3D> printObjects = [];
     // BoundingBox printVolumeBB;
@@ -34,12 +35,12 @@ module microtome.slicer {
     private _slicingParamsDirty: boolean = true;
     private _slicerMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
 
-    constructor(public scene: microtome.three_d.PrinterScene, public renderer: THREE.WebGLRenderer,
+    constructor(public scene: three_d.PrinterScene, public renderer: THREE.WebGLRenderer,
       public targetZ: number = 100, public sliceEpsilon: number = 0.00001) {
       this._oCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this._slicerMaterial.uniforms = this._sliceMaterialUniforms;
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
-      var planeMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial.clone();
+      var planeMaterial = three_d.CoreMaterialsFactory.whiteMaterial.clone();
       planeMaterial.side = THREE.DoubleSide;
       this._sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
       this._sliceBackground.position.z = SLICER_BACKGROUND_Z;
