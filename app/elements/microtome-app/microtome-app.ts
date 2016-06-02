@@ -344,7 +344,7 @@ class MicrotomeApp extends polymer.Base {
       // // this.scene.remove(this.pickedMesh);
       this.pickedMesh.geometry.dispose();
       this.pickedMesh.material.dispose();
-      this.scene.remove(this.pickedMesh);
+      this.scene.removePrintObject(this.pickedMesh);
       this.pickedMesh = null;
       this.notifyPath("scene.printObjects", this.scene.printObjects.slice());
     }
