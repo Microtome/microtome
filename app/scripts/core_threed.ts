@@ -31,7 +31,23 @@ module microtome.three_d {
       public dTex: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
-    ){}
+    ) { }
+  }
+
+  export class CopyShaderUniforms {
+    constructor(public src: TextureUniform,
+      public viewWidth: IntegerUniform,
+      public viewHeight: IntegerUniform
+    ) { }
+  }
+
+  export class ErodeDialateShaderUniforms {
+    constructor(public dilate: IntegerUniform,
+      public pixelRadius: IntegerUniform,
+      public src: TextureUniform,
+      public viewWidth: IntegerUniform,
+      public viewHeight: IntegerUniform
+    ) { }
   }
 
   /**
@@ -86,8 +102,8 @@ uniform int viewHeight;
 
 // Radius of sampling area
 uniform int pixelRadius;
-// If == 1, dialate, else erode
-uniform int dialate;
+// If == 1, dilate, else erode
+uniform int dilate;
 
 void main(void) {
   float pr2 = pixelRadius * pixelRadius;
@@ -99,7 +115,7 @@ void main(void) {
     for(int j = -pixelRadius; j <= pixelRadius; j++ ){
       if( i*i + j*j <= pr2 ){
         vec2 offset = vec2(i / viewWidth, j / viewHeight);
-        if(dialate == 1){
+        if(dilate == 1){
           smpl = max(smpl, texture2D(src, lookup + offset));
         }else{
           smpl = min(smpl, texture2D(src, lookup + offset));
