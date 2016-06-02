@@ -88,8 +88,7 @@ uniform int viewHeight;
 
 void main(void) {
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float smpl = texture2D(src, lookup);
-  gl_FragColor = vec4(smpl);
+  gl_FragColor = texture2D(src, lookup);
 }  `;
 
     private static _erodeOrDialateShaderFrag = `
@@ -105,25 +104,33 @@ uniform int pixelRadius;
 // If == 1, dilate, else erode
 uniform int dilate;
 
+float s2f(const in vec4 smpl){
+  return (smpl.r + smpl.g + smpl.b) / 3.0;
+}
+
 void main(void) {
-  float pr2 = pixelRadius * pixelRadius;
+  // int pr2 = pixelRadius * pixelRadius;
+  int pr2 = 26 * 26;
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float smpl = texture2D(src, lookup);
+  float test = s2f(texture2D(src, lookup));
   // TODO these offsets should be pre-generated and set as array uniform
   // to shader
-  for(int i = -pixelRadius; i <= pixelRadius; i++ ){
-    for(int j = -pixelRadius; j <= pixelRadius; j++ ){
+  // TODO Must be constant expression, so we do need to pass
+  // in a array of explicit indices.
+  for(int i = -26; i <= 26; i++ ){
+    for(int j = -26; j <= 26; j++ ){
       if( i*i + j*j <= pr2 ){
-        vec2 offset = vec2(i / viewWidth, j / viewHeight);
+        vec2 offset = vec2(i,j)/ vec2(viewWidth,viewHeight);
+        float s2 = s2f(texture2D(src, lookup + offset));
         if(dilate == 1){
-          smpl = max(smpl, texture2D(src, lookup + offset));
+          test = max(test, s2);
         }else{
-          smpl = min(smpl, texture2D(src, lookup + offset));
+          test = min(test, s2);
         }
       }
     }
   }
-  gl_FragColor = vec4(smpl);
+  gl_FragColor = vec4(test,0,0,1);
 }  `;
 
     private static _sliceShaderFrag = `
@@ -189,6 +196,7 @@ void main(void) {
     static zLineMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
     static bBoxMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
     static whiteMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
+    static flatWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
     static objectMaterial = new THREE.MeshPhongMaterial({ color: 0xCFCFCF, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
     static selectMaterial = new THREE.MeshPhongMaterial({ color: 0x00CFCF, side: THREE.DoubleSide });//, ambient:0x00cfcf});
     /**
@@ -719,7 +727,7 @@ void main(void) {
       return this._printVolume;
     }
 
-    public remove(child: THREE.Object3D) {
+    public removePrintObject(child: THREE.Object3D) {
       this._printObjectsHolder.remove(child);
     }
 
