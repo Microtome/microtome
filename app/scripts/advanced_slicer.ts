@@ -63,7 +63,7 @@ module microtome.slicer {
     private erodeDialateMaterial = three_d.CoreMaterialsFactory.erodeOrDialateMaterial.clone();
 
     private erodeDialateMaterialUniforms = new three_d.ErodeDialateShaderUniforms(
-      new three_d.IntegerUniform(null),
+      new three_d.IntegerUniform(1),
       new three_d.IntegerUniform(0),
       new three_d.TextureUniform(null),
       new three_d.IntegerUniform(0),
@@ -116,12 +116,11 @@ module microtome.slicer {
 
     private render(z: number) {
       try {
-        this.sliceAt(z);
         let dirty = this.prepareRender();
         // if (z <= this.raftThickness) {
-          this.renderRaftSlice();
+        this.renderRaftSlice();
         // } else {
-          // this.renderSlice(z, dirty);
+        // this.renderSlice(z, dirty);
         // }
       } finally {
         // Set everything back to normal if stuff goes south
@@ -132,14 +131,16 @@ module microtome.slicer {
     private renderRaftSlice() {
 
       // Set model color to white,
-      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial;
+      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial;
       // Hide slice background if present
       this.scene.remove(this.sliceBackground);
+      this.scene.printVolume.visible = false
+      // this.renderer.render(this.scene, this.sliceCamera);
       // render to texture
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
       // Hide objects, show slice background
-      this.scene.add(this.sliceBackground);
       this.scene.hidePrintObjects();
+      this.scene.add(this.sliceBackground);
       // Apply dialate filter to texture
       this.scene.overrideMaterial = this.erodeDialateMaterial;
       this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
@@ -171,9 +172,12 @@ module microtome.slicer {
         // Dispose old textures
         // Allocate new textures
         this.prepareShaders(width, height);
+        this.prepareCameras(width, height);
         this.reallocateTargets(width, height);
         this.lastWidth = width;
         this.lastHeight = height;
+        this.sliceBackground.scale.x=width;
+        this.sliceBackground.scale.y=height;
         dirty = true;
       }
       return dirty;
@@ -200,6 +204,14 @@ module microtome.slicer {
         camera.updateProjectionMatrix();
         camera.lookAt(Z_DOWN);
       }
+      let targetZ = this.scene.printVolume.boundingBox.max.z;
+      this.sliceCamera.position.z = targetZ + CAMERA_NEAR;
+      this.sliceCamera.near = CAMERA_NEAR;
+      // We add a little padding to the camera far so that if
+      // slice geometry is right on the 0 xy plane, when
+      // we draw in the colors and textures we don't get ambiguity
+      this.sliceCamera.far = FAR_Z_PADDING + targetZ + CAMERA_NEAR;
+
     }
 
     /**
@@ -266,11 +278,11 @@ module microtome.slicer {
     */
     private reallocateTargets(width: number, height: number) {
       // Dispose
-      this.finalCompositeTarget.dispose();
-      this.depthTarget.dispose();
-      this.maskTarget.dispose();
-      this.tempTarget1.dispose();
-      this.tempTarget2.dispose();
+      this.finalCompositeTarget && this.finalCompositeTarget.dispose();
+      this.depthTarget && this.depthTarget.dispose();
+      this.maskTarget && this.maskTarget.dispose();
+      this.tempTarget1 && this.tempTarget1.dispose();
+      this.tempTarget1 && this.tempTarget2.dispose();
       // Allocate
       this.finalCompositeTarget = new THREE.WebGLRenderTarget(width, height, {
         format: THREE.RGBAFormat,
