@@ -14,7 +14,9 @@ class SlicePreview extends polymer.Base {
 
   private _reqAnimFrameHandle: number;
 
-  private _slicer: microtome.slicer.Slicer = new microtome.slicer.Slicer(this.scene, this._renderer);
+  // private _slicer: microtome.slicer.Slicer = new microtome.slicer.Slicer(this.scene, this._renderer);
+  private _slicer: microtome.slicer.AdvancedSlicer = new microtome.slicer.AdvancedSlicer(
+    this.scene, 3, 4, 4, this._renderer, 400);
 
   @property({ notify: false, readOnly: false })
   public scene: microtome.three_d.PrinterScene;
@@ -39,7 +41,6 @@ class SlicePreview extends polymer.Base {
   }
 
   public detached() {
-    this._slicer.teardownSlicerPreview();
     this._stopRendering();
   }
 
@@ -57,18 +58,16 @@ class SlicePreview extends polymer.Base {
     if (this._slicer) {
       if (this._reqAnimFrameHandle) {
         window.cancelAnimationFrame(this._reqAnimFrameHandle)
-        this._slicer.teardownSlicerPreview();
       }
       this.scene.printVolume.visible = true;
     }
   }
-  
+
   private _startRendering() {
     if (this._slicer) {
       if (this._reqAnimFrameHandle) {
         window.cancelAnimationFrame(this._reqAnimFrameHandle);
       }
-      this._slicer.setupSlicerPreview();
     }
     this.scene.printVolume.visible = false;
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
@@ -91,7 +90,6 @@ class SlicePreview extends polymer.Base {
     canvas.style.width = "" + pvw * scale + "px";
     canvas.style.height = "" + pvd * scale + "px";
     // TODO fix NEED dirty check on div resize
-    this._slicer.resize();
     this._slicer.sliceAt(this.sliceAt);
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
