@@ -130,7 +130,7 @@ void main(void) {
       }
     }
   }
-  gl_FragColor = vec4(test,0,0,1);
+  gl_FragColor = vec4(vec3(test),1);
 }  `;
 
     private static _sliceShaderFrag = `
