@@ -92,6 +92,8 @@ module microtome.slicer {
       planeMaterial.side = THREE.DoubleSide;
       this.sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
       this.sliceBackground.position.z = SLICER_BACKGROUND_Z;
+      this.sliceBackground.visible = false;
+      this.scene.add(this.sliceBackground);
       this.sliceCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this.zShellCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
 
@@ -134,11 +136,11 @@ module microtome.slicer {
       // Set model color to white,
       this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial;
       // Hide slice background if present
-      this.scene.remove(this.sliceBackground);
+      this.sliceBackground.visible=false;
       // render to texture
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
       // Hide objects, show slice background
-      this.scene.add(this.sliceBackground);
+      this.sliceBackground.visible=true;
       this.scene.hidePrintObjects();
       // Apply dialate filter to texture
       this.scene.overrideMaterial = this.erodeDialateMaterial;
@@ -256,7 +258,7 @@ module microtome.slicer {
 
     private resetScene() {
       this.scene.overrideMaterial = null;
-      this.scene.remove(this.sliceBackground);
+      this.sliceBackground.visible=false;
       this.scene.printVolume.visible = true;
       this.scene.showPrintObjects();
     }
