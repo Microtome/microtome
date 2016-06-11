@@ -76,6 +76,11 @@ void main() {
   gl_FragColor = pack(gl_FragCoord.z);
 }`;
 
+    private static _flatWhiteTranslucentShaderFrag = `
+void main() {
+  gl_FragColor = vec4(1.0,1.0,1.0,1.0/32.0);
+}`;
+
     private static _copyShaderFrag = `
 // Texture containing depth info of scene
 // packed into rgba
@@ -189,14 +194,29 @@ void main(void) {
     static zLineMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
     static bBoxMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
     static whiteMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
-    static objectMaterial = new THREE.MeshPhongMaterial({ color: 0xCFCFCF, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
-    static selectMaterial = new THREE.MeshPhongMaterial({ color: 0x00CFCF, side: THREE.DoubleSide });//, ambient:0x00cfcf});
+    static objectMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
+    static selectMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
     /**
-    Material for rendering depth textures
+    Material for encoding z depth in image rgba
     */
     static depthMaterial = new THREE.ShaderMaterial({
       fragmentShader: CoreMaterialsFactory._depthShaderFrag, vertexShader: CoreMaterialsFactory._basicVertex, blending: THREE.NoBlending
     });
+
+    /**
+    Material for alpha rendering object intersections.
+    */
+    static flatWhiteTranslucentMaterial = new THREE.ShaderMaterial({
+      fragmentShader: CoreMaterialsFactory._flatWhiteTranslucentShaderFrag,
+      vertexShader: CoreMaterialsFactory._basicVertex,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending
+      // opacity: 0.1
+    });
+
     /**
     Material for slicing
     */
