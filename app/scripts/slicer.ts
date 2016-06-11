@@ -44,6 +44,8 @@ module microtome.slicer {
       planeMaterial.side = THREE.DoubleSide;
       this._sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
       this._sliceBackground.position.z = SLICER_BACKGROUND_Z;
+      this._sliceBackground.visible = false;
+      this.scene.add(this._sliceBackground);
     }
 
     resize() {
@@ -103,13 +105,13 @@ module microtome.slicer {
 
     setupSlicerPreview() {
       this.targetZ = this.scene.printVolume.height;
-      this.scene.add(this._sliceBackground);
+      this._sliceBackground.visible=true;
     }
 
     teardownSlicerPreview() {
       this.scene.overrideMaterial = null;
       this._slicingParamsDirty = true;
-      this.scene.remove(this._sliceBackground);
+      this._sliceBackground.visible=false;
     }
 
     /// Got back to home position and reset slicing
