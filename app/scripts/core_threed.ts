@@ -27,10 +27,17 @@ module microtome.three_d {
   export class SliceShaderUniforms {
     constructor(
       public cutoff: FloatUniform,
-      public epsilon: FloatUniform,
-      public dTex: TextureUniform,
+      // public epsilon: FloatUniform,
+      // public dTex: TextureUniform,
+      public iTex: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
+    ) { }
+  }
+
+  export class IntersectionShaderUniforms {
+    constructor(
+      public cutoff: FloatUniform
     ) { }
   }
 
@@ -50,10 +57,6 @@ module microtome.three_d {
     ) { }
   }
 
-  /**
-    * Properly encoding 32 bit float in rgba from here:
-    * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
-    */
   export class CoreMaterialsFactory {
     private static _basicVertex = `
 void main(void) {
@@ -61,6 +64,10 @@ void main(void) {
    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
+/**
+* Properly encoding 32 bit float in rgba from here:
+* http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
+*/
     private static _depthShaderFrag = `
 vec4 pack( const in float depth ) {
     const float toFixed = 255.0/256.0;
@@ -76,9 +83,20 @@ void main() {
   gl_FragColor = pack(gl_FragCoord.z);
 }`;
 
-    private static _flatWhiteTranslucentShaderFrag = `
+    private static _intersectionShaderFrag = `
+// current slice height in device coordinates
+uniform float cutoff;
+
+const float STEPS = 256.0;
+
 void main() {
-  gl_FragColor = vec4(1.0,1.0,1.0,1.0/32.0);
+  float zCutoff = 1.0 - cutoff;
+
+  if ( gl_FragCoord.z < zCutoff ){
+    discard;
+  }
+
+  gl_FragColor = vec4(1.0,1.0,1.0,1.0/STEPS);
 }`;
 
     private static _copyShaderFrag = `
@@ -141,55 +159,27 @@ void main(void) {
     private static _sliceShaderFrag = `
 // current slice height in device coordinates
 uniform float cutoff;
-
-// Texture containing depth info of scene
-// packed into rgba
-// Must be same size as current viewport
-uniform sampler2D dTex;
-
-// Since depth conversion not exact
-// Use epsilon for compare
-// 1/2 slice height should be good.
-uniform float epsilon;
-
+// Alpha image sampling which can
+// be used to check inside/outside
+uniform sampler2D iTex;
 uniform int viewWidth;
 uniform int viewHeight;
 
-float unpack(const in vec4 color) {
-  const float fromFixed = 256.0/255.0;
-  float result = color.r*fromFixed/(1.0)
-  +color.g*fromFixed/(255.0)
-  +color.b*fromFixed/(255.*255.0)
-  +color.a*fromFixed/(255.0*255.0*255.0);
-  return result;
-}
-
-bool isInLattice(const in vec4 fragCoord, const in float cutOff){
-  float modX = abs(mod(fragCoord.x, 20.0));
-  float modY = abs(mod(fragCoord.y, 20.0));
-  float modZ = abs(mod(cutOff * 1000.0, 20.0));
-
-  return ( (modX <= 1.0 && modY <= 1.0) || (modX <= 1.0 && modZ <= 10.0) || (modY <= 1.0 && modZ <= 10.0)  );
-}
+const float STEPS = 256.0;
 
 void main(void) {
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float depth = unpack(texture2D(dTex, lookup));
-
+  float oddEven = mod(texture2D(iTex, lookup).r * 255.0, 2.0);
   float zCutoff = 1.0 - cutoff;
-
   if ( gl_FragCoord.z < zCutoff ){
     discard;
   }
 
   if(gl_FrontFacing){
-    float modX = abs(mod(gl_FragCoord.x, 20.0));
-    float modY = abs(mod(gl_FragCoord.y, 20.0));
-    float modZ = abs(mod(gl_FragCoord.z * 20.0 , 20.0));
-    gl_FragColor = vec4(vec3(0), 1);
-    if( isInLattice(gl_FragCoord, zCutoff)
-      && gl_FragCoord.z > epsilon + depth && zCutoff > depth  ){
+    if(oddEven > 0.9){
       gl_FragColor = vec4(vec3(1), 1);
+    } else {
+      gl_FragColor = vec4(0,0,0, 1);
     }
   } else {
     gl_FragColor = vec4(vec3(1),1);
@@ -201,7 +191,7 @@ void main(void) {
     static zLineMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
     static bBoxMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
     static whiteMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
-    static flatWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
+    static flatWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     static objectMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
     static selectMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
 
@@ -209,14 +199,16 @@ void main(void) {
     Material for encoding z depth in image rgba
     */
     static depthMaterial = new THREE.ShaderMaterial({
-      fragmentShader: CoreMaterialsFactory._depthShaderFrag, vertexShader: CoreMaterialsFactory._basicVertex, blending: THREE.NoBlending
+      fragmentShader: CoreMaterialsFactory._depthShaderFrag,
+      vertexShader: CoreMaterialsFactory._basicVertex,
+      blending: THREE.NoBlending
     });
 
     /**
     Material for alpha rendering object intersections.
     */
-    static flatWhiteTranslucentMaterial = new THREE.ShaderMaterial({
-      fragmentShader: CoreMaterialsFactory._flatWhiteTranslucentShaderFrag,
+    static intersectionMaterial = new THREE.ShaderMaterial({
+      fragmentShader: CoreMaterialsFactory._intersectionShaderFrag,
       vertexShader: CoreMaterialsFactory._basicVertex,
       transparent: true,
       side: THREE.DoubleSide,
@@ -234,7 +226,6 @@ void main(void) {
       vertexShader: CoreMaterialsFactory._basicVertex,
       side: THREE.DoubleSide,
       blending: THREE.NoBlending,
-      uniforms: {}
     });
     /**
     Material for erode/dialate

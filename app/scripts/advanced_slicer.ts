@@ -77,6 +77,20 @@ module microtome.slicer {
       new three_d.IntegerUniform(0),
       new three_d.IntegerUniform(0));
 
+    private intersectionTestMaterial = three_d.CoreMaterialsFactory.intersectionMaterial.clone();
+
+    private intersectionMaterialUniforms = new three_d.IntersectionShaderUniforms(
+      new three_d.FloatUniform(0)
+    );
+
+    private sliceMaterial = three_d.CoreMaterialsFactory.sliceMaterial.clone();
+
+    private sliceMaterialUniforms = new three_d.SliceShaderUniforms(
+      new three_d.FloatUniform(0),
+      new three_d.TextureUniform(null),
+      new three_d.IntegerUniform(0),
+      new three_d.IntegerUniform(0));
+
     /**
     *
     */
@@ -96,9 +110,10 @@ module microtome.slicer {
       this.scene.add(this.sliceBackground);
       this.sliceCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this.zShellCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
-
       this.erodeDialateMaterial.uniforms = this.erodeDialateMaterialUniforms;
       this.copyMaterial.uniforms = this.copyMaterialUniforms;
+      this.intersectionTestMaterial.uniforms = this.intersectionMaterialUniforms;
+      this.sliceMaterial.uniforms = this.sliceMaterialUniforms;
     }
 
     /**
@@ -113,6 +128,7 @@ module microtome.slicer {
     * Returns a dataurl of the image
     */
     sliceAtToImage(z: number): String {
+      this.render(z);
       return this.renderer.domElement.toDataURL();
     }
 
@@ -120,9 +136,9 @@ module microtome.slicer {
       try {
         let dirty = this.prepareRender();
         // if (z <= this.raftThickness) {
-        this.renderRaftSlice();
+        // this.renderRaftSlice();
         // } else {
-        // this.renderSlice(z, dirty);
+        this.renderSlice(z, dirty);
         // }
       } finally {
         // Set everything back to normal if stuff goes south
@@ -131,9 +147,8 @@ module microtome.slicer {
     }
 
     private renderRaftSlice() {
-
       // Set model color to white,
-      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial;
+      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial
       // Hide slice background if present
       this.scene.printVolume.visible = false
       this.sliceBackground.visible = false;
@@ -152,80 +167,36 @@ module microtome.slicer {
       this.renderer.render(this.scene, this.sliceCamera);
     }
 
-    /**
-    * Handle reallocating render targets if dimensions have changed and
-    * return true if changes have occured
-    */
-    private prepareRender(): boolean {
-      let dirty = false;
-      // Get canvasElement height
-      let width = this.renderer.domElement.width;
-      let height = this.renderer.domElement.height;
-      // If its changed...
-      if (width != this.lastWidth || height != this.lastHeight) {
-        // Recalc pixel width, and shelling parameters
-        this.pixelWidthMM = this.scene.printVolume.width / width;
-        this.pixelHeightMM = this.scene.printVolume.depth / height;
-        // TODO NOT needed for now, will need to reapproach for non square pixel densities
-        // Also currently all done in the shader.
-        // this.recalcShellSElemSampOffsets();
-        // this.recalcRaftSElemSampOffsets();
-        // Dispose old textures
-        // Allocate new textures
-        this.prepareShaders(width, height);
-        this.prepareCameras(width, height);
-        this.reallocateTargets(width, height);
-        this.lastWidth = width;
-        this.lastHeight = height;
-        this.sliceBackground.scale.x = width;
-        this.sliceBackground.scale.y = height;
-        dirty = true;
-      }
-      return dirty;
-    }
-
-    /**
-    * Update camera dimensions
-    */
-    private prepareCameras(newWidth: number, newHeight: number) {
-      var pVolumeBBox = this.scene.printVolume.boundingBox;
-
-      var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
-      var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
-      var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
-      let right = (scale * newWidth) / 2.0;
-      let left = -right;
-      let top = (scale * newHeight) / 2.0;
-      let bottom = -top
-      for (let camera of [this.sliceCamera, this.zShellCamera]) {
-        camera.right = right;
-        camera.left = left;
-        camera.top = top;
-        camera.bottom = bottom;
-        camera.updateProjectionMatrix();
-        camera.lookAt(Z_DOWN);
-      }
-      let targetZ = this.scene.printVolume.boundingBox.max.z;
-      this.sliceCamera.position.z = targetZ + CAMERA_NEAR;
-      this.sliceCamera.near = CAMERA_NEAR;
-      // We add a little padding to the camera far so that if
-      // slice geometry is right on the 0 xy plane, when
-      // we draw in the colors and textures we don't get ambiguity
-      this.sliceCamera.far = FAR_Z_PADDING + targetZ + CAMERA_NEAR;
-
-    }
-
-    /**
-    * Update shader uniforms such as dimensions
-    */
-    private prepareShaders(newWidth: number, newHeight: number) {
-      this.erodeDialateMaterialUniforms.viewWidth.value = newWidth;
-      this.erodeDialateMaterialUniforms.viewHeight.value = newHeight;
-      this.copyMaterialUniforms.viewWidth.value = newWidth;
-      this.copyMaterialUniforms.viewHeight.value = newHeight;
-    }
 
     private renderSlice(z: number, dirty: boolean) {
+      let buildVolHeight = this.scene.printVolume.boundingBox.max.z;
+      let sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + buildVolHeight);
+      // window.console.log(`Render Slice At mm:${z} => ${z / buildVolHeight} => ${sliceZ}`);
+      // Hide print volume
+      this.scene.printVolume.visible = false
+      // Hide slice background if present
+      this.sliceBackground.visible = false;
+      // Intersection test material
+      this.scene.overrideMaterial = this.intersectionTestMaterial;
+      this.intersectionMaterialUniforms.cutoff.value = sliceZ;
+      // // render to texture
+      // this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+      // // Hide objects, show slice background
+      // this.sliceBackground.visible = true;
+      // this.scene.hidePrintObjects();
+      // // Apply dialate filter to texture
+      // this.scene.overrideMaterial = this.erodeDialateMaterial;
+      // this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
+      // this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+      // // render texture to view
+      this.scene.overrideMaterial = this.sliceMaterial;
+      this.sliceMaterialUniforms.iTex = new three_d.TextureUniform(this.tempTarget1);
+      this.sliceMaterialUniforms.cutoff.value = sliceZ;
+      this.renderer.render(this.scene, this.sliceCamera, null, true);
+
+
+
 
       // Generate depth image
 
@@ -267,6 +238,80 @@ module microtome.slicer {
     //
     // }
 
+    /**
+    * Handle reallocating render targets if dimensions have changed and
+    * return true if changes have occured
+    */
+    private prepareRender(): boolean {
+      let dirty = false;
+      // Get canvasElement height
+      let width = this.renderer.domElement.width;
+      let height = this.renderer.domElement.height;
+      // If its changed...
+      if (width != this.lastWidth || height != this.lastHeight) {
+        // Recalc pixel width, and shelling parameters
+        this.pixelWidthMM = this.scene.printVolume.width / width;
+        this.pixelHeightMM = this.scene.printVolume.depth / height;
+        // TODO NOT needed for now, will need to reapproach for non square pixel densities
+        // Also currently all done in the shader.
+        // this.recalcShellSElemSampOffsets();
+        // this.recalcRaftSElemSampOffsets();
+        // Dispose old textures
+        // Allocate new textures
+        this.prepareShaders(width, height);
+        this.prepareCameras(width, height);
+        this.reallocateTargets(width, height);
+        this.sliceBackground.scale.x = width;
+        this.sliceBackground.scale.y = height;
+        this.lastWidth = width;
+        this.lastHeight = height;
+        dirty = true;
+      }
+      return dirty;
+    }
+
+    /**
+    * Update camera dimensions
+    */
+    private prepareCameras(newWidth: number, newHeight: number) {
+      var pVolumeBBox = this.scene.printVolume.boundingBox;
+
+      var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
+      var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
+      var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
+      let right = (scale * newWidth) / 2.0;
+      let left = -right;
+      let top = (scale * newHeight) / 2.0;
+      let bottom = -top
+      let targetZ = this.scene.printVolume.boundingBox.max.z;
+      this.sliceCamera.position.z = targetZ + CAMERA_NEAR;
+      this.sliceCamera.near = CAMERA_NEAR;
+      // We add a little padding to the camera far so that if
+      // slice geometry is right on the 0 xy plane, when
+      // we draw in the colors and textures we don't get ambiguity
+      this.sliceCamera.far = FAR_Z_PADDING + targetZ + CAMERA_NEAR;
+      for (let camera of [this.sliceCamera, this.zShellCamera]) {
+        camera.right = right;
+        camera.left = left;
+        camera.top = top;
+        camera.bottom = bottom;
+        camera.lookAt(Z_DOWN);
+        camera.updateProjectionMatrix();
+      }
+    }
+
+    /**
+    * Update shader uniforms such as dimensions
+    */
+    private prepareShaders(newWidth: number, newHeight: number) {
+      this.erodeDialateMaterialUniforms.viewWidth.value = newWidth;
+      this.erodeDialateMaterialUniforms.viewHeight.value = newHeight;
+      this.copyMaterialUniforms.viewWidth.value = newWidth;
+      this.copyMaterialUniforms.viewHeight.value = newHeight;
+      this.sliceMaterialUniforms.viewWidth.value = newWidth;
+      this.sliceMaterialUniforms.viewHeight.value = newHeight;
+    }
+
     private resetScene() {
       this.scene.overrideMaterial = null;
       this.sliceBackground.visible = false;
@@ -283,7 +328,7 @@ module microtome.slicer {
       this.depthTarget && this.depthTarget.dispose();
       this.maskTarget && this.maskTarget.dispose();
       this.tempTarget1 && this.tempTarget1.dispose();
-      this.tempTarget1 && this.tempTarget2.dispose();
+      this.tempTarget2 && this.tempTarget2.dispose();
       // Allocate
       this.finalCompositeTarget = new THREE.WebGLRenderTarget(width, height, {
         format: THREE.RGBAFormat,
