@@ -77,6 +77,14 @@ module microtome.slicer {
       new three_d.IntegerUniform(0),
       new three_d.IntegerUniform(0));
 
+    private xorMaterial = three_d.CoreMaterialsFactory.xorMaterial.clone();
+
+    private xorMaterialUniforms = new three_d.XorShaderUniforms(
+      new three_d.TextureUniform(null),
+      new three_d.TextureUniform(null),
+      new three_d.IntegerUniform(0),
+      new three_d.IntegerUniform(0));
+
     private intersectionTestMaterial = three_d.CoreMaterialsFactory.intersectionMaterial.clone();
 
     private intersectionMaterialUniforms = new three_d.IntersectionShaderUniforms(
@@ -112,6 +120,7 @@ module microtome.slicer {
       this.zShellCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
       this.erodeDialateMaterial.uniforms = this.erodeDialateMaterialUniforms;
       this.copyMaterial.uniforms = this.copyMaterialUniforms;
+      this.xorMaterial.uniforms = this.xorMaterialUniforms;
       this.intersectionTestMaterial.uniforms = this.intersectionMaterialUniforms;
       this.sliceMaterial.uniforms = this.sliceMaterialUniforms;
     }
@@ -176,25 +185,33 @@ module microtome.slicer {
       this.scene.printVolume.visible = false
       // Hide slice background if present
       this.sliceBackground.visible = false;
-      // Intersection test material
+      // Intersection test material to temp1
       this.scene.overrideMaterial = this.intersectionTestMaterial;
       this.intersectionMaterialUniforms.cutoff.value = sliceZ;
-      // // render to texture
-      // this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
-      // // Hide objects, show slice background
-      // this.sliceBackground.visible = true;
-      // this.scene.hidePrintObjects();
-      // // Apply dialate filter to texture
-      // this.scene.overrideMaterial = this.erodeDialateMaterial;
-      // this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
-      // this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-      // // render texture to view
+      // Render slice to temp2
       this.scene.overrideMaterial = this.sliceMaterial;
       this.sliceMaterialUniforms.iTex = new three_d.TextureUniform(this.tempTarget1);
       this.sliceMaterialUniforms.cutoff.value = sliceZ;
-      this.renderer.render(this.scene, this.sliceCamera, null, true);
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+      // Erode slice to temp1
+      this.scene.overrideMaterial = this.erodeDialateMaterial;
+      this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget2);
+      this.erodeDialateMaterialUniforms.dilate.value =0;
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
 
+      // Xor for shelling to final composition target
+      // temp1 ^ temp2 => finalCompositeTarget
+      this.sliceBackground.visible = true;
+      this.scene.overrideMaterial = this.xorMaterial;
+      this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.tempTarget1);
+      this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
+      this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
+      // Render final image
+      this.scene.overrideMaterial = this.copyMaterial;
+      // this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
+      this.copyMaterialUniforms.src = new three_d.TextureUniform(this.finalCompositeTarget);
+      this.renderer.render(this.scene, this.sliceCamera, null, true);
 
 
 
@@ -308,6 +325,8 @@ module microtome.slicer {
       this.erodeDialateMaterialUniforms.viewHeight.value = newHeight;
       this.copyMaterialUniforms.viewWidth.value = newWidth;
       this.copyMaterialUniforms.viewHeight.value = newHeight;
+      this.xorMaterialUniforms.viewWidth.value = newWidth;
+      this.xorMaterialUniforms.viewHeight.value = newHeight;
       this.sliceMaterialUniforms.viewWidth.value = newWidth;
       this.sliceMaterialUniforms.viewHeight.value = newHeight;
     }
