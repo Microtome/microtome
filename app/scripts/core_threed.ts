@@ -48,6 +48,14 @@ module microtome.three_d {
     ) { }
   }
 
+  export class XorShaderUniforms {
+    constructor(public src1: TextureUniform,
+      public src2: TextureUniform,
+      public viewWidth: IntegerUniform,
+      public viewHeight: IntegerUniform
+    ) { }
+  }
+
   export class ErodeDialateShaderUniforms {
     constructor(public dilate: IntegerUniform,
       public pixelRadius: IntegerUniform,
@@ -64,10 +72,10 @@ void main(void) {
    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-/**
-* Properly encoding 32 bit float in rgba from here:
-* http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
-*/
+    /**
+    * Properly encoding 32 bit float in rgba from here:
+    * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
+    */
     private static _depthShaderFrag = `
 vec4 pack( const in float depth ) {
     const float toFixed = 255.0/256.0;
@@ -114,6 +122,28 @@ void main(void) {
   gl_FragColor = texture2D(src, lookup);
 }  `;
 
+    private static _xorShaderFrag = `
+// Two sources to xor together
+uniform sampler2D src1;
+uniform sampler2D src2;
+
+// View dimensions
+uniform int viewWidth;
+uniform int viewHeight;
+
+void main(void) {
+  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
+  float smpl1 = texture2D(src1, lookup).r;
+  float smpl2 = texture2D(src2, lookup).r;
+  // No XOR yet? :P
+  // float dst = round(smpl1) ^ round(smpl2);
+  float dst = 0.0;
+  if((smpl1 > 0.9 || smpl2 > 0.9) && !(smpl1 > 0.9 && smpl2 > 0.9)){
+    dst = 1.0;
+  }
+  gl_FragColor = vec4(vec3(dst),1);
+}  `;
+
     private static _erodeOrDialateShaderFrag = `
 // Image to be dialated/eroded
 uniform sampler2D src;
@@ -133,15 +163,15 @@ float s2f(const in vec4 smpl){
 
 void main(void) {
   // int pr2 = pixelRadius * pixelRadius;
-  int pr2 = 26 * 26;
+  int pr2 = 5 * 5;
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
   float test = s2f(texture2D(src, lookup));
   // TODO these offsets should be pre-generated and set as array uniform
   // to shader
   // TODO Must be constant expression, so we do need to pass
   // in a array of explicit indices.
-  for(int i = -26; i <= 26; i++ ){
-    for(int j = -26; j <= 26; j++ ){
+  for(int i = -5; i <= 5; i++ ){
+    for(int j = -5; j <= 5; j++ ){
       if( i*i + j*j <= pr2 ){
         vec2 offset = vec2(i,j)/ vec2(viewWidth,viewHeight);
         float s2 = s2f(texture2D(src, lookup + offset));
@@ -237,14 +267,26 @@ void main(void) {
       blending: THREE.NoBlending,
       uniforms: {}
     });
+
     /**
     Material for copy
     */
     static copyMaterial = new THREE.ShaderMaterial({
       fragmentShader: CoreMaterialsFactory._copyShaderFrag,
       vertexShader: CoreMaterialsFactory._basicVertex,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       blending: THREE.NoBlending,
+      uniforms: {}
+    });
+
+    /**
+    Material for xor
+    */
+    static xorMaterial = new THREE.ShaderMaterial({
+      fragmentShader: CoreMaterialsFactory._xorShaderFrag,
+      vertexShader: CoreMaterialsFactory._basicVertex,
+      side: THREE.FrontSide,
+      blending: THREE.AdditiveBlending,
       uniforms: {}
     });
   }
