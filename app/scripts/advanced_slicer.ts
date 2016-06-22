@@ -159,8 +159,8 @@ module microtome.slicer {
         this.erodeDialateMaterialUniforms.dilate.value = 1;
         let dilatePixels = this.raftDilatePixels;
         // Repeatedly apply dilate if needed
-        do {
-          let pixels = dilatePixels % 8 || 8;
+        while (dilatePixels > 0) {
+          let pixels = dilatePixels % 10 || 10;
           dilatePixels = dilatePixels - pixels;
           this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
           this.erodeDialateMaterialUniforms.pixels.value = pixels;
@@ -169,7 +169,7 @@ module microtome.slicer {
           let swapTarget = this.tempTarget1;
           this.tempTarget1 = this.tempTarget2;
           this.tempTarget2 = swapTarget;
-        } while (dilatePixels > 0)
+        }
       }
       // render texture to view
       this.scene.overrideMaterial = this.copyMaterial;
@@ -198,26 +198,43 @@ module microtome.slicer {
       this.sliceMaterialUniforms.cutoff.value = sliceZ;
       this.sliceMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera, this.maskTarget, true);
+
       // Erode slice to temp2
       this.scene.hidePrintObjects;
       this.sliceBackground.visible = true;
-      this.scene.overrideMaterial = this.erodeDialateMaterial;
-      this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.maskTarget);
-      this.erodeDialateMaterialUniforms.dilate.value = 0;
-      this.erodeDialateMaterialUniforms.pixels.value = 5;
-      this.erodeDialateMaterial.needsUpdate = true;
-      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-      // Xor for shelling to final composition target
-      // temp1 ^ temp2 => finalCompositeTarget
-      this.scene.overrideMaterial = this.xorMaterial;
-      this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.maskTarget);
-      this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
-      this.xorMaterial.needsUpdate = true;
-      this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
+      if (this.shellErodePixels > 0) {
+        // Render another slice to tempTarget1
+        this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+        // Now switch materials
+        this.scene.overrideMaterial = this.erodeDialateMaterial;
+        this.erodeDialateMaterialUniforms.dilate.value = 0;
+        let erodePixels = this.shellErodePixels;
+        // Repeatedly apply erode if needed
+        while (erodePixels > 0) {
+          let pixels = erodePixels % 10 || 10;
+          erodePixels = erodePixels - pixels;
+          console.log(`ERODE PIXELS ${pixels}`);
+          this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget2);
+          this.erodeDialateMaterialUniforms.pixels.value = pixels;
+          this.erodeDialateMaterial.needsUpdate = true;
+          this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+          let swapTarget = this.tempTarget1;
+          this.tempTarget1 = this.tempTarget2;
+          this.tempTarget2 = swapTarget;
+        }
+
+        // Xor for shelling to final composition target
+        // temp1 ^ temp2 => finalCompositeTarget
+        this.scene.overrideMaterial = this.xorMaterial;
+        this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.maskTarget);
+        this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
+        this.xorMaterial.needsUpdate = true;
+        this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
+      }
       // Render final image
       this.scene.overrideMaterial = this.copyMaterial;
       // this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
-      this.copyMaterialUniforms.src = new three_d.TextureUniform(this.finalCompositeTarget);
+      this.copyMaterialUniforms.src = new three_d.TextureUniform(this.shellErodePixels > 0 ? this.finalCompositeTarget : this.maskTarget);
       this.copyMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera);
 
@@ -255,13 +272,23 @@ module microtome.slicer {
       let height = this.renderer.domElement.height;
       // If its changed...
       if (width != this.lastWidth || height != this.lastHeight) {
+        this.lastWidth = width;
+        this.lastHeight = height;
         // Recalc pixel width, and shelling parameters
         this.pixelWidthMM = this.scene.printVolume.width / width;
         this.pixelHeightMM = this.scene.printVolume.depth / height;
-        this.raftDilatePixels = Math.round(this.raftOffset / this.pixelWidthMM);
-        this.shellErodePixels = Math.round(this.shellInset / this.pixelWidthMM);
-        if (this.shellErodePixels < AdvancedSlicer._MIN_SHELL_PIXELS) {
-          this.shellErodePixels = AdvancedSlicer._MIN_SHELL_PIXELS;
+        if (this.raftOffset && this.raftOffset > 0) {
+          this.raftDilatePixels = Math.round(this.raftOffset / this.pixelWidthMM);
+        } else {
+          this.raftDilatePixels = 0;
+        }
+        if (this.shellInset && this.shellInset > 0) {
+          this.shellErodePixels = Math.round(this.shellInset / this.pixelWidthMM);
+          if (this.shellErodePixels < AdvancedSlicer._MIN_SHELL_PIXELS) {
+            this.shellErodePixels = AdvancedSlicer._MIN_SHELL_PIXELS;
+          }
+        } else {
+          this.shellErodePixels = 0;
         }
         this.reallocateTargets(width, height);
         this.prepareCameras(width, height);
@@ -271,6 +298,7 @@ module microtome.slicer {
         this.lastWidth = width;
         this.lastHeight = height;
         dirty = true;
+        window.console.log(this);
       }
       return dirty;
     }
