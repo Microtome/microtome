@@ -58,7 +58,7 @@ module microtome.three_d {
 
   export class ErodeDialateShaderUniforms {
     constructor(public dilate: IntegerUniform,
-      public pixelRadius: IntegerUniform,
+      public pixels: IntegerUniform,
       public src: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
@@ -144,6 +144,16 @@ void main(void) {
   gl_FragColor = vec4(vec3(dst),1);
 }  `;
 
+/**
+* This shader frag supports structuring elements up to 17x17
+* ( pixelRadius = 8) in size, any larger will yield strange results
+* Multiple passes can be used instead for erosion/dilation
+* of large values.
+*
+* WebGL uses GSLS 100, so proper dynamic sized loops are not supported.
+*
+* Should be revisited when WebGL 2.0 comes out with ES 3.0 support
+*/
     private static _erodeOrDialateShaderFrag = `
 // Image to be dialated/eroded
 uniform sampler2D src;
@@ -153,7 +163,7 @@ uniform int viewWidth;
 uniform int viewHeight;
 
 // Radius of sampling area
-uniform int pixelRadius;
+uniform int pixels;
 // If == 1, dilate, else erode
 uniform int dilate;
 
@@ -162,14 +172,9 @@ float s2f(const in vec4 smpl){
 }
 
 void main(void) {
-  // int pr2 = pixelRadius * pixelRadius;
-  int pr2 = 5 * 5;
+  int pr2 = pixels * pixels;
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
   float test = s2f(texture2D(src, lookup));
-  // TODO these offsets should be pre-generated and set as array uniform
-  // to shader
-  // TODO Must be constant expression, so we do need to pass
-  // in a array of explicit indices.
   for(int i = -5; i <= 5; i++ ){
     for(int j = -5; j <= 5; j++ ){
       if( i*i + j*j <= pr2 ){

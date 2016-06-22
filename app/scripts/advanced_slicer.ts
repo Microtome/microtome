@@ -9,6 +9,7 @@ module microtome.slicer {
   hollow shells, etc.
   */
   export class AdvancedSlicer {
+
     // Slice camera
     private sliceCamera: THREE.OrthographicCamera = null;
     // z-shell camera
@@ -34,29 +35,15 @@ module microtome.slicer {
     // Cache canvas height for dirty checking
     private lastHeight: number = -1;
 
-    // Width of a pixel in mm
-    private pixelWidthMM = -1;
-    // Height of a pixel in mm
-    private pixelHeightMM = -1;
-    // Shell pixels in x dir
-    private shellPixelsX = -1;
-    // Shell pixels in y dir
-    private shellPixelsY = -1;
-    // Raft outset pixels in x dir
-    private raftOutsetPixelsX = -1;
-    // Raft outset pixels in y dir
-    private raftOutsetPixelsY = -1;
-
     // In order for a shell to be fully connected, min pixel
     // count is 3 in x or y.
     private static _MIN_SHELL_PIXELS = 3;
 
-    // //Structuring element sampling offsets for shelling
-    // private shellSElemSampOffsets: number[] = [];
-    // //Structuring element sampling offsets for raft outset
-    // private raftSElemSampOffsets: number[] = [];
-
     private sliceBackground: THREE.Mesh;
+
+    private raftDilatePixels = 0;
+
+    private shellErodePixels = 0;
 
     // Materials ---------------------------------------------------------------------------------
 
@@ -67,8 +54,7 @@ module microtome.slicer {
       new three_d.IntegerUniform(0),
       new three_d.TextureUniform(null),
       new three_d.IntegerUniform(0),
-      new three_d.IntegerUniform(0)
-    );
+      new three_d.IntegerUniform(0));
 
     private copyMaterial = three_d.CoreMaterialsFactory.copyMaterial.clone();
 
@@ -104,11 +90,12 @@ module microtome.slicer {
     */
     constructor(
       private scene: microtome.three_d.PrinterScene,
-      private raftThickness: number,
-      private raftOffset: number,
-      private shellThickness: number,
-      private renderer?: THREE.WebGLRenderer,
-      private maxZ?: number) {
+      public pixelWidthMM: number,
+      public pixelHeightMM: number,
+      public raftThickness: number,
+      public raftOffset: number,
+      public shellInset: number,
+      private renderer?: THREE.WebGLRenderer) {
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
       var planeMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial.clone();
       planeMaterial.side = THREE.DoubleSide;
@@ -144,11 +131,11 @@ module microtome.slicer {
     private render(z: number) {
       try {
         let dirty = this.prepareRender();
-        // if (z <= this.raftThickness) {
-        // this.renderRaftSlice();
-        // } else {
-        this.renderSlice(z, dirty);
-        // }
+        if (z <= this.raftThickness) {
+          this.renderRaftSlice();
+        } else {
+          this.renderSlice(z, dirty);
+        }
       } finally {
         // Set everything back to normal if stuff goes south
         this.resetScene();
@@ -156,62 +143,83 @@ module microtome.slicer {
     }
 
     private renderRaftSlice() {
-      // Set model color to white,
-      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial
-      // Hide slice background if present
       this.scene.printVolume.visible = false
+      // Set model color to white,
+      this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial;
+      // Hide slice background if present, render to temp target 1;
       this.sliceBackground.visible = false;
-      // render to texture
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+
       // Hide objects, show slice background
-      this.sliceBackground.visible = true;
       this.scene.hidePrintObjects();
+      this.sliceBackground.visible = true;
       // Apply dialate filter to texture
-      this.scene.overrideMaterial = this.erodeDialateMaterial;
-      this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
-      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+      if (this.raftDilatePixels > 0) {
+        this.scene.overrideMaterial = this.erodeDialateMaterial;
+        this.erodeDialateMaterialUniforms.dilate.value = 1;
+        let dilatePixels = this.raftDilatePixels;
+        // Repeatedly apply dilate if needed
+        do {
+          let pixels = dilatePixels % 8 || 8;
+          dilatePixels = dilatePixels - pixels;
+          this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
+          this.erodeDialateMaterialUniforms.pixels.value = pixels;
+          this.erodeDialateMaterial.needsUpdate = true;
+          this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+          let swapTarget = this.tempTarget1;
+          this.tempTarget1 = this.tempTarget2;
+          this.tempTarget2 = swapTarget;
+        } while (dilatePixels > 0)
+      }
       // render texture to view
       this.scene.overrideMaterial = this.copyMaterial;
-      this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget2);
+      this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
+      this.copyMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera);
     }
 
 
     private renderSlice(z: number, dirty: boolean) {
+      // Hide print volume
+      this.scene.printVolume.visible = false
+      // Hide slice background
+      this.sliceBackground.visible = false;
       let buildVolHeight = this.scene.printVolume.boundingBox.max.z;
       let sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + buildVolHeight);
       // window.console.log(`Render Slice At mm:${z} => ${z / buildVolHeight} => ${sliceZ}`);
-      // Hide print volume
-      this.scene.printVolume.visible = false
-      // Hide slice background if present
-      this.sliceBackground.visible = false;
       // Intersection test material to temp1
       this.scene.overrideMaterial = this.intersectionTestMaterial;
       this.intersectionMaterialUniforms.cutoff.value = sliceZ;
+      this.intersectionTestMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
-      // Render slice to temp2
+      // Render slice to maskTarget
       this.scene.overrideMaterial = this.sliceMaterial;
       this.sliceMaterialUniforms.iTex = new three_d.TextureUniform(this.tempTarget1);
       this.sliceMaterialUniforms.cutoff.value = sliceZ;
-      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-      // Erode slice to temp1
+      this.sliceMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera, this.maskTarget, true);
+      // Erode slice to temp2
+      this.scene.hidePrintObjects;
+      this.sliceBackground.visible = true;
       this.scene.overrideMaterial = this.erodeDialateMaterial;
-      this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget2);
-      this.erodeDialateMaterialUniforms.dilate.value =0;
-      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
-
+      this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.maskTarget);
+      this.erodeDialateMaterialUniforms.dilate.value = 0;
+      this.erodeDialateMaterialUniforms.pixels.value = 5;
+      this.erodeDialateMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
       // Xor for shelling to final composition target
       // temp1 ^ temp2 => finalCompositeTarget
-      this.sliceBackground.visible = true;
       this.scene.overrideMaterial = this.xorMaterial;
-      this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.tempTarget1);
+      this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.maskTarget);
       this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
+      this.xorMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
       // Render final image
       this.scene.overrideMaterial = this.copyMaterial;
       // this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
       this.copyMaterialUniforms.src = new three_d.TextureUniform(this.finalCompositeTarget);
-      this.renderer.render(this.scene, this.sliceCamera, null, true);
+      this.copyMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera);
 
 
 
@@ -236,25 +244,6 @@ module microtome.slicer {
       // 3 Write combined texture, masked to final image
     }
 
-    // private recalcShellSElemSampOffsets() {
-    //   this.shellPixelsX = this.shellThickness / this.pixelWidthMM;
-    //   this.shellPixelsY = this.shellThickness / this.pixelHeightMM;
-    //   if (this.shellPixelsX < AdvancedSlicer.MIN_SHELL_PIXELS) {
-    //     window.console.warn(`Too few x shell pixels: ${this.shellPixelsX}`);
-    //     this.shellPixelsX = AdvancedSlicer.MIN_SHELL_PIXELS;
-    //   }
-    //   if (
-    //     this.shellPixelsY < AdvancedSlicer.MIN_SHELL_PIXELS) {
-    //     window.console.warn(`Too few y shell pixels: ${this.shellPixelsY}`);
-    //     this.shellPixelsX = AdvancedSlicer.MIN_SHELL_PIXELS;
-    //   }
-    //
-    // }
-    //
-    // private recalcRaftSElemSampOffsets() {
-    //
-    // }
-
     /**
     * Handle reallocating render targets if dimensions have changed and
     * return true if changes have occured
@@ -269,17 +258,16 @@ module microtome.slicer {
         // Recalc pixel width, and shelling parameters
         this.pixelWidthMM = this.scene.printVolume.width / width;
         this.pixelHeightMM = this.scene.printVolume.depth / height;
-        // TODO NOT needed for now, will need to reapproach for non square pixel densities
-        // Also currently all done in the shader.
-        // this.recalcShellSElemSampOffsets();
-        // this.recalcRaftSElemSampOffsets();
-        // Dispose old textures
-        // Allocate new textures
-        this.prepareShaders(width, height);
-        this.prepareCameras(width, height);
+        this.raftDilatePixels = Math.round(this.raftOffset / this.pixelWidthMM);
+        this.shellErodePixels = Math.round(this.shellInset / this.pixelWidthMM);
+        if (this.shellErodePixels < AdvancedSlicer._MIN_SHELL_PIXELS) {
+          this.shellErodePixels = AdvancedSlicer._MIN_SHELL_PIXELS;
+        }
         this.reallocateTargets(width, height);
-        this.sliceBackground.scale.x = width;
-        this.sliceBackground.scale.y = height;
+        this.prepareCameras(width, height);
+        this.prepareShaders(width, height);
+        this.sliceBackground.scale.x = width + 20;
+        this.sliceBackground.scale.y = height + 20;
         this.lastWidth = width;
         this.lastHeight = height;
         dirty = true;
@@ -292,7 +280,6 @@ module microtome.slicer {
     */
     private prepareCameras(newWidth: number, newHeight: number) {
       var pVolumeBBox = this.scene.printVolume.boundingBox;
-
       var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
       var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
       var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
