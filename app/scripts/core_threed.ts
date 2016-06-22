@@ -175,8 +175,8 @@ void main(void) {
   int pr2 = pixels * pixels;
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
   float test = s2f(texture2D(src, lookup));
-  for(int i = -5; i <= 5; i++ ){
-    for(int j = -5; j <= 5; j++ ){
+  for(int i = -10; i <= 10; i++ ){
+    for(int j = -10; j <= 10; j++ ){
       if( i*i + j*j <= pr2 ){
         vec2 offset = vec2(i,j)/ vec2(viewWidth,viewHeight);
         float s2 = s2f(texture2D(src, lookup + offset));
