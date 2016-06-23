@@ -104,7 +104,11 @@ void main() {
     discard;
   }
 
-  gl_FragColor = vec4(1.0,1.0,1.0,1.0/STEPS);
+  if(gl_FrontFacing){
+    gl_FragColor = vec4(1.0,0,0,1.0/STEPS);
+  }else{
+    gl_FragColor = vec4(0,1.0,0,1.0/STEPS);
+  }
 }`;
 
     private static _copyShaderFrag = `
@@ -204,14 +208,15 @@ const float STEPS = 256.0;
 
 void main(void) {
   vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float oddEven = mod(texture2D(iTex, lookup).r * 255.0, 2.0);
+  vec4 color = texture2D(iTex, lookup);
+  float shouldBeWhite = (color.g - color.r) * (STEPS - 1.0);
   float zCutoff = 1.0 - cutoff;
   if ( gl_FragCoord.z < zCutoff ){
     discard;
   }
 
   if(gl_FrontFacing){
-    if(oddEven > 0.9){
+    if(shouldBeWhite > 0.0){
       gl_FragColor = vec4(vec3(1), 1);
     } else {
       gl_FragColor = vec4(0,0,0, 1);

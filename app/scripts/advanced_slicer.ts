@@ -192,6 +192,7 @@ module microtome.slicer {
       this.intersectionMaterialUniforms.cutoff.value = sliceZ;
       this.intersectionTestMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+      // this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
       // Render slice to maskTarget
       this.scene.overrideMaterial = this.sliceMaterial;
       this.sliceMaterialUniforms.iTex = new three_d.TextureUniform(this.tempTarget1);
@@ -233,32 +234,10 @@ module microtome.slicer {
       }
       // Render final image
       this.scene.overrideMaterial = this.copyMaterial;
-      // this.copyMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
+      // this.copyMaterialUniforms.src = new three_d.TextureUniform(this.finalCompositeTarget);
       this.copyMaterialUniforms.src = new three_d.TextureUniform(this.shellErodePixels > 0 ? this.finalCompositeTarget : this.maskTarget);
       this.copyMaterial.needsUpdate = true;
       this.renderer.render(this.scene, this.sliceCamera);
-
-
-
-      // Generate depth image
-
-      // Generate slice mask image
-
-      // Generate slice image with support
-
-      // Copy slice mask
-
-      // Erode slice Mask
-
-      // Subtract eroded slice mask from slice w / support, using masking
-
-      // Generate Z-shell help target
-
-      // 1 Render top view of slice
-
-      // 2 Render bottom view of slice
-
-      // 3 Write combined texture, masked to final image
     }
 
     /**
