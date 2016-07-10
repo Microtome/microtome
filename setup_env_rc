@@ -1,0 +1,8 @@
+# Source local definitions
+if [ -f $HOME/.bashrc ]; then
+        . $HOME/.bashrc
+fi
+
+export PS1="(micro2)$PS1"
+
+PATH=$PATH:`npm bin`

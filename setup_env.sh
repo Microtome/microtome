@@ -1,4 +1,7 @@
+# Source this file to set up development enviroment so everything
+# points to local copies of node_modules to ensure clean builds
+# npm install -g is poison
+
 echo "Setting up development env"
-NEW_PS1="(micro2)$PS1"
 # Setup customized bash evn
-env PS1="$NEW_PS1" PATH=`npm bin`:$PATH bash --norc -i
+bash --rcfile setup_env_rc -i
