@@ -1,0 +1,25 @@
+{
+  "name": "microtome-model-slicer",
+  "private": true,
+  "dependencies": {
+    "iron-elements": "PolymerElements/iron-elements#~1",
+    "neon-elements": "PolymerElements/neon-elements#~1",
+    "paper-elements": "PolymerElements/paper-elements#~1",
+    "platinum-elements": "PolymerElements/platinum-elements#~1",
+    "polymer": "Polymer/polymer#~1",
+    "polymer-ts": "0.1.26",
+    "paper-styles": "PolymerElements/paper-styles#~1",
+    "font-roboto": "PolymerElements/font-roboto-local#~1",
+    "three.js": "threejs#r75",
+    "font-awesome-polymer-icons": "vashchenkov/font-awesome-polymer-icons#~1",
+    "iron-list": "~1",
+    "neon-animation": "~1"
+  },
+  "devDependencies": {
+    "web-component-tester": "*"
+  },
+  "ignore": [],
+  "resolutions": {
+    "paper-styles": "^1.1.4"
+  }
+}
