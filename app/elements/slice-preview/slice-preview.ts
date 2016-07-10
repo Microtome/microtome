@@ -16,7 +16,7 @@ class SlicePreview extends polymer.Base {
 
   // private _slicer: microtome.slicer.Slicer = new microtome.slicer.Slicer(this.scene, this._renderer);
   private _slicer: microtome.slicer.AdvancedSlicer = new microtome.slicer.AdvancedSlicer(
-    this.scene, 0.1, 0.1, 2, 1.5, 1, this._renderer);
+    this.scene, 0.1, 0.1, 0.5, 1, 0, this._renderer);
 
   @property({ notify: false, readOnly: false })
   public scene: microtome.three_d.PrinterScene;
