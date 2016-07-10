@@ -102,7 +102,7 @@ class PrinterVolumeView extends polymer.Base {
 
   @observe("pickedMesh")
   pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
-    if (newMesh) {
+    if (newMesh && newMesh.rotation) {
       var rotation = newMesh.rotation;
       this._rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
       this._rotY = (((rotation.y / (2 * Math.PI)) * 360) % 360).toFixed(0);
