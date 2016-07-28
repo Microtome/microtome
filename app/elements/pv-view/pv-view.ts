@@ -2,31 +2,31 @@
 @component("pv-view")
 class PrinterVolumeView extends polymer.Base {
 
-  private _renderer: THREE.Renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, clearColor: 0x000000, clearAlpha: 0 });
+  private renderer: THREE.Renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, clearColor: 0x000000, clearAlpha: 0 });
 
-  private _raycaster: THREE.Raycaster = new THREE.Raycaster();
+  private raycaster: THREE.Raycaster = new THREE.Raycaster();
 
-  private _scatterLight: THREE.AmbientLight = new THREE.AmbientLight();
+  private scatterLight: THREE.AmbientLight = new THREE.AmbientLight();
 
-  private _skyLight: THREE.DirectionalLight = new THREE.DirectionalLight();
+  private skyLight: THREE.DirectionalLight = new THREE.DirectionalLight();
 
-  private _groundLight: THREE.DirectionalLight = new THREE.DirectionalLight();
+  private groundLight: THREE.DirectionalLight = new THREE.DirectionalLight();
 
-  private _canvasElement: HTMLCanvasElement = this._renderer.domElement;
+  private canvasElement: HTMLCanvasElement = this.renderer.domElement;
 
-  private _pvCamera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(37, 1.0, 1.0, 2000.0);
+  private pvCamera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(37, 1.0, 1.0, 2000.0);
 
-  private static _ORIGIN = new THREE.Vector3(0, 0, 0);
+  private static ORIGIN = new THREE.Vector3(0, 0, 0);
 
-  private _pvObjectGroup = new THREE.Group();
+  private pvObjectGroup = new THREE.Group();
 
-  private _canvasHome: HTMLDivElement;
+  private canvasHome: HTMLDivElement;
 
-  private _reqAnimFrameHandle: number;
+  private reqAnimFrameHandle: number;
 
-  private _printerVolume: microtome.three_d.PrintVolume = new microtome.three_d.PrintVolume(120, 120, 120);
+  private printerVolume: microtome.three_d.PrintVolume = new microtome.three_d.PrintVolume(120, 120, 120);
 
-  private _camNav: microtome.three_d.CameraNav;
+  private camNav: microtome.three_d.CameraNav;
 
   //--------------------------------------------------------
   // Properties
@@ -48,25 +48,25 @@ class PrinterVolumeView extends polymer.Base {
   public groundColor: string = "#775533"
 
   @property({ notify: true, readOnly: false, type: Object })
-  public pickedMesh: THREE.Mesh = null;
+  public pickedMesh: THREE.Mesh;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _rotX: string;
+  public rotX: string;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _rotY: string;
+  public rotY: string;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _rotZ: string;
+  public rotZ: string;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _sX: string;
+  public sX: string;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _sY: string;
+  public sY: string;
 
   @property({ notify: true, readOnly: false, type: String })
-  public _sZ: string;
+  public sZ: string;
 
 
   //-----------------------------------------------------------
@@ -76,48 +76,49 @@ class PrinterVolumeView extends polymer.Base {
   @observe("disabled")
   disabledChanged(newValue: boolean, oldValue: boolean) {
     if (!newValue) {
-      this.async(this._startRendering.bind(this), 100)
+      this.async(this.startRendering.bind(this), 100)
     } else {
-      this._stopRendering();
+      this.stopRendering();
     }
-    if (this._camNav) {
-      this._camNav.enabled = !newValue;
+    if (this.camNav) {
+      this.camNav.enabled = !newValue;
     }
   }
 
   @observe("scatterColor")
   scatterColorChanged(newValue: string, oldValue: string) {
-    this._scatterLight.color.setStyle(newValue);
+    this.scatterLight.color.setStyle(newValue);
   }
 
   @observe("skyColor")
   skyColorChanged(newValue: string, oldValue: string) {
-    this._skyLight.color.setStyle(newValue);
+    this.skyLight.color.setStyle(newValue);
   }
 
   @observe("groundColor")
   groundColorChanged(newValue: string, oldValue: string) {
-    this._groundLight.color.setStyle(newValue);
+    this.groundLight.color.setStyle(newValue);
   }
 
   @observe("pickedMesh")
   pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
-    if (newMesh && newMesh.rotation) {
+    console.log(arguments);
+    if (newMesh && newMesh.rotation && newMesh.scale) {
       var rotation = newMesh.rotation;
-      this._rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
-      this._rotY = (((rotation.y / (2 * Math.PI)) * 360) % 360).toFixed(0);
-      this._rotZ = (((rotation.z / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      this.rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      this.rotY = (((rotation.y / (2 * Math.PI)) * 360) % 360).toFixed(0);
+      this.rotZ = (((rotation.z / (2 * Math.PI)) * 360) % 360).toFixed(0);
       var scale = newMesh.scale;
-      this._sX = scale.x.toFixed(2);
-      this._sY = scale.y.toFixed(2);
-      this._sZ = scale.z.toFixed(2);
+      this.sX = scale.x.toFixed(2);
+      this.sY = scale.y.toFixed(2);
+      this.sZ = scale.z.toFixed(2);
     } else {
-      this._rotX = this._rotY = this._rotZ = null;
-      this._sX = this._sY = this._sZ = null;
+      this.rotX = this.rotY = this.rotZ = null;
+      this.sX = this.sY = this.sZ = null;
     }
   }
 
-  @observe("_rotX,_rotY,_rotZ")
+  @observe("rotX,rotY,rotZ")
   rotationChanged(rotX: string, rotY: string, rotZ: string) {
     if (!this.pickedMesh) return;
     if (rotX) {
@@ -131,7 +132,7 @@ class PrinterVolumeView extends polymer.Base {
     }
   }
 
-  @observe("_sX,_sY,_sZ")
+  @observe("sX,sY,sZ")
   scaleChanged(sX: string, sY: string, sZ: string) {
     if (!this.pickedMesh) return;
     if (sX) {
@@ -150,104 +151,117 @@ class PrinterVolumeView extends polymer.Base {
   //----------------------------------------------------------
 
   public attached() {
-    this._canvasHome = this.$["pv-canvas-home"] as HTMLDivElement;
-    this._canvasHome.appendChild(this._canvasElement);
-    this._pvCamera.up.set(0, 0, 1);
-    this._pvCamera.position.set(0, 350, 250);
-    this._configureLighting();
-    this._pvCamera.lookAt(this._printerVolume.position);
-    this._camNav = new microtome.three_d.CameraNav(this._pvCamera, this._canvasElement, true)
-    this._camNav.target = this._printerVolume;
-    this._camNav.frameTarget();
-    this._startRendering();
+    this.canvasHome = this.$["pv-canvas-home"] as HTMLDivElement;
+    this.canvasHome.appendChild(this.canvasElement);
+    this.pvCamera.up.set(0, 0, 1);
+    this.pvCamera.position.set(0, 350, 250);
+    this.configureLighting();
+    this.pvCamera.lookAt(this.printerVolume.position);
+    this.camNav = new microtome.three_d.CameraNav(this.pvCamera, this.canvasElement, true)
+    this.camNav.target = this.printerVolume;
+    this.camNav.frameTarget();
+    this.startRendering();
+    console.log(this);
   }
 
   public detached() {
-    this._stopRendering();
+    this.stopRendering();
   }
 
-  private _configureLighting() {
-    this._scatterLight.color.setStyle(this.scatterColor);
-    this.scene.add(this._scatterLight);
-    this._skyLight.color.setStyle(this.skyColor);
-    this._skyLight.intensity = 0.65;
-    this._skyLight.position.set(0, 0, 1000);
-    this.scene.add(this._skyLight);
-    this._groundLight.color.setStyle(this.groundColor);
-    this._groundLight.intensity = 0.45;
-    this._groundLight.position.set(0, 0, -1000);
-    this.scene.add(this._groundLight);
+  private configureLighting() {
+    this.scatterLight.color.setStyle(this.scatterColor);
+    this.scene.add(this.scatterLight);
+    this.skyLight.color.setStyle(this.skyColor);
+    this.skyLight.intensity = 0.65;
+    this.skyLight.position.set(0, 0, 1000);
+    this.scene.add(this.skyLight);
+    this.groundLight.color.setStyle(this.groundColor);
+    this.groundLight.intensity = 0.45;
+    this.groundLight.position.set(0, 0, -1000);
+    this.scene.add(this.groundLight);
   }
 
   //---------------------------------------------------------
   // Rendering lifecycle hooks
   //---------------------------------------------------------
 
-  private _stopRendering() {
-    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle)
+  private stopRendering() {
+    if (this.reqAnimFrameHandle) window.cancelAnimationFrame(this.reqAnimFrameHandle)
   }
 
-  private _startRendering() {
-    if (this._reqAnimFrameHandle) window.cancelAnimationFrame(this._reqAnimFrameHandle);
-    this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
+  private startRendering() {
+    if (this.reqAnimFrameHandle) window.cancelAnimationFrame(this.reqAnimFrameHandle);
+    this.reqAnimFrameHandle = window.requestAnimationFrame(this.render.bind(this));
   }
 
-  private _render(timestamp: number) {
-    var canvas = this._canvasElement;
-    var div = this._canvasHome
+  private render(timestamp: number) {
+    var canvas = this.canvasElement;
+    var div = this.canvasHome
     if (canvas.height != div.clientHeight || canvas.width != div.clientWidth) {
       canvas.width = div.clientWidth;
       canvas.height = div.clientHeight;
-      this._pvCamera.aspect = div.clientWidth / div.clientHeight;
-      this._pvCamera.updateProjectionMatrix();
-      this._renderer.setSize(canvas.width, canvas.height);
+      this.pvCamera.aspect = div.clientWidth / div.clientHeight;
+      this.pvCamera.updateProjectionMatrix();
+      this.renderer.setSize(canvas.width, canvas.height);
     }
-    this._renderer.render(this.scene, this._pvCamera);
-    this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
+    this.renderer.render(this.scene, this.pvCamera);
+    this.reqAnimFrameHandle = window.requestAnimationFrame(this.render.bind(this));
   }
 
   //---------------------------------------------------------
   // Picking support
   //---------------------------------------------------------
 
-  private _mouseXY = new THREE.Vector2();
+  private mouseXY = new THREE.Vector2();
 
-  private _doPick = false;
+  private doPick = false;
 
   public preparePick(e: MouseEvent) {
     if (e.buttons === 1) {
-      this._doPick = true;
+      this.doPick = true;
     }
   }
 
   public cancelPick(e: MouseEvent) {
-    this._doPick = false;
+    this.doPick = false;
   }
 
   public tryPick(e: MouseEvent) {
-    if (this._doPick) {
-      var bounds = this._canvasHome.getBoundingClientRect();
+    if (this.doPick) {
+      var bounds = this.canvasHome.getBoundingClientRect();
       var x = (e.clientX / bounds.width) * 2 - 1;
       var y = - (e.clientY / bounds.height) * 2 + 1;
       // update the picking ray with the camera and mouse position
-      this._mouseXY.x = x;
-      this._mouseXY.y = y;
-      this._raycaster.setFromCamera(this._mouseXY, this._pvCamera);
+      this.mouseXY.x = x;
+      this.mouseXY.y = y;
+      this.raycaster.setFromCamera(this.mouseXY, this.pvCamera);
       // calculate objects intersecting the picking ray
-      var intersects = this._raycaster.intersectObjects(this.scene.printObjects);
-      if (this.pickedMesh != null) {
-        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
-        this.pickedMesh = null;
-      }
+      var intersects = this.raycaster.intersectObjects(this.scene.printObjects);
       if (intersects.length > 0) {
-        this.pickedMesh = intersects[0].object as THREE.Mesh;
-        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
+        let mesh = intersects[0].object as THREE.Mesh;
+        this.pickMesh(mesh);
+      } else {
+        this.unpickMesh();
       }
     }
   }
 
-  public formatVolume(vol:number){
-    return (vol/1000).toFixed(1);
+  private pickMesh(mesh: THREE.Mesh) {
+    if (this.pickedMesh) {
+      this.unpickMesh();
+    }
+    mesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
+    this.pickedMesh = mesh;
+  }
+
+  private unpickMesh() {
+    if (!this.pickedMesh) return;
+    this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
+    this.pickedMesh = null;
+  }
+
+  public formatVolume(vol: number) {
+    return (vol / 1000).toFixed(1);
   }
 }
 
