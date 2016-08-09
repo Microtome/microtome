@@ -1,0 +1,23 @@
+sudo: false
+git:
+  depth: 1
+language: node_js
+node_js:
+- "6.1"
+os:
+- linux
+before_cache:
+#  - rm -f $HOME/.gradle/caches/modules-2/modules-2.lock
+cache:
+  directories:
+#    - $HOME/.gradle/caches/
+install:
+  - nvm install stable
+  - nvm alias default stable
+  - export PATH=`npm bin`:$PATH
+  - npm install
+  - npm install typings
+  - typings install
+  - bower install
+script:
+  - gulp default
