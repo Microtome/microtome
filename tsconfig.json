@@ -13,13 +13,13 @@
   "compileOnSave": false,
   "buildOnSave": false,
   "filesGlob": [
-    "typings/browser.d.ts",
+    "typings/index.d.ts",
     "local_typings/**/*.d.ts",
     "bower_components/polymer-ts/**/*.d.ts",
     "app/**/*.ts"
   ],
   "files": [
-    "typings/browser.d.ts",
+    "typings/index.d.ts",
     "local_typings/chrome_serial.d.ts",
     "local_typings/threejs-extended.d.ts",
     "bower_components/polymer-ts/polymer-ts.d.ts",
@@ -43,7 +43,6 @@
     "app/scripts/units.ts"
   ],
   "exclude": [
-    "typings/main/**",
     "node_modules/**"
   ],
   "atom": {

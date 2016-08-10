@@ -22,7 +22,6 @@ module microtome.slicer {
     // 3D
     private _sliceMaterialUniforms: three_d.SliceShaderUniforms = new three_d.SliceShaderUniforms(
       new three_d.FloatUniform(0),
-      new three_d.FloatUniform(0),
       new three_d.TextureUniform(null),
       new three_d.IntegerUniform(0),
       new three_d.IntegerUniform(0)
@@ -91,7 +90,7 @@ module microtome.slicer {
       this.renderer.setClearColor(new THREE.Color(0x000000), 1.0);
 
       this.scene.overrideMaterial = this._slicerMaterial;
-      this._sliceMaterialUniforms['dTex'].value = this._depthTexRenderTarget;
+      this._sliceMaterialUniforms['iTex'].value = this._depthTexRenderTarget;
       this._sliceMaterialUniforms['viewWidth'].value = width;
       this._sliceMaterialUniforms['viewHeight'].value = height;
       this.renderer.render(this.scene, this._oCamera);
@@ -127,7 +126,7 @@ module microtome.slicer {
       // we draw in the colors and textures we don't get ambiguity
       this._oCamera.far = FAR_Z_PADDING + this.targetZ + CAMERA_NEAR;
       this._oCamera.lookAt(new THREE.Vector3(0, 0, 0));
-      this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
+      // this._sliceMaterialUniforms['epsilon'].value = this.sliceEpsilon;
       var pVolumeBBox = this.scene.printVolume.boundingBox;
       this._sliceBackground.scale.set(this.scene.printVolume.width, this.scene.printVolume.depth, 1);
       var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;

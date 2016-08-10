@@ -1,5 +1,5 @@
 // Required due to typescript bug 6595
-/// <reference path="../typings/browser/ambient/three/index.d.ts" />
+/// <reference path="../typings/index.d.ts" />
 
 declare module THREE {
   export class STLLoader extends THREE.Loader {
