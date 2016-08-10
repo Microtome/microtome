@@ -1,7 +1,7 @@
 {
   "name": "microtome-model-slicer",
   "version": false,
-  "ambientDependencies": {
+  "globalDependencies": {
     "Q": "github:DefinitelyTyped/DefinitelyTyped/q/Q.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
     "chrome-app": "github:DefinitelyTyped/DefinitelyTyped/chrome/chrome-app.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
     "filesystem": "github:DefinitelyTyped/DefinitelyTyped/filesystem/filesystem.d.ts#7a3ca1f0b8a0960af9fc1838f3234cc9d6ce0645",
