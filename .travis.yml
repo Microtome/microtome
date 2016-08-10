@@ -3,7 +3,7 @@ git:
   depth: 1
 language: node_js
 node_js:
-- "6.1"
+- "5.12.0"
 os:
 - linux
 before_cache:
@@ -12,8 +12,8 @@ cache:
   directories:
 #    - $HOME/.gradle/caches/
 install:
-  - nvm install 5.12.0
-  - nvm alias default 5.12.0
+  # - nvm install 5.12.0
+  # - nvm alias default 5.12.0
   - export PATH=`npm bin`:$PATH
   - npm install
   - npm install typings
