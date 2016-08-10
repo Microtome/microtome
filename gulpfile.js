@@ -197,7 +197,7 @@ gulp.task('html', function() {
 });
 
 // Build ts libs
-var tsProject = ts.createProject('app/tsconfig.json');
+var tsProject = ts.createProject('tsconfig.json');
 
 gulp.task('typescript', function() {
   return tsProject.src()
