@@ -11,6 +11,10 @@ module microtome.slicer {
   const POS_Z = new THREE.Vector3(0, 0, 1);
   const NEG_Z = new THREE.Vector3(0, 0, -1);
 
+  export const FAR_Z_PADDING: number = 1.0;
+  export const CAMERA_NEAR: number = 1.0;
+  export const SLICER_BACKGROUND_Z = -0.1;
+
   /**
   Advanced slicer supporting shelling, support pattern generation,
   hollow shells, etc.
@@ -195,7 +199,7 @@ module microtome.slicer {
     private renderSlice(z: number) {
       this.renderSliceCommon(z);
       if (this.shellErodePixels > 0) {
-        this.renderShelledSlice();
+        this.renderShelledSlice2(z);
         this.renderSliceFinal(this.finalCompositeTarget);
       } else {
         this.renderSliceFinal(this.maskTarget);
@@ -203,47 +207,55 @@ module microtome.slicer {
     }
 
     private renderShelledSlice() {
-      /*
-              // Do Z direction shell step...
-              // Look Down
-              this.sliceMaterialUniforms.cutoff.value = 2.0;
-              this.zShellCamera.position.z = this.scene.printVolume.boundingBox.max.z;
-              this.zShellCamera.near = z;
-              this.zShellCamera.far = z + this.shellInset;
-              this.zShellCamera.lookAt(NEG_Z);
-              this.zShellCamera.up = POS_Y;
-              this.zShellCamera.updateProjectionMatrix();
-              this.renderer.render(this.scene, this.zShellCamera, this.tempTarget2, true);
-              // Look Up
-              this.zShellCamera.position.z = 0;
-              this.zShellCamera.near = z;
-              this.zShellCamera.far = z + this.shellInset;
-              this.zShellCamera.lookAt(POS_Z);
-              this.zShellCamera.up = NEG_Y;
-              this.zShellCamera.updateProjectionMatrix();
-              this.renderer.render(this.scene, this.zShellCamera, this.tempTarget2, true);
-              // Use OR material to combine
-              this.sliceBackground.visible = true;
-              this.scene.overrideMaterial = this.orMaterial;
-              this.orMaterialUniforms.src1 = new three_d.TextureUniform(this.tempTarget1);
-              this.orMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
-              this.orMaterial.needsUpdate = true;
-              this.renderer.render(this.scene, this.sliceCamera, this.zshellTarget, true);
-      */
       this.erodeOrDilate(this.shellErodePixels, false);
       // X-Y shelling to temp target 1
       this.scene.overrideMaterial = this.xorMaterial;
       this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.maskTarget);
       this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget1);
       this.xorMaterial.needsUpdate = true;
-      // this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
       this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
+    }
+
+    private renderShelledSlice2(z: number) {
+      // Do Z direction shell step...
+      // Look Down
+      this.sliceMaterialUniforms.cutoff.value = 2.0;
+      this.zShellCamera.position.z = this.scene.printVolume.boundingBox.max.z;
+      this.zShellCamera.near = z;
+      this.zShellCamera.far = z + this.shellInset;
+      this.zShellCamera.lookAt(NEG_Z);
+      this.zShellCamera.up = POS_Y;
+      this.zShellCamera.updateProjectionMatrix();
+      this.renderer.render(this.scene, this.zShellCamera, this.tempTarget1, true);
+      // Look Up
+      this.zShellCamera.position.z = 0;
+      this.zShellCamera.near = z;
+      this.zShellCamera.far = z + this.shellInset;
+      this.zShellCamera.lookAt(POS_Z);
+      this.zShellCamera.up = NEG_Y;
+      this.zShellCamera.updateProjectionMatrix();
+      this.renderer.render(this.scene, this.zShellCamera, this.tempTarget2, true);
+      // Use OR material to combine
+      this.sliceBackground.visible = true;
+      this.scene.overrideMaterial = this.orMaterial;
+      this.orMaterialUniforms.src1 = new three_d.TextureUniform(this.tempTarget1);
+      this.orMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget2);
+      this.orMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera, this.zshellTarget, true);
+
+      this.erodeOrDilate(this.shellErodePixels, false);
+      // X-Y shelling to temp target 1
+      this.scene.overrideMaterial = this.xorMaterial;
+      this.xorMaterialUniforms.src1 = new three_d.TextureUniform(this.maskTarget);
+      this.xorMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget1);
+      this.xorMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
       // OR X-Y with Z shell
-      // this.scene.overrideMaterial = this.orMaterial;
-      // this.orMaterialUniforms.src1 = new three_d.TextureUniform(this.zshellTarget);
-      // this.orMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget1);
-      // this.orMaterial.needsUpdate = true;
-      // this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
+      this.scene.overrideMaterial = this.orMaterial;
+      this.orMaterialUniforms.src1 = new three_d.TextureUniform(this.zshellTarget);
+      this.orMaterialUniforms.src2 = new three_d.TextureUniform(this.tempTarget1);
+      this.orMaterial.needsUpdate = true;
+      this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
     }
 
     private renderCombinedSlice() {
