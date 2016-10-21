@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "target": "es5",
+    "outFile": "slicer-lib.js",
+    "sourceMap": true,
+    "newLine": "LF",
+    "module": "system"
+  },
+  "compileOnSave": false,
+  "buildOnSave": false,
+  "include": [
+    "typings/index.d.ts",
+    "app/scripts/**/*.ts"
+  ]
+}
