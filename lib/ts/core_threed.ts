@@ -1,6 +1,6 @@
 module microtome.three_d {
 
-  interface UniformValue<T> {
+  export interface UniformValue<T> {
     type: string,
     value: T,
   }
@@ -335,7 +335,7 @@ void main(void) {
   }
 
 
-  type CameraTarget = THREE.Vector3 | THREE.Mesh | PrintVolume;
+  export type CameraTarget = THREE.Vector3 | THREE.Mesh | PrintVolume;
 
   export class CameraNav {
     _sceneDomElement: HTMLElement;

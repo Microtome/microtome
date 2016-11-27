@@ -5,10 +5,11 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "target": "es5",
-    "outFile": "./../../dist/lib/js/slicer-lib.js",
+    "outFile": "./../../build/lib/js/slicer-lib.js",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "amd"
+    "module": "amd",
+    "declaration": true
   },
   "compileOnSave": false,
   "buildOnSave": false,

@@ -1,15 +1,15 @@
 module microtome.slicer {
 
   // TODO Move to threed?
-  const Z_DOWN = new THREE.Vector3(0, 0, -1000000);
-  const Z_UP = new THREE.Vector3(0, 0, 1000000);
-  const ORIGIN = new THREE.Vector3(0, 0, 0);
-  const POS_X = new THREE.Vector3(1, 0, 0);
-  const NEG_X = new THREE.Vector3(-1, 0, 0);
-  const POS_Y = new THREE.Vector3(0, 1, 0);
-  const NEG_Y = new THREE.Vector3(0, -1, 0);
-  const POS_Z = new THREE.Vector3(0, 0, 1);
-  const NEG_Z = new THREE.Vector3(0, 0, -1);
+  export const Z_DOWN = new THREE.Vector3(0, 0, -1000000);
+  export const Z_UP = new THREE.Vector3(0, 0, 1000000);
+  export const ORIGIN = new THREE.Vector3(0, 0, 0);
+  export const POS_X = new THREE.Vector3(1, 0, 0);
+  export const NEG_X = new THREE.Vector3(-1, 0, 0);
+  export const POS_Y = new THREE.Vector3(0, 1, 0);
+  export const NEG_Y = new THREE.Vector3(0, -1, 0);
+  export const POS_Z = new THREE.Vector3(0, 0, 1);
+  export const NEG_Z = new THREE.Vector3(0, 0, -1);
 
   export const FAR_Z_PADDING: number = 1.0;
   export const CAMERA_NEAR: number = 1.0;
