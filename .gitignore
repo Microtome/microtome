@@ -1,5 +1,6 @@
 node_modules
 dist
+build
 bower_components
 .tmp
 app/scripts/gen
