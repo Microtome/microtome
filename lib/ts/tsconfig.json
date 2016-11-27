@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "target": "es5",
+    "outFile": "./../../dist/lib/js/slicer-lib.js",
+    "sourceMap": true,
+    "newLine": "LF",
+    "module": "amd"
+  },
+  "compileOnSave": false,
+  "buildOnSave": false,
+  "filesGlob": [
+    "../../typings/index.d.ts",
+    "./**/*.ts"
+  ],
+  "atom": {
+    "rewriteTsconfig": true
+  },
+  "files": [
+    "../../typings/index.d.ts",
+    "./actions.ts",
+    "./advanced_slicer.ts",
+    "./background.ts",
+    "./core_threed.ts",
+    "./printer_config.ts",
+    "./projector.ts",
+    "./units.ts"
+  ]
+}
