@@ -5,7 +5,6 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "target": "es5",
-    "outDir": ".",
     "sourceMap": true,
     "newLine": "LF",
     "module": "umd"
@@ -16,7 +15,8 @@
     "../typings/index.d.ts",
     "../local_typings/**/*.d.ts",
     "../bower_components/polymer-ts/**/*.d.ts",
-    "./**/*.ts"
+    "./**/*.ts",
+    "../build/lib/js/*.d.ts"
   ],
   "files": [
     "../typings/index.d.ts",
@@ -29,7 +29,8 @@
     "./elements/microtome-app/microtome-app.ts",
     "./elements/pv-view/pv-view.ts",
     "./elements/shared-animatable/shared-animatable.ts",
-    "./elements/slice-preview/slice-preview.ts"
+    "./elements/slice-preview/slice-preview.ts",
+    "../build/lib/js/slicer-lib.d.ts"
   ],
   "exclude": [
     "node_modules/**"
