@@ -27,13 +27,7 @@ class LayerHeight extends polymer.Base {
   @property({ notify: true, readOnly: false, type: "number" })
   public steps: number;
 
-  private threadUnitGroup: PaperRadioGroup;
-
-  private threadMeasure: PaperInput;
-
   attached() {
-    this.threadUnitGroup = this.$["thread-unit"] as PaperRadioGroup
-    this.threadMeasure = this.$["thread-measure"] as PaperInput
     // TODO Move these to default value functions on property
     this.threadLabel = "tpi"
     this.manualOverride = false;
