@@ -1,6 +1,6 @@
 
 @component("shared-animatable")
-@behavior(Polymer.NeonSharedElementAnimatableBehavior)
+@behavior((<any>Polymer)["NeonSharedElementAnimatableBehavior"])
 class SharedAnimatable extends polymer.Base {
 
   @property({type:Object})
