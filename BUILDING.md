@@ -23,3 +23,4 @@ see package.json for commands
 * `npm run build` to build app and lib and copy to /build
 * `npm run serve:dev` to serve from build/
 * `npm dev:hot` which will build and then serve from build/, recompiling as needed as files are edited or changed.
+* dist target is not finished yet
