@@ -17,6 +17,7 @@ install:
   # - nvm alias default 5.12.0
   - export PATH=`npm bin`:$PATH
   - npm install typings
+  - npm install bower
   - typings install
   - bower install
 script:
