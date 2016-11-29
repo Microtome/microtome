@@ -1,6 +1,8 @@
 {
   "private": true,
   "devDependencies": {
+    "@types/core-js": "^0.9.34",
+    "@types/jszip": "^0.0.31",
     "bower": "^1.7.9",
     "bower-locker": "^1.0.3",
     "browser-sync": "^2.7.7",
@@ -11,8 +13,8 @@
     "run-sequence": "^1.0.2",
     "typescript": "^2.0.3",
     "vulcanize": ">= 1.4.2",
-    "wrappy": "^1.0.1",
-    "watch": "^1.0.1"
+    "watch": "^1.0.1",
+    "wrappy": "^1.0.1"
   },
   "scripts": {
     "clean": "rm -rf ./dist && rm -rf ./build",
@@ -29,5 +31,7 @@
     "node": ">=5.0.0"
   },
   "dependencies": {
+    "core-js": "^2.4.1",
+    "jszip": "^3.1.3"
   }
 }

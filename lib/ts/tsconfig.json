@@ -15,19 +15,22 @@
   "buildOnSave": false,
   "filesGlob": [
     "../../typings/index.d.ts",
-    "./**/*.ts"
+    "./**/*.ts",
+    "../../node_modules/@types/jszip/*.d.ts",
+    "../../node_modules/@types/core-js/*.d.ts"
   ],
   "atom": {
     "rewriteTsconfig": true
   },
   "files": [
     "../../typings/index.d.ts",
-    "./actions.ts",
     "./advanced_slicer.ts",
-    "./background.ts",
     "./core_threed.ts",
     "./printer_config.ts",
     "./projector.ts",
-    "./units.ts"
+    "./toZipSlicer.ts",
+    "./units.ts",
+    "../../node_modules/@types/jszip/index.d.ts",
+    "../../node_modules/@types/core-js/index.d.ts"
   ]
 }
