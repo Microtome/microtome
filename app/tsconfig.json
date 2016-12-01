@@ -16,7 +16,8 @@
     "../local_typings/**/*.d.ts",
     "../bower_components/polymer-ts/**/*.d.ts",
     "./**/*.ts",
-    "../build/lib/js/*.d.ts"
+    "../build/lib/js/*.d.ts",
+    "../node_modules/@types/file-saver/**/*.d.ts"
   ],
   "files": [
     "../typings/index.d.ts",
@@ -30,12 +31,27 @@
     "./elements/pv-view/pv-view.ts",
     "./elements/shared-animatable/shared-animatable.ts",
     "./elements/slice-preview/slice-preview.ts",
-    "../build/lib/js/slicer-lib.d.ts"
+    "../build/lib/js/slicer-lib.d.ts",
+    "../node_modules/@types/file-saver/index.d.ts"
   ],
   "exclude": [
     "node_modules/**"
   ],
   "atom": {
     "rewriteTsconfig": true
+  },
+  "formatCodeOptions": {
+    "indentSize": 2,
+    "tabSize": 2,
+    "newLineCharacter": "\n",
+    "convertTabsToSpaces": true,
+    "insertSpaceAfterCommaDelimiter": true,
+    "insertSpaceAfterSemicolonInForStatements": true,
+    "insertSpaceBeforeAndAfterBinaryOperators": true,
+    "insertSpaceAfterKeywordsInControlFlowStatements": true,
+    "insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+    "insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis": false,
+    "placeOpenBraceOnNewLineForFunctions": false,
+    "placeOpenBraceOnNewLineForControlBlocks": false
   }
 }

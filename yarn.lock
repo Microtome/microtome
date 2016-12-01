@@ -10,6 +10,10 @@
   version "0.9.34"
   resolved "https://registry.yarnpkg.com/@types/core-js/-/core-js-0.9.34.tgz#72c521d8e59fdaa8b65f76db71fa53c82c7c21c5"
 
+"@types/file-saver@^0.0.0":
+  version "0.0.0"
+  resolved "https://registry.yarnpkg.com/@types/file-saver/-/file-saver-0.0.0.tgz#1d954502619862d4354444d43385fb8a8fa4478a"
+
 "@types/jszip@^0.0.31":
   version "0.0.31"
   resolved "https://registry.yarnpkg.com/@types/jszip/-/jszip-0.0.31.tgz#841abc138e53f6e66653714d467935b6dbdf9819"
@@ -805,6 +809,10 @@ fancy-log@^1.1.0:
 fast-levenshtein@~2.0.4:
   version "2.0.5"
   resolved "https://registry.yarnpkg.com/fast-levenshtein/-/fast-levenshtein-2.0.5.tgz#bd33145744519ab1c36c3ee9f31f08e9079b67f2"
+
+file-saverjs@^1.3.5:
+  version "1.3.5"
+  resolved "https://registry.yarnpkg.com/file-saverjs/-/file-saverjs-1.3.5.tgz#9d1345d2335fbe6a98a58e4247ed5cab4c50c5fd"
 
 filename-regex@^2.0.0:
   version "2.0.0"

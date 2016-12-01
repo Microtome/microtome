@@ -17,7 +17,8 @@
     "../../typings/index.d.ts",
     "./**/*.ts",
     "../../node_modules/@types/jszip/*.d.ts",
-    "../../node_modules/@types/core-js/*.d.ts"
+    "../../node_modules/@types/core-js/*.d.ts",
+    "../../node_modules/@types/file-saver/*.d.ts"
   ],
   "atom": {
     "rewriteTsconfig": true
@@ -28,9 +29,24 @@
     "./core_threed.ts",
     "./printer_config.ts",
     "./projector.ts",
-    "./toZipSlicer.ts",
+    "./slicer_job.ts",
     "./units.ts",
     "../../node_modules/@types/jszip/index.d.ts",
-    "../../node_modules/@types/core-js/index.d.ts"
-  ]
+    "../../node_modules/@types/core-js/index.d.ts",
+    "../../node_modules/@types/file-saver/index.d.ts"
+  ],
+  "formatCodeOptions": {
+    "indentSize": 2,
+    "tabSize": 2,
+    "newLineCharacter": "\n",
+    "convertTabsToSpaces": true,
+    "insertSpaceAfterCommaDelimiter": true,
+    "insertSpaceAfterSemicolonInForStatements": true,
+    "insertSpaceBeforeAndAfterBinaryOperators": true,
+    "insertSpaceAfterKeywordsInControlFlowStatements": true,
+    "insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+    "insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis": false,
+    "placeOpenBraceOnNewLineForFunctions": false,
+    "placeOpenBraceOnNewLineForControlBlocks": false
+  }
 }
