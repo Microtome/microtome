@@ -56,8 +56,8 @@ class MicrotomeApp extends polymer.Base {
     description: 'Homebrew DLP printer built from servo city parts and using micro projector',
     lastModified: null,
     volume: {
-      width: 36,
-      depth: 24,
+      width: 50,
+      depth: 40,
       height: 50
     },
     zStage: {
