@@ -59,7 +59,7 @@ module microtome.slicer_job {
       this.resolve = resolve;
       this.reject = reject;
     })
-    private readonly SLICE_TIME = 2;
+    private readonly SLICE_TIME = 20;
 
     constructor(private scene: microtome.three_d.PrinterScene,
       private cfg: microtome.printer.PrinterConfig,
@@ -74,6 +74,8 @@ module microtome.slicer_job {
       this.renderer.setSize(cfg.projector.xRes, cfg.projector.xRes);
       this.canvasElement.style.width = `${cfg.projector.xRes}px`;
       this.canvasElement.style.height = `${cfg.projector.xRes}px`;
+      this.canvasElement.width=cfg.projector.xRes;
+      this.canvasElement.height=cfg.projector.yRes;
       this.slicer = new microtome.slicer.AdvancedSlicer(scene,
         pixelWidthMM,
         pixelHeightMM,
@@ -92,9 +94,9 @@ module microtome.slicer_job {
         this.z = this.z + this.zStep;
         // regular slice
       }
-      let data = this.slicer.sliceAtToImage(this.z);
+      let data = this.slicer.sliceAtToImageBase64(this.z);
       let base64Data = data.slice(data.indexOf(",") + 1);
-      this.zip.file(`${this.sliceNum}.png`, base64Data, { base64: true, compression: "store" })
+      this.zip.file(`${this.sliceNum}.png`, base64Data, { base64:true, compression: "store" })
       this.sliceNum++;
       this.scheduleNextSlice();
       if (this.sliceNum % 20 == 0) {
