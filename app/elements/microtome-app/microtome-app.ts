@@ -67,8 +67,8 @@ class MicrotomeApp extends polymer.Base {
       microsteps: 1
     },
     projector: {
-      xRes: 360,
-      yRes: 240,
+      xRes: 1280,
+      yRes: 1024,
     }
   };
 
@@ -254,11 +254,11 @@ class MicrotomeApp extends polymer.Base {
       retractMM: 3
     }
 
-    // microtome.slicer_job.HeadlessToZipSlicer.execute(
-    //   this.scene,
-    //   this.printerConfig,
-    //   jobCfg,
-    //   false).then((content) => saveAs(content, "slices.zip"));
+    microtome.slicer_job.HeadlessToZipSlicer.execute(
+      this.scene,
+      this.printerConfig,
+      jobCfg,
+      false).then((content) => saveAs(content, "slices.zip"));
 
   }
 
