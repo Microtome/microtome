@@ -144,10 +144,19 @@ module microtome.slicer {
     * Slice to an image
     * Returns a dataurl of the image
     */
-    sliceAtToImage(z: number): String {
+    sliceAtToImageBase64(z: number): String {
       this.render(z);
       return this.renderer.domElement.toDataURL("image/png");
     }
+
+    // /***
+    // * Slice to an image
+    // * Returns a dataurl of the image
+    // */
+    // sliceAtToBlob(z: number): String {
+    //   this.render(z);
+    //   return this.renderer.domElement.toDataURL("image/png");
+    // }
 
     private render(z: number) {
       try {
