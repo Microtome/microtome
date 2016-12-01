@@ -53,12 +53,13 @@ module microtome.slicer_job {
     private startTime = Date.now();
     private zip = new JSZip();
     private handle: number = null;
-    private resolve:Function = null;
-    private reject:Function = null;
-    private zipBlob: Promise<Blob> = new Promise((resolve,reject)=>{
+    private resolve: Function = null;
+    private reject: Function = null;
+    private zipBlob: Promise<Blob> = new Promise((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
     })
+    private readonly SLICE_TIME = 2;
 
     constructor(private scene: microtome.three_d.PrinterScene,
       private cfg: microtome.printer.PrinterConfig,
@@ -93,10 +94,10 @@ module microtome.slicer_job {
       }
       let data = this.slicer.sliceAtToImage(this.z);
       let base64Data = data.slice(data.indexOf(",") + 1);
-      this.zip.file(`${this.sliceNum}.png`, base64Data, { base64: true })
+      this.zip.file(`${this.sliceNum}.png`, base64Data, { base64: true, compression: "store" })
       this.sliceNum++;
       this.scheduleNextSlice();
-      if(this.sliceNum % 20==0){
+      if (this.sliceNum % 20 == 0) {
         console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
       }
       // return this.zip.generateAsync({ type: "blob" });
@@ -105,12 +106,12 @@ module microtome.slicer_job {
 
     private scheduleNextSlice() {
       if (this.z <= this.scene.printVolume.height) {
-        this.handle = setTimeout(this.doSlice.bind(this), 10);
+        this.handle = setTimeout(this.doSlice.bind(this), this.SLICE_TIME);
       } else {
         if (this.handle) {
           clearTimeout(this.handle);
         }
-        this.zip.generateAsync({type: "blob"}).then(blob => this.resolve(blob));
+        this.zip.generateAsync({ type: "blob" }).then(blob => this.resolve(blob));
       }
     }
 
@@ -119,10 +120,10 @@ module microtome.slicer_job {
         job: this.jobCfg,
         printer: this.cfg
       }
-      try{
+      try {
         this.doSlice();
         this.scheduleNextSlice();
-      }catch(e){
+      } catch (e) {
         this.reject(e);
       }
       return this.zipBlob;
