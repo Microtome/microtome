@@ -112,10 +112,10 @@ module microtome.slicer {
       private scene: microtome.three_d.PrinterScene,
       public pixelWidthMM: number,
       public pixelHeightMM: number,
-      public raftThickness: number,
+      public raftThicknessMM: number,
       public raftOffset: number,
       public shellInset: number,
-      private renderer?: THREE.WebGLRenderer) {
+      private renderer: THREE.WebGLRenderer) {
       var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
       var planeMaterial = microtome.three_d.CoreMaterialsFactory.whiteMaterial.clone();
       planeMaterial.side = THREE.DoubleSide;
@@ -146,13 +146,13 @@ module microtome.slicer {
     */
     sliceAtToImage(z: number): String {
       this.render(z);
-      return this.renderer.domElement.toDataURL();
+      return this.renderer.domElement.toDataURL("image/png");
     }
 
     private render(z: number) {
       try {
         let dirty = this.prepareRender();
-        if (z <= this.raftThickness) {
+        if (z <= this.raftThicknessMM) {
           this.renderRaftSlice();
         } else {
           this.renderSlice(z);
