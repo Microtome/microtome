@@ -11,7 +11,7 @@ issues with the Dart platform and Chrome Apps; specifically in the mistaken beli
 window communication even inside a self-contained chrome app is severely crippled.
 
 - [X] For z axis change pitch to lead as its what really matters
-- [ ] Slice to zip file via zipjs and filejs, create a download containing PNG slices
+- [X] Slice to zip file via zipjs and filejs, create a download containing PNG slices
 - [X] Enable scrollwheel in slice preview
 - [ ] Add Job configuration object
   - [ ] Specify slice thickness as multiples of minimum printer slice
@@ -27,16 +27,16 @@ window communication even inside a self-contained chrome app is severely cripple
   - [ ] Specify thickness of support grind in mm
   - [ ] Specify support cube lattice spacing in mm
   - [ ] Allow rotation of support cube matrix
-  - [ ] Generate raft
+  - [X] Generate raft
   - [ ] Support multi-step layer exposure patterns to reduce heat generation for large slice areas.
 - [ ] Print volume preview
-  - [ ] Move
-  - [ ] Rotate
-  - [ ] Scale
-  - [ ] Select
-  - [ ] Add
-  - [ ] Delete
-  - [ ] Copy
+  - [X] Move
+  - [X] Rotate
+  - [X] Scale
+  - [X] Select
+  - [X] Add
+  - [X] Delete
+  - [X] Copy
 - [ ] Export / Import project
   - [ ] Job settings
   - [ ] Printer config
