@@ -28,7 +28,6 @@
     "./advanced_slicer.ts",
     "./core_threed.ts",
     "./printer_config.ts",
-    "./projector.ts",
     "./slicer_job.ts",
     "./units.ts",
     "../../node_modules/@types/jszip/index.d.ts",

@@ -96,7 +96,7 @@ module microtome.printer {
     /** The step distance used when this job was created */
     stepDistance: number;
     /** The number of steps per layer */
-    stepsPerLayer:number;
+    stepsPerLayer: number;
     /** Settle time, ms */
     settleTime: number;
     /** Exposure time per layer, ms */
