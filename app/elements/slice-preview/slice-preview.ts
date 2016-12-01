@@ -87,8 +87,8 @@ class SlicePreview extends polymer.Base {
     var scalew = div.clientWidth / pvw;
     var scale = scaleh < scalew ? scaleh : scalew;
     this._renderer.setSize(this.xres, this.yres);
-    canvas.style.width = "" + pvw * scale + "px";
-    canvas.style.height = "" + pvd * scale + "px";
+    canvas.style.width = `${pvw * scale}px`;
+    canvas.style.height = `${pvd * scale}px`;
     // TODO fix NEED dirty check on div resize
     this._slicer.sliceAt(this.sliceAt);
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
