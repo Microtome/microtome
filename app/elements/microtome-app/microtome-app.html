@@ -146,6 +146,7 @@
               <!-- <paper-fab mini icon="av:play-circle-outline" title="Animate"></paper-fab> -->
               <paper-fab mini class="icon-rotate-90" icon="av:play-arrow" title="Slice Down" on-click="sliceDown"></paper-fab>
               <paper-fab mini class="icon-rotate-270" icon="av:skip-previous" title="To Start" on-click="sliceStart"></paper-fab>
+              <paper-fab mini class="icon-rotate-270" icon="save" title="Slice To File" on-click="sliceToFile"></paper-fab>
             </div>
             <slice-preview id="slice-preview" disabled$="{{hideSlicePreview}}" xres="{{printerConfig.projector.xRes}}" yres="{{printerConfig.projector.yRes}}" slice-at="[[sliceAt]]" class="fit" scene="[[scene]]"></slice-preview>
           </shared-animatable>

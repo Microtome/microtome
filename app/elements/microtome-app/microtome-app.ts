@@ -238,6 +238,30 @@ class MicrotomeApp extends polymer.Base {
     window.console.log(this.sliceAt);
   }
 
+  public sliceToFile() {
+    let jobCfg: microtome.slicer_job.SliceJobConfig = {
+      layers: {
+        thicknessMicrons: 50,
+        exposureTimeSecs: 5
+      },
+      raft: {
+        thicknessMM: 1,
+        layers: {
+          thicknessMicrons: 150,
+          exposureTimeSecs: 10
+        }
+      },
+      retractMM: 3
+    }
+
+    // microtome.slicer_job.HeadlessToZipSlicer.execute(
+    //   this.scene,
+    //   this.printerConfig,
+    //   jobCfg,
+    //   false).then((content) => saveAs(content, "slices.zip"));
+
+  }
+
   //-----------------------------------------------------------------
   // Event listeners
   //-----------------------------------------------------------------
@@ -309,12 +333,12 @@ class MicrotomeApp extends polymer.Base {
     var fl: FileList = this.$['mesh-file']['inputElement'].files;
     var furl: string = URL.createObjectURL(fl[0]);
     this._stlLoader.load(furl, (geom: THREE.Geometry | THREE.BufferGeometry) => {
-      var g = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry> geom);
+      var g = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry>geom);
       var mesh = new microtome.three_d.PrintMesh(g, microtome.three_d.CoreMaterialsFactory.objectMaterial);
       g.computeBoundingBox();
-      var toOriginVector = new THREE.Vector3(0,0,0).sub(g.boundingBox.center());
-      g.translate(toOriginVector.x,toOriginVector.y,toOriginVector.z);
-      g.translate(0,0,(g.boundingBox.max.z-g.boundingBox.min.z)/2);
+      var toOriginVector = new THREE.Vector3(0, 0, 0).sub(g.boundingBox.center());
+      g.translate(toOriginVector.x, toOriginVector.y, toOriginVector.z);
+      g.translate(0, 0, (g.boundingBox.max.z - g.boundingBox.min.z) / 2);
       g.computeBoundingBox();
       this.scene.printObjects.push(mesh);
       this.notifyPath("scene.printObjects", this.scene.printObjects.slice());
@@ -338,7 +362,7 @@ class MicrotomeApp extends polymer.Base {
   }
 
   onDeleteModelClick(e: MouseEvent) {
-    if(this.pickedMesh != null){
+    if (this.pickedMesh != null) {
       // var idx = this.scene.printObjects.indexOf(this.pickedMesh);
       // this.scene.printObjects.splice(idx,1);
       // // this.scene.remove(this.pickedMesh);
