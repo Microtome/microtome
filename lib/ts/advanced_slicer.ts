@@ -59,6 +59,8 @@ module microtome.slicer {
 
     private shellErodePixels = 0;
 
+    // private dummyReadPixels = new Uint8Array(4);
+
     // Materials ---------------------------------------------------------------------------------
 
     private erodeDialateMaterial = three_d.CoreMaterialsFactory.erodeOrDialateMaterial.clone();
@@ -146,17 +148,21 @@ module microtome.slicer {
     */
     sliceAtToImageBase64(z: number): String {
       this.render(z);
+      // let gl = this.renderer.context
+      // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
       return this.renderer.domElement.toDataURL("image/png");
     }
 
-    // /***
-    // * Slice to an image
-    // * Returns a dataurl of the image
-    // */
-    // sliceAtToBlob(z: number): String {
-    //   this.render(z);
-    //   return this.renderer.domElement.toDataURL("image/png");
-    // }
+    /***
+    * Slice to an image
+    * Returns a dataurl of the image
+    */
+    sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
+      this.render(z);
+      // let gl = this.renderer.context
+      // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
+      this.renderer.domElement.toBlob(callback, "image/png");
+    }
 
     private render(z: number) {
       try {
@@ -178,7 +184,7 @@ module microtome.slicer {
       this.scene.overrideMaterial = microtome.three_d.CoreMaterialsFactory.flatWhiteMaterial;
       // Hide slice background if present, render to temp target 1;
       this.sliceBackground.visible = false;
-      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
+      this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
 
       // Hide objects, show slice background
       this.scene.hidePrintObjects();
@@ -195,14 +201,14 @@ module microtome.slicer {
           this.erodeDialateMaterialUniforms.src = new three_d.TextureUniform(this.tempTarget1);
           this.erodeDialateMaterialUniforms.pixels.value = pixels;
           this.erodeDialateMaterial.needsUpdate = true;
-          this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
+          this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
           let swapTarget = this.tempTarget2;
           this.tempTarget2 = this.tempTarget1;
           this.tempTarget1 = swapTarget;
         }
       }
       // render texture to view
-      this.renderSliceFinal(this.tempTarget1);
+      this.renderSliceFinal(this.tempTarget2);
     }
 
     private renderSlice(z: number) {

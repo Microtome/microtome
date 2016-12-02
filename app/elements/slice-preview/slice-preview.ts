@@ -25,12 +25,6 @@ class SlicePreview extends polymer.Base {
   public disabled: boolean = false;
 
   @property({ notify: false, readOnly: false, type: Number })
-  public xres: number;
-
-  @property({ notify: false, readOnly: false, type: Number })
-  public yres: number;
-
-  @property({ notify: false, readOnly: false, type: Number })
   public sliceAt: number;
 
   public attached() {
@@ -86,7 +80,7 @@ class SlicePreview extends polymer.Base {
     var scaleh = div.clientHeight / pvd;
     var scalew = div.clientWidth / pvw;
     var scale = scaleh < scalew ? scaleh : scalew;
-    this._renderer.setSize(this.xres, this.yres);
+    this._renderer.setSize(pvw * scale, pvd * scale);
     canvas.style.width = `${pvw * scale}px`;
     canvas.style.height = `${pvd * scale}px`;
     // TODO fix NEED dirty check on div resize

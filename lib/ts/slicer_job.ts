@@ -10,6 +10,7 @@ module microtome.slicer_job {
   export interface SliceJobRaftConfig {
     thicknessMM: number,
     layers: SliceJobLayerConfig,
+    dialateMM: number,
   }
 
   export interface SliceJobLayerConfig {
@@ -65,7 +66,7 @@ module microtome.slicer_job {
       private cfg: microtome.printer.PrinterConfig,
       private jobCfg: SliceJobConfig) {
       let shellInset = -1;
-      let raftOffset = jobCfg.raft.thicknessMM || 0;
+      let raftOffset = jobCfg.raft.dialateMM || 0;
       let pixelWidthMM = this.scene.printVolume.width / cfg.projector.xRes;
       let pixelHeightMM = this.scene.printVolume.depth / cfg.projector.yRes;
       this.raftThickness = this.jobCfg.raft.thicknessMM;
@@ -74,8 +75,8 @@ module microtome.slicer_job {
       this.renderer.setSize(cfg.projector.xRes, cfg.projector.xRes);
       this.canvasElement.style.width = `${cfg.projector.xRes}px`;
       this.canvasElement.style.height = `${cfg.projector.xRes}px`;
-      this.canvasElement.width=cfg.projector.xRes;
-      this.canvasElement.height=cfg.projector.yRes;
+      this.canvasElement.width = cfg.projector.xRes;
+      this.canvasElement.height = cfg.projector.yRes;
       this.slicer = new microtome.slicer.AdvancedSlicer(scene,
         pixelWidthMM,
         pixelHeightMM,
@@ -94,14 +95,24 @@ module microtome.slicer_job {
         this.z = this.z + this.zStep;
         // regular slice
       }
-      let data = this.slicer.sliceAtToImageBase64(this.z);
-      let base64Data = data.slice(data.indexOf(",") + 1);
-      this.zip.file(`${this.sliceNum}.png`, base64Data, { base64:true, compression: "store" })
-      this.sliceNum++;
-      this.scheduleNextSlice();
-      if (this.sliceNum % 20 == 0) {
-        console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
-      }
+      // let data = this.slicer.sliceAtToImageBase64(this.z);
+      // let base64Data = data.slice(data.indexOf(",") + 1);
+      // this.zip.file(`${this.sliceNum}.png`, base64Data, { base64: true, compression: "store" })
+      // this.sliceNum++;
+      // this.scheduleNextSlice();
+      // if (this.sliceNum % 20 == 0) {
+      //   console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
+      // }
+      this.slicer.sliceAtToBlob(this.z, blob => {
+        // console.log("SLICE!!!");
+        this.zip.file(`${this.sliceNum}.png`, blob, {  compression: "store" })
+        this.sliceNum++;
+        if (this.sliceNum % 20 == 0) {
+          console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
+        }
+        this.scheduleNextSlice();
+      });
+      ;
       // return this.zip.generateAsync({ type: "blob" });
       // TODO Need to generate zip after adding all files. Not quite right still
     }
@@ -124,7 +135,7 @@ module microtome.slicer_job {
       }
       try {
         this.doSlice();
-        this.scheduleNextSlice();
+        // this.scheduleNextSlice();
       } catch (e) {
         this.reject(e);
       }
