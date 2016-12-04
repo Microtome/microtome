@@ -756,7 +756,7 @@ void main(void) {
         this.scale.set(widthOrPv as number, depth, height);
       } else {
         var pv = widthOrPv as microtome.printer.PrintVolume
-        this.scale.set(pv.width, pv.depth, pv.height)
+        this.scale.set(pv.width_mm, pv.depth_mm, pv.height_mm)
       }
       this._recalcBBox();
     }

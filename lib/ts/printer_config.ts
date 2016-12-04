@@ -22,26 +22,21 @@ module microtome.printer {
   export interface GcodeProtocol {
   };
 
-  /**
-  * Unit of measure for threads
-  */
-  export enum ThreadUnits {
-    /** Thread pitch mm */
-    LEAD_MM,
-    /** Thread pitch inches */
-    LEAD_IN
-  };
-
   export interface ZStage {
-    threadMeasure: number,
-    threadUnits: ThreadUnits,
+    // How far does it travel per revolution
+    lead_mm: number,
+    // Full steps per revolution
     stepsPerRev: number,
+    // Microsteps per full step
     microsteps: number
   };
 
+  // CUrrently assumes square pixels
   export interface Projector {
-    xRes: number;
-    yRes: number;
+    // Pixels x direction
+    xRes_px: number;
+    // Pixels y direction;
+    yRes_px: number;
   };
 
   export interface Resin {
@@ -49,16 +44,16 @@ module microtome.printer {
     productName: string,
     productNumber: string,
     pricePerUnit: string,
-    unitVolume: string,
+    unitVolume_ml: string,
   }
 
   /**
   * Specifies printer volume
   */
   export interface PrintVolume {
-    width: number,
-    depth: number,
-    height: number
+    width_mm: number,
+    depth_mm: number,
+    height_mm: number
   };
 
   /**
@@ -73,14 +68,11 @@ module microtome.printer {
     lastModified: number,
     /**
     * Print volume
-    * x = width
-    * y = depth
-    * z = height
     */
     volume: PrintVolume,
-
+    // Z Stage info
     zStage: ZStage,
-
+    // Projector info
     projector: Projector
     // protocol: GpioProtocol | GcodeProtocol
   };
@@ -94,27 +86,31 @@ module microtome.printer {
     /** Description of job*/
     decription: string;
     /** The step distance used when this job was created */
-    stepDistance: number;
+    stepDistance_microns: number;
     /** The number of steps per layer */
     stepsPerLayer: number;
     /** Settle time, ms */
-    settleTime: number;
+    settleTime_ms: number;
     /** Exposure time per layer, ms */
-    layerExposureTime: number;
+    layerExposureTime_ms: number;
     /** Blank time, ms */
-    blankTime: number;
+    blankTime_ms: number;
     /** Retract distance, distance platforms move to peel print, mm */
-    retractDistance: number;
+    retractDistance_mm: number;
     /**
     * Z offset for added objects. This is the amount objects are offset
     * when they are added to the scene
     */
-    zOffset: number;
+    zOffset_mm: number;
     /**
     * Thickness of printed raft, used to 'stick' items to build platform
     * raftThickness <= zOffset;
     */
-    raftThickness: number;
+    raftThickness_mm: number;
+    /**
+    * How much distance to grow the raft border by
+    */
+    raftOutset_mm:number;
   };
 
 }

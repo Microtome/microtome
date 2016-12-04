@@ -67,16 +67,16 @@ module microtome.slicer_job {
       private jobCfg: SliceJobConfig) {
       let shellInset = -1;
       let raftOffset = jobCfg.raft.dialateMM || 0;
-      let pixelWidthMM = this.scene.printVolume.width / cfg.projector.xRes;
-      let pixelHeightMM = this.scene.printVolume.depth / cfg.projector.yRes;
+      let pixelWidthMM = this.scene.printVolume.width / cfg.projector.xRes_px;
+      let pixelHeightMM = this.scene.printVolume.depth / cfg.projector.yRes_px;
       this.raftThickness = this.jobCfg.raft.thicknessMM;
       this.raftZStep = this.jobCfg.raft.layers.thicknessMicrons / 1000;
       this.zStep = this.jobCfg.layers.thicknessMicrons / 1000;
-      this.renderer.setSize(cfg.projector.xRes, cfg.projector.xRes);
-      this.canvasElement.style.width = `${cfg.projector.xRes}px`;
-      this.canvasElement.style.height = `${cfg.projector.xRes}px`;
-      this.canvasElement.width = cfg.projector.xRes;
-      this.canvasElement.height = cfg.projector.yRes;
+      this.renderer.setSize(cfg.projector.xRes_px, cfg.projector.yRes_px);
+      this.canvasElement.style.width = `${cfg.projector.xRes_px}px`;
+      this.canvasElement.style.height = `${cfg.projector.yRes_px}px`;
+      this.canvasElement.width = cfg.projector.xRes_px;
+      this.canvasElement.height = cfg.projector.yRes_px;
       this.slicer = new microtome.slicer.AdvancedSlicer(scene,
         pixelWidthMM,
         pixelHeightMM,

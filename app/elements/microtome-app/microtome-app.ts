@@ -21,8 +21,8 @@ enum TransformMode {
 class MicrotomeApp extends polymer.Base {
 
   // Convenience imports
-  _LEAD_MM = microtome.printer.ThreadUnits.LEAD_MM;
-  _LEAD_IN = microtome.printer.ThreadUnits.LEAD_IN;
+  // _LEAD_MM = microtome.printer.ThreadUnits.LEAD_MM;
+  // _LEAD_IN = microtome.printer.ThreadUnits.LEAD_IN;
   _INCH = microtome.units.LengthUnit.INCH;
   _µM = microtome.units.LengthUnit.MICRON;
   _MM = microtome.units.LengthUnit.MILLIMETER;
@@ -40,14 +40,15 @@ class MicrotomeApp extends polymer.Base {
   public printJobConfig: microtome.printer.PrintJobConfig = {
     name: "Job 1",
     decription: "",
-    stepDistance: 1.24,
+    stepDistance_microns: 1.24,
     stepsPerLayer: 20,
-    settleTime: 1000,
-    layerExposureTime: 500,
-    blankTime: 1000,
-    retractDistance: 5,
-    zOffset: 2,
-    raftThickness: 1.5
+    settleTime_ms: 1000,
+    layerExposureTime_ms: 500,
+    blankTime_ms: 1000,
+    retractDistance_mm: 5,
+    zOffset_mm: 2,
+    raftThickness_mm: 1.5,
+    raftOutset_mm: 3.5
   }
 
   @property({ readOnly: false, notify: true, type: Object })
@@ -56,19 +57,18 @@ class MicrotomeApp extends polymer.Base {
     description: 'Homebrew DLP printer built from servo city parts and using micro projector',
     lastModified: null,
     volume: {
-      width: 50,
-      depth: 40,
-      height: 50
+      width_mm: 50,
+      depth_mm: 40,
+      height_mm: 50
     },
     zStage: {
-      threadMeasure: 0.05,
-      threadUnits: microtome.printer.ThreadUnits.LEAD_IN,
+      lead_mm: 1.27,
       stepsPerRev: 1024,
       microsteps: 1
     },
     projector: {
-      xRes: 1280,
-      yRes: 1024,
+      xRes_px: 1280,
+      yRes_px: 1024,
     }
   };
 
@@ -115,15 +115,15 @@ class MicrotomeApp extends polymer.Base {
     this.scene.printVolume.resize(newWidth, newDepth, newHeight);
   }
 
-  @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
-  zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
-    if (newThreadUnits == this._LEAD_IN) {
-      this.minLayerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
-    } else if (newThreadUnits == this._LEAD_MM) {
-      this.minLayerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
-    }
-    // window.console.log(this.minLayerThickness);
-  }
+  // @observe("printerConfig.zStage.threadMeasure,printerConfig.zStage.threadUnits,printerConfig.zStage.stepsPerRev,printerConfig.zStage.microsteps")
+  // zstageParamsChanged(newThreadMeasure: number, newThreadUnits: microtome.printer.ThreadUnits, newStepsPerRev: number, newMicrosteps: number) {
+  //   if (newThreadUnits == this._LEAD_IN) {
+  //     this.minLayerThickness = this._convertLengthUnit(newThreadMeasure / (newMicrosteps * newStepsPerRev), this._INCH, this._MM);
+  //   } else if (newThreadUnits == this._LEAD_MM) {
+  //     this.minLayerThickness = newThreadMeasure / (newMicrosteps * newStepsPerRev);
+  //   }
+  //   // window.console.log(this.minLayerThickness);
+  // }
 
   @observe("pickedMesh")
   pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
