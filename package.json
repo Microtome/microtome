@@ -13,7 +13,7 @@
     "lite-server": "2.2.2",
     "run-sequence": "^1.0.2",
     "typescript": "^2.0.3",
-    "vulcanize": ">= 1.4.2",
+    "vulcanize": "^1.14.12",
     "watch": "^1.0.1",
     "wrappy": "^1.0.1"
   },
@@ -26,7 +26,8 @@
     "build:app:watch": "watch 'npm run build:app' ./app -d --wait=10",
     "all": "npm run clean && npm run build",
     "serve:dev": "lite-server -c server-config-dev.json",
-    "dev:hot": "concurrently 'npm run serve:dev' 'npm run build:lib:watch' 'npm run build:app:watch'"
+    "dev:hot": "concurrently 'npm run serve:dev' 'npm run build:lib:watch' 'npm run build:app:watch'",
+    "vulcanize": "mkdir -p dist && vulcanize --inline-scripts --inline-css --redirect '/bower_components|./bower_components' --redirect '/node_modules|./node_modules' --redirect '/lib/js|./build/lib/js' build/app/index.html  > dist/microtome2.html"
   },
   "engines": {
     "node": ">=5.0.0"
