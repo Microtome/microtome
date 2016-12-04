@@ -67,8 +67,8 @@ class MicrotomeApp extends polymer.Base {
       microsteps: 1
     },
     projector: {
-      xRes: 640,
-      yRes: 512,
+      xRes: 1280,
+      yRes: 1024,
     }
   };
 
