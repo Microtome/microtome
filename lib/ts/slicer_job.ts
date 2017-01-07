@@ -1,56 +1,19 @@
 module microtome.slicer_job {
 
-  export interface SliceJobConfig {
-    layers: SliceJobLayerConfig,
-    retractMM: number,
-    raft: SliceJobRaftConfig,
-    maxZ?: number
-  }
-
-  export interface SliceJobRaftConfig {
-    thicknessMM: number,
-    layers: SliceJobLayerConfig,
-    dialateMM: number,
-  }
-
-  export interface SliceJobLayerConfig {
-    thicknessMicrons: number,
-    exposureTimeSecs: number
-  }
-
-  /**
-  * This slicer is headless, slicing a given scene to a zip file
-  * containing containing images and slice information
-  *
-  * TODO add ability to set preview dom element for slice images
-  *
-  */
-  export class HeadlessToZipSlicer {
-
-    /**
-    *
-    */
-    static execute(scene: microtome.three_d.PrinterScene,
-      cfg: microtome.printer.PrinterConfig,
-      jobCfg: SliceJobConfig, validate: boolean = false): Promise<Blob> {
-      return (new HeadlessToZipSlicerJob(scene, cfg, jobCfg)).execute(validate);
-    }
-  }
-
   /**
   * Class that actually handles the slicing job. Not reusable
   */
-  class HeadlessToZipSlicerJob {
+  export class HeadlessToZipSlicerJob {
 
     private readonly slicer: microtome.slicer.AdvancedSlicer;
     private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ alpha: false, antialias: false, clearColor: 0x000000 });
     private canvasElement: HTMLCanvasElement = this.renderer.domElement;
-    private raftThickness: number = 0;
-    private raftZStep: number = 0;
-    private zStep: number = 0;
+    private raftThickness_mm: number = 0;
+    // private raftZStep_mm: number = 0;
+    private zStep_mm: number = 0;
 
     private z = 0;
-    private sliceNum = 0;
+    private sliceNum = 1;
     private startTime = Date.now();
     private zip = new JSZip();
     private handle: number = null;
@@ -61,17 +24,17 @@ module microtome.slicer_job {
       this.reject = reject;
     })
     private readonly SLICE_TIME = 20;
+    private cancelled = false;
 
     constructor(private scene: microtome.three_d.PrinterScene,
       private cfg: microtome.printer.PrinterConfig,
-      private jobCfg: SliceJobConfig) {
-      let shellInset = -1;
-      let raftOffset = jobCfg.raft.dialateMM || 0;
+      private jobCfg: microtome.printer.PrintJobConfig) {
+      let shellInset_mm = -1;
+      let raftOutset_mm = jobCfg.raftOutset_mm || 0;
       let pixelWidthMM = this.scene.printVolume.width / cfg.projector.xRes_px;
       let pixelHeightMM = this.scene.printVolume.depth / cfg.projector.yRes_px;
-      this.raftThickness = this.jobCfg.raft.thicknessMM;
-      this.raftZStep = this.jobCfg.raft.layers.thicknessMicrons / 1000;
-      this.zStep = this.jobCfg.layers.thicknessMicrons / 1000;
+      this.raftThickness_mm = this.jobCfg.raftThickness_mm;
+      this.zStep_mm = (this.jobCfg.stepDistance_microns * this.jobCfg.stepsPerLayer) / 1000;
       this.renderer.setSize(cfg.projector.xRes_px, cfg.projector.yRes_px);
       this.canvasElement.style.width = `${cfg.projector.xRes_px}px`;
       this.canvasElement.style.height = `${cfg.projector.yRes_px}px`;
@@ -80,32 +43,18 @@ module microtome.slicer_job {
       this.slicer = new microtome.slicer.AdvancedSlicer(scene,
         pixelWidthMM,
         pixelHeightMM,
-        this.raftThickness,
-        raftOffset,
-        shellInset,
+        this.raftThickness_mm,
+        raftOutset_mm,
+        shellInset_mm,
         this.renderer)
     }
 
     private doSlice() {
-      if (this.z < this.raftThickness) {
-        this.z = this.z + this.raftZStep;
-        // raft slice, handled by slicer, but we
-        // we need to handle z steps
-      } else {
-        this.z = this.z + this.zStep;
-        // regular slice
-      }
-      // let data = this.slicer.sliceAtToImageBase64(this.z);
-      // let base64Data = data.slice(data.indexOf(",") + 1);
-      // this.zip.file(`${this.sliceNum}.png`, base64Data, { base64: true, compression: "store" })
-      // this.sliceNum++;
-      // this.scheduleNextSlice();
-      // if (this.sliceNum % 20 == 0) {
-      //   console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
-      // }
+      // TODO Error accumulation
+      this.z = this.zStep_mm * this.sliceNum;
       this.slicer.sliceAtToBlob(this.z, blob => {
         // console.log("SLICE!!!");
-        this.zip.file(`${this.sliceNum}.png`, blob, {  compression: "store" })
+        this.zip.file(`${this.sliceNum}.png`, blob, { compression: "store" })
         this.sliceNum++;
         if (this.sliceNum % 20 == 0) {
           console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
@@ -118,16 +67,31 @@ module microtome.slicer_job {
     }
 
     private scheduleNextSlice() {
-      if (this.z <= this.scene.printVolume.height) {
+      if (this.z <= this.scene.printVolume.height && !this.cancelled) {
         this.handle = setTimeout(this.doSlice.bind(this), this.SLICE_TIME);
       } else {
         if (this.handle) {
           clearTimeout(this.handle);
         }
-        this.zip.generateAsync({ type: "blob" }).then(blob => this.resolve(blob));
+        if (this.cancelled) {
+          this.reject();
+        } else {
+          this.zip.generateAsync({ type: "blob" }).then(blob => this.resolve(blob));
+        }
       }
     }
 
+    /**
+    * Cancel the slicing job. Will cause the promise returned by
+    * execute to fail
+    */
+    cancel() {
+      this.cancelled = true;
+    }
+
+    /**
+    * Execute the slicing job
+    */
     execute(validate: boolean = false): Promise<Blob> {
       let config = {
         job: this.jobCfg,

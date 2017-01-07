@@ -39,9 +39,9 @@ class MicrotomeApp extends polymer.Base {
   @property({ readOnly: false, notify: true, type: Object })
   public printJobConfig: microtome.printer.PrintJobConfig = {
     name: "Job 1",
-    decription: "",
-    stepDistance_microns: 1.24,
-    stepsPerLayer: 20,
+    description: "",
+    stepDistance_microns: 1.27,
+    stepsPerLayer: 40,
     settleTime_ms: 1000,
     layerExposureTime_ms: 500,
     blankTime_ms: 1000,
@@ -67,8 +67,8 @@ class MicrotomeApp extends polymer.Base {
       microsteps: 1
     },
     projector: {
-      xRes_px: 1280,
-      yRes_px: 1024,
+      xRes_px: 640,
+      yRes_px: 512,
     }
   };
 
@@ -79,7 +79,7 @@ class MicrotomeApp extends polymer.Base {
   public sliceAt: number = 0;
 
   @property({ readOnly: false, notify: true })
-  public minLayerThickness: number;
+  public minLayerThickness: number = 0.005;
 
   @property({ type: Number })
   public activePage: ActivePage = ActivePage.PRINT_VOLUME;
@@ -239,28 +239,11 @@ class MicrotomeApp extends polymer.Base {
   }
 
   public sliceToFile() {
-    let jobCfg: microtome.slicer_job.SliceJobConfig = {
-      layers: {
-        thicknessMicrons: 50,
-        exposureTimeSecs: 5
-      },
-      raft: {
-        thicknessMM: 1,
-        dialateMM: 2.5,
-        layers: {
-          thicknessMicrons: 150,
-          exposureTimeSecs: 10
-        }
-      },
-      retractMM: 3
-    }
-
-    microtome.slicer_job.HeadlessToZipSlicer.execute(
+    let job = new microtome.slicer_job.HeadlessToZipSlicerJob(
       this.scene,
       this.printerConfig,
-      jobCfg,
-      false).then((content) => saveAs(content, "slices.zip"));
-
+      this.printJobConfig);
+    job.execute().then((content) => saveAs(content, "slices.zip"));
   }
 
   //-----------------------------------------------------------------

@@ -84,7 +84,7 @@ module microtome.printer {
     /** Name of settings */
     name: string;
     /** Description of job*/
-    decription: string;
+    description: string;
     /** The step distance used when this job was created */
     stepDistance_microns: number;
     /** The number of steps per layer */
