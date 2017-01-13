@@ -17,3 +17,10 @@ Use readpixels to force a fence ensuring rendering is done. This will matter mor
 when rendering is forced off into web workers.
 
 Looks like we can't use webworkers immeadiately, chrome has not implemented offscreen canvas
+
+http://codeflow.org/issues/timing/
+
+Look at this for how to use readpixels. Looks like you can read just 1 pixel worth of bytes.
+
+Should use adaptive slice timing to back off or ramp up to maximize slice speed.
+Save what works best in local storage...
