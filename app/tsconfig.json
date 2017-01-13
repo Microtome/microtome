@@ -31,6 +31,7 @@
     "./elements/pv-view/pv-view.ts",
     "./elements/shared-animatable/shared-animatable.ts",
     "./elements/slice-preview/slice-preview.ts",
+    "./elements/slicer-jobcontrol/slicer-jobcontrol.ts",
     "../build/lib/js/slicer-lib.d.ts",
     "../node_modules/@types/file-saver/index.d.ts"
   ],
