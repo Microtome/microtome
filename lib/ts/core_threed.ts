@@ -1,6 +1,6 @@
 module microtome.three_d {
 
-  export interface UniformValue<T> {
+  export interface UniformValue<T> extends THREE.IUniform{
     type: string,
     value: T,
   }
@@ -23,8 +23,15 @@ module microtome.three_d {
     }
   }
 
+  export interface ThreeUniforms {
+    [uniform:string]: THREE.IUniform
+  }
 
-  export class SliceShaderUniforms {
+  export class BaseUniforms implements ThreeUniforms{
+    [uniform:string]: THREE.IUniform;
+  }
+
+  export class SliceShaderUniforms extends BaseUniforms{
     constructor(
       public cutoff: FloatUniform,
       // public epsilon: FloatUniform,
@@ -32,37 +39,37 @@ module microtome.three_d {
       public iTex: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
-    ) { }
+    ) { super(); }
   }
 
-  export class IntersectionShaderUniforms {
+  export class IntersectionShaderUniforms  extends BaseUniforms{
     constructor(
       public cutoff: FloatUniform
-    ) { }
+    ) { super();}
   }
 
-  export class CopyShaderUniforms {
+  export class CopyShaderUniforms   extends BaseUniforms{
     constructor(public src: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
-    ) { }
+    ) { super(); }
   }
 
-  export class BoolOpShaderUniforms {
+  export class BoolOpShaderUniforms   extends BaseUniforms{
     constructor(public src1: TextureUniform,
       public src2: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
-    ) { }
+    ) { super(); }
   }
 
-  export class ErodeDialateShaderUniforms {
+  export class ErodeDialateShaderUniforms   extends BaseUniforms {
     constructor(public dilate: IntegerUniform,
       public pixels: IntegerUniform,
       public src: TextureUniform,
       public viewWidth: IntegerUniform,
       public viewHeight: IntegerUniform
-    ) { }
+    ) { super(); }
   }
 
   export class CoreMaterialsFactory {

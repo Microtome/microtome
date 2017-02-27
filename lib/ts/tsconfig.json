@@ -13,26 +13,8 @@
   },
   "compileOnSave": false,
   "buildOnSave": false,
-  "filesGlob": [
-    "../../typings/index.d.ts",
-    "./**/*.ts",
-    "../../node_modules/@types/jszip/*.d.ts",
-    "../../node_modules/@types/core-js/*.d.ts",
-    "../../node_modules/@types/file-saver/*.d.ts"
-  ],
-  "atom": {
-    "rewriteTsconfig": true
-  },
-  "files": [
-    "../../typings/index.d.ts",
-    "./advanced_slicer.ts",
-    "./core_threed.ts",
-    "./printer_config.ts",
-    "./slicer_job.ts",
-    "./units.ts",
-    "../../node_modules/@types/jszip/index.d.ts",
-    "../../node_modules/@types/core-js/index.d.ts",
-    "../../node_modules/@types/file-saver/index.d.ts"
+  "include": [
+    "**/*.ts"
   ],
   "formatCodeOptions": {
     "indentSize": 2,

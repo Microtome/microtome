@@ -320,7 +320,7 @@ class MicrotomeApp extends polymer.Base {
       var g = geom instanceof THREE.Geometry ? geom : new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry>geom);
       var mesh = new microtome.three_d.PrintMesh(g, microtome.three_d.CoreMaterialsFactory.objectMaterial);
       g.computeBoundingBox();
-      var toOriginVector = new THREE.Vector3(0, 0, 0).sub(g.boundingBox.center());
+      var toOriginVector = new THREE.Vector3(0, 0, 0).sub(g.boundingBox.getCenter());
       g.translate(toOriginVector.x, toOriginVector.y, toOriginVector.z);
       g.translate(0, 0, (g.boundingBox.max.z - g.boundingBox.min.z) / 2);
       g.computeBoundingBox();
