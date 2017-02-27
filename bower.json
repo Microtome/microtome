@@ -106,10 +106,11 @@
     "stacky": "https://github.com/PolymerLabs/stacky.git#fa297bb077559544c56b4a123c05df2ff97e9fdc",
     "sw-toolbox": "https://github.com/GoogleChrome/sw-toolbox.git#2a979f3b20a15264e162636bf998e9c45b8f9e39",
     "test-fixture": "git://github.com/polymerelements/test-fixture.git#a7407b76881a7f214250af17108a8792fddfde89",
-    "three.js": "https://github.com/mrdoob/three.js.git#cd5d86ca4436b8baaa46d419ccc4350814be7434",
     "web-animations-js": "git://github.com/web-animations/web-animations-js.git#45d8e40300e82ff02ccfbbc78c89500de0f5616f",
     "web-component-tester": "https://github.com/Polymer/web-component-tester.git#0a56c4de27a316fd9941582401a17a0ee08a8bbd",
-    "webcomponentsjs": "https://github.com/Polymer/webcomponentsjs.git#50f9751f8e638301603aebb33ba9f1e90d2b0d32"
+    "webcomponentsjs": "https://github.com/Polymer/webcomponentsjs.git#50f9751f8e638301603aebb33ba9f1e90d2b0d32",
+    "three.js-examples": "^0.84.0",
+    "threejs": "*"
   },
   "ignore": [],
   "resolutions": {
@@ -329,7 +330,7 @@
       "stacky": "1.3.2",
       "sw-toolbox": "3.2.1",
       "test-fixture": "1.1.1",
-      "three.js": "r75",
+      "three.js": "r83",
       "web-animations-js": "2.2.1",
       "web-component-tester": "4.3.1",
       "webcomponentsjs": "0.7.22"
