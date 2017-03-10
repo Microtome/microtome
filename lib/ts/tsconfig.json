@@ -5,29 +5,14 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "target": "es5",
-    "outFile": "./../../build/lib/js/slicer-lib.js",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "amd",
+    "module": "es6",
     "declaration": true
   },
   "compileOnSave": false,
   "buildOnSave": false,
   "include": [
     "**/*.ts"
-  ],
-  "formatCodeOptions": {
-    "indentSize": 2,
-    "tabSize": 2,
-    "newLineCharacter": "\n",
-    "convertTabsToSpaces": true,
-    "insertSpaceAfterCommaDelimiter": true,
-    "insertSpaceAfterSemicolonInForStatements": true,
-    "insertSpaceBeforeAndAfterBinaryOperators": true,
-    "insertSpaceAfterKeywordsInControlFlowStatements": true,
-    "insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
-    "insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis": false,
-    "placeOpenBraceOnNewLineForFunctions": false,
-    "placeOpenBraceOnNewLineForControlBlocks": false
-  }
+  ]
 }
