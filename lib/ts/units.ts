@@ -21,7 +21,7 @@ export function lengthUnitToString(unit: LengthUnit): String {
 
 export var mm_in_cm: number = 10.0;
 export var mm_in_in: number = 25.4;
-export var mm_in_µm: number = 0.001
+export var mm_in_micron: number = 0.001
 
 export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUnit): number {
   // mm
@@ -32,7 +32,7 @@ export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUni
 
   switch (from) {
     case LengthUnit.MICRON:
-      conversion = value * mm_in_µm;
+      conversion = value * mm_in_micron;
       break;
     case LengthUnit.MILLIMETER:
       conversion = value;
@@ -49,7 +49,7 @@ export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUni
 
   switch (to) {
     case LengthUnit.MICRON:
-      conversion /= mm_in_µm;
+      conversion /= mm_in_micron;
       break;
     case LengthUnit.MILLIMETER:
       break;
