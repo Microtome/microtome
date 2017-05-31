@@ -54,3 +54,11 @@ window communication even inside a self-contained chrome app is severely cripple
   - Seems to be a recent port and works well.
 - Mesh union
 - Mesh repair utilities
+
+## Donations
+
+Donations are always accepted, and will be used for coffee, hardware costs, hosting, and other fees
+
+Bitcoin: 1LsbziuCYKyCY3Urd3Yo7WSsK1Co6wjCqT
+
+Paypal: paypal.me/dajoyce
