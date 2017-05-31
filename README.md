@@ -54,3 +54,10 @@ window communication even inside a self-contained chrome app is severely cripple
   - Seems to be a recent port and works well.
 - Mesh union
 - Mesh repair utilities
+
+## Donation
+
+This project is worked on in my spare time. Donations go towards
+coffee, beer, hardware and software
+
+Bitcoin: 1LsbziuCYKyCY3Urd3Yo7WSsK1Co6wjCqT
