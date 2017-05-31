@@ -2,7 +2,7 @@ title: Microtome
 description: A browser based GPU accelerated 3D model slicer
 google_analytics: 
 show_downloads: false
-theme: jekyll-theme-tactile
+theme: jekyll-theme-slate
 
 gems:
   - jekyll-mentions
