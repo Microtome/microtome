@@ -55,9 +55,11 @@ window communication even inside a self-contained chrome app is severely cripple
 - Mesh union
 - Mesh repair utilities
 
-## Donation
+## Donations
 
-This project is worked on in my spare time. Donations go towards
-coffee, beer, hardware and software
+Donations are always accepted, and will be used for coffee, hardware costs, hosting, and other fees
 
 Bitcoin: 1LsbziuCYKyCY3Urd3Yo7WSsK1Co6wjCqT
+
+Paypal: paypal.me/dajoyce
+
