@@ -1,7 +1,7 @@
 import string from 'rollup-plugin-string';
 
-export default{
-    entry: 'lib/ts/index.js',
+export default {
+    entry: 'build/lib/js/index.js',
     format: 'umd',
     external: ['THREE'],
     dest: 'dist/lib/microtome-lib.js',

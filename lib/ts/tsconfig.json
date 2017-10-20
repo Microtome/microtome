@@ -8,7 +8,8 @@
     "sourceMap": true,
     "newLine": "LF",
     "module": "es6",
-    "declaration": true
+    "declaration": true,
+    "outDir": "../../build/lib/js"
   },
   "compileOnSave": false,
   "buildOnSave": false,

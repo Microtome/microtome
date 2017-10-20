@@ -33,7 +33,7 @@
     "serve:dev": "lite-server -c server-config-dev.json",
     "dev:hot": "concurrently 'npm run serve:dev' 'npm run build:lib:watch' 'npm run build:app:watch'",
     "vulcanize": "mkdir -p dist && vulcanize --inline-scripts --inline-css --redirect '/bower_components|./bower_components' --redirect '/node_modules|./node_modules' --redirect '/lib/js|./build/lib/js' build/app/index.html  > dist/microtome2.html",
-    "rollup:lib": "node rollup-config-lib.js"
+    "rollup:lib": "rollup -c rollup-config-lib.js"
   },
   "engines": {
     "node": ">=5.0.0"
