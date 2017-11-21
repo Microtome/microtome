@@ -1,4 +1,4 @@
-import string from 'rollup-plugin-string';
+import rollupString from 'rollup-plugin-string';
 
 export default {
     entry: 'build/lib/js/index.js',
@@ -9,7 +9,7 @@ export default {
     moduleName: "microtome",
     plugins: [
         // customResolver(),
-        string({
+        rollupString({
             // Required to be specified
             include: 'lib/**/*.glsl',
         })

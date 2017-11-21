@@ -1,5 +1,9 @@
-export * from "./advanced_slicer";
-export * from "./core_threed";
-export * from "./printer_config";
-export * from "./slicer_job";
-export * from "./units";
+import * as slicer from "./advanced_slicer";
+import * as three_d from "./core_threed";
+import * as printer from "./printer_config";
+import * as slicer_job from "./slicer_job";
+import * as units from "./units";
+
+export {
+    slicer, three_d, printer, slicer_job, units
+}

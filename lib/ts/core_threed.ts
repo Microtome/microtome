@@ -1,4 +1,5 @@
 import * as printer from "./printer_config";
+
 // import * as derp from "./derp.glsl";
 // 
 // let z = derp.default;
@@ -260,19 +261,19 @@ void main(void) {
   }
 }`;
 
-  static xLineMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
-  static yLineMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
-  static zLineMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
-  static bBoxMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
-  static whiteMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
-  static flatWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  static objectMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
-  static selectMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
+  static xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
+  static yLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
+  static zLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
+  static bBoxMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
+  static whiteMaterial: THREE.MeshLambertMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
+  static flatWhiteMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  static objectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
+  static selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
 
   /**
   Material for encoding z depth in image rgba
   */
-  static depthMaterial = new THREE.ShaderMaterial({
+  static depthMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._depthShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     blending: THREE.NoBlending
@@ -281,7 +282,7 @@ void main(void) {
   /**
   Material for alpha rendering object intersections.
   */
-  static intersectionMaterial = new THREE.ShaderMaterial({
+  static intersectionMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._intersectionShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     transparent: true,
@@ -295,7 +296,7 @@ void main(void) {
   /**
   Material for slicing
   */
-  static sliceMaterial = new THREE.ShaderMaterial({
+  static sliceMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._sliceShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.DoubleSide,
@@ -304,7 +305,7 @@ void main(void) {
   /**
   Material for erode/dialate
   */
-  static erodeOrDialateMaterial = new THREE.ShaderMaterial({
+  static erodeOrDialateMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._erodeOrDialateShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.DoubleSide,
@@ -315,7 +316,7 @@ void main(void) {
   /**
   Material for copy
   */
-  static copyMaterial = new THREE.ShaderMaterial({
+  static copyMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._copyShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
@@ -326,7 +327,7 @@ void main(void) {
   /**
   Material for xor
   */
-  static xorMaterial = new THREE.ShaderMaterial({
+  static xorMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._xorShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
@@ -337,7 +338,7 @@ void main(void) {
   /**
   Material for or
   */
-  static orMaterial = new THREE.ShaderMaterial({
+  static orMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: CoreMaterialsFactory._orShaderFrag,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
@@ -357,7 +358,7 @@ export class CameraNav {
   /// Camera nav enabled?
   _enabled: boolean;
   _target: CameraTarget = new THREE.Vector3(0.0, 0.0, 0.0);
-  homePosition = new THREE.Vector3(0.0, 0.0, 100.0);
+  homePosition:THREE.Vector3 = new THREE.Vector3(0.0, 0.0, 100.0);
   /// Do we follow mouse movements across the whole window?
   useWholeWindow = true;
   /// Is zooming enabled?
@@ -388,7 +389,7 @@ export class CameraNav {
   // Prevent gimbal lock, we never allow
   // phi to be exactly 0 or PI
   _min_phi_delta = 0.0001;
-  _start = new THREE.Vector2(0.0, 0.0);
+  _start:THREE.Vector2 = new THREE.Vector2(0.0, 0.0);
 
   // private zoomActiveKeyCode:KeyCo = null;
   _currZoomSpeed = 0.0;
@@ -854,7 +855,7 @@ export class PrintMesh extends THREE.Mesh {
 
   private _gvolume: number = null;
 
-  constructor(geometry?: THREE.Geometry, material?: THREE.Material) {
+  constructor(geometry?: THREE.Geometry, material?: THREE.Material| THREE.Material[]) {
     super(geometry, material);
     this._calculateVolume();
   }
