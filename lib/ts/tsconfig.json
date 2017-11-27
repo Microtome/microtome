@@ -5,15 +5,14 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es5",
+    "target": "es2015",
     "sourceMap": true,
     "newLine": "LF",
     "module": "es6",
     "declaration": true,
     "outDir": "../../build/lib/js",
-    "types":[
+    "types": [
       "three",
-      "core-js",
       "jszip"
     ]
   },

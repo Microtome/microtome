@@ -1,9 +1,18 @@
 import * as printer from "./printer_config";
+import * as THREE from "three";
 
+// bring in frag shaders
+import * as erodeDilateShaderFrag from "./shaders/erode_dilate_frag.glsl";
+import * as sliceShaderFrag from './shaders/slice_shader_frag.glsl';
+import * as orShaderFrag from './shaders/or_shader_frag.glsl';
+import * as xorShaderFrag from './shaders/xor_shader_frag.glsl';
+import * as depthShaderFrag from './shaders/depth_shader_frag.glsl';
+import * as copyShaderFrag from './shaders/copy_shader_frag.glsl';
+import * as intersectionShaderFrag from './shaders/intersection_shader_frag.glsl';
+
+// Import shaders from external files
 // import * as derp from "./derp.glsl";
-// 
 // let z = derp.default;
-// 
 // console.log(z);
 
 export interface UniformValue<T> extends THREE.IUniform {
@@ -85,182 +94,6 @@ void main(void) {
    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-  /**
-  * Properly encoding 32 bit float in rgba from here:
-  * http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/
-  */
-  private static _depthShaderFrag = `
-vec4 pack( const in float depth ) {
-    const float toFixed = 255.0/256.0;
-    vec4 result = vec4(0);
-    result.r = fract(depth*toFixed*1.0);
-    result.g = fract(depth*toFixed*255.0);
-    result.b = fract(depth*toFixed*255.0*255.0);
-    result.a = fract(depth*toFixed*255.0*255.0*255.0);
-    return result;
-}
-
-void main() {
-  gl_FragColor = pack(gl_FragCoord.z);
-}`;
-
-  private static _intersectionShaderFrag = `
-// current slice height in device coordinates
-uniform float cutoff;
-
-const float STEPS = 256.0;
-
-void main() {
-  float zCutoff = 1.0 - cutoff;
-
-  if ( gl_FragCoord.z < zCutoff ){
-    discard;
-  }
-
-  if(gl_FrontFacing){
-    gl_FragColor = vec4(1.0,0,0,1.0/STEPS);
-  }else{
-    gl_FragColor = vec4(0,1.0,0,1.0/STEPS);
-  }
-}`;
-
-  private static _copyShaderFrag = `
-// Texture containing depth info of scene
-// packed into rgba
-// Must be same size as current viewport
-uniform sampler2D src;
-
-// View dimensions
-uniform int viewWidth;
-uniform int viewHeight;
-
-void main(void) {
-  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  gl_FragColor = texture2D(src, lookup);
-}  `;
-
-  private static _xorShaderFrag = `
-// Two sources to xor together
-uniform sampler2D src1;
-uniform sampler2D src2;
-
-// View dimensions
-uniform int viewWidth;
-uniform int viewHeight;
-
-void main(void) {
-  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float smpl1 = texture2D(src1, lookup).r;
-  float smpl2 = texture2D(src2, lookup).r;
-  // No XOR yet? :P
-  // float dst = round(smpl1) ^ round(smpl2);
-  float dst = 0.0;
-  if((smpl1 > 0.9 || smpl2 > 0.9) && !(smpl1 > 0.9 && smpl2 > 0.9)){
-    dst = 1.0;
-  }
-  gl_FragColor = vec4(vec3(dst),1);
-}  `;
-
-  private static _orShaderFrag = `
-// Two sources to xor together
-uniform sampler2D src1;
-uniform sampler2D src2;
-
-// View dimensions
-uniform int viewWidth;
-uniform int viewHeight;
-
-void main(void) {
-  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float smpl1 = texture2D(src1, lookup).r;
-  float smpl2 = texture2D(src2, lookup).r;
-  // No OR yet? :P
-  // float dst = round(smpl1) || round(smpl2);
-  float dst = 0.0;
-  if(smpl1 > 0.9 || smpl2 > 0.9){
-    dst = 1.0;
-  }
-  gl_FragColor = vec4(vec3(dst),1);
-}  `;
-
-  /**
-  * This shader frag supports structuring elements up to 17x17
-  * ( pixelRadius = 8) in size, any larger will yield strange results
-  * Multiple passes can be used instead for erosion/dilation
-  * of large values.
-  *
-  * WebGL uses GSLS 100, so proper dynamic sized loops are not supported.
-  *
-  * Should be revisited when WebGL 2.0 comes out with ES 3.0 support
-  */
-  private static _erodeOrDialateShaderFrag = `
-// Image to be dialated/eroded
-uniform sampler2D src;
-
-// View dimensions
-uniform int viewWidth;
-uniform int viewHeight;
-
-// Radius of sampling area
-uniform int pixels;
-// If == 1, dilate, else erode
-uniform int dilate;
-
-float s2f(const in vec4 smpl){
-  return (smpl.r + smpl.g + smpl.b) / 3.0;
-}
-
-void main(void) {
-  int pr2 = pixels * pixels;
-  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  float test = s2f(texture2D(src, lookup));
-  for(int i = -10; i <= 10; i++ ){
-    for(int j = -10; j <= 10; j++ ){
-      if( i*i + j*j <= pr2 ){
-        vec2 offset = vec2(i,j)/ vec2(viewWidth,viewHeight);
-        float s2 = s2f(texture2D(src, lookup + offset));
-        if(dilate == 1){
-          test = max(test, s2);
-        }else{
-          test = min(test, s2);
-        }
-      }
-    }
-  }
-  gl_FragColor = vec4(vec3(test),1);
-}  `;
-
-  private static _sliceShaderFrag = `
-// current slice height in device coordinates
-uniform float cutoff;
-// Alpha image sampling which can
-// be used to check inside/outside
-uniform sampler2D iTex;
-uniform int viewWidth;
-uniform int viewHeight;
-
-const float STEPS = 256.0;
-
-void main(void) {
-  vec2 lookup = gl_FragCoord.xy / vec2(viewWidth, viewHeight );
-  vec4 color = texture2D(iTex, lookup);
-  float shouldBeWhite = (color.g - color.r) * (STEPS - 1.0);
-  float zCutoff = 1.0 - cutoff;
-  if ( gl_FragCoord.z < zCutoff ){
-    discard;
-  }
-
-  if(gl_FrontFacing){
-    if(shouldBeWhite > 0.0){
-      gl_FragColor = vec4(vec3(1), 1);
-    } else {
-      gl_FragColor = vec4(0,0,0, 1);
-    }
-  } else {
-    gl_FragColor = vec4(vec3(1),1);
-  }
-}`;
-
   static xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
   static yLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
   static zLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
@@ -273,8 +106,8 @@ void main(void) {
   /**
   Material for encoding z depth in image rgba
   */
-  static depthMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._depthShaderFrag,
+  static depthMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: depthShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     blending: THREE.NoBlending
   });
@@ -282,8 +115,8 @@ void main(void) {
   /**
   Material for alpha rendering object intersections.
   */
-  static intersectionMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._intersectionShaderFrag,
+  static intersectionMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: intersectionShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     transparent: true,
     side: THREE.DoubleSide,
@@ -296,8 +129,8 @@ void main(void) {
   /**
   Material for slicing
   */
-  static sliceMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._sliceShaderFrag,
+  static sliceMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: sliceShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.DoubleSide,
     blending: THREE.NoBlending,
@@ -305,8 +138,8 @@ void main(void) {
   /**
   Material for erode/dialate
   */
-  static erodeOrDialateMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._erodeOrDialateShaderFrag,
+  static erodeOrDialateMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: erodeDilateShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.DoubleSide,
     blending: THREE.NoBlending,
@@ -316,8 +149,8 @@ void main(void) {
   /**
   Material for copy
   */
-  static copyMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._copyShaderFrag,
+  static copyMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: copyShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
     blending: THREE.NoBlending,
@@ -327,8 +160,8 @@ void main(void) {
   /**
   Material for xor
   */
-  static xorMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._xorShaderFrag,
+  static xorMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: xorShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
@@ -338,8 +171,8 @@ void main(void) {
   /**
   Material for or
   */
-  static orMaterial:THREE.ShaderMaterial = new THREE.ShaderMaterial({
-    fragmentShader: CoreMaterialsFactory._orShaderFrag,
+  static orMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+    fragmentShader: orShaderFrag.default,
     vertexShader: CoreMaterialsFactory._basicVertex,
     side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
@@ -358,7 +191,7 @@ export class CameraNav {
   /// Camera nav enabled?
   _enabled: boolean;
   _target: CameraTarget = new THREE.Vector3(0.0, 0.0, 0.0);
-  homePosition:THREE.Vector3 = new THREE.Vector3(0.0, 0.0, 100.0);
+  homePosition: THREE.Vector3 = new THREE.Vector3(0.0, 0.0, 100.0);
   /// Do we follow mouse movements across the whole window?
   useWholeWindow = true;
   /// Is zooming enabled?
@@ -389,7 +222,7 @@ export class CameraNav {
   // Prevent gimbal lock, we never allow
   // phi to be exactly 0 or PI
   _min_phi_delta = 0.0001;
-  _start:THREE.Vector2 = new THREE.Vector2(0.0, 0.0);
+  _start: THREE.Vector2 = new THREE.Vector2(0.0, 0.0);
 
   // private zoomActiveKeyCode:KeyCo = null;
   _currZoomSpeed = 0.0;
@@ -855,7 +688,7 @@ export class PrintMesh extends THREE.Mesh {
 
   private _gvolume: number = null;
 
-  constructor(geometry?: THREE.Geometry, material?: THREE.Material| THREE.Material[]) {
+  constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
     super(geometry, material);
     this._calculateVolume();
   }

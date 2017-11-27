@@ -2,6 +2,9 @@ import * as slicer from "./advanced_slicer";
 import * as printer from "./printer_config";
 import * as three_d from "./core_threed";
 
+import * as THREE from "three";
+import * as JSZip from "jszip";
+
 /**
 * Class that actually handles the slicing job. Not reusable
 */
@@ -28,20 +31,30 @@ export class HeadlessToZipSlicerJob {
   private readonly SLICE_TIME = 20;
   private cancelled = false;
 
+  /**
+   * Create a headless slicing job that slices to
+   * a zip compressed blob
+   * 
+   * INSTANCES CAN NOT BE REUSED
+   * 
+   * @param scene to slice
+   * @param printerCfg printer configuration 
+   * @param jobCfg job configuration
+   */
   constructor(private scene: three_d.PrinterScene,
-    private cfg: printer.PrinterConfig,
+    private printerCfg: printer.PrinterConfig,
     private jobCfg: printer.PrintJobConfig) {
     let shellInset_mm = -1;
     let raftOutset_mm = jobCfg.raftOutset_mm || 0;
-    let pixelWidthMM = this.scene.printVolume.width / cfg.projector.xRes_px;
-    let pixelHeightMM = this.scene.printVolume.depth / cfg.projector.yRes_px;
+    let pixelWidthMM = this.scene.printVolume.width / printerCfg.projector.xRes_px;
+    let pixelHeightMM = this.scene.printVolume.depth / printerCfg.projector.yRes_px;
     this.raftThickness_mm = this.jobCfg.raftThickness_mm;
     this.zStep_mm = (this.jobCfg.stepDistance_microns * this.jobCfg.stepsPerLayer) / 1000;
-    this.renderer.setSize(cfg.projector.xRes_px, cfg.projector.yRes_px);
-    this.canvasElement.style.width = `${cfg.projector.xRes_px}px`;
-    this.canvasElement.style.height = `${cfg.projector.yRes_px}px`;
-    this.canvasElement.width = cfg.projector.xRes_px;
-    this.canvasElement.height = cfg.projector.yRes_px;
+    this.renderer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
+    this.canvasElement.style.width = `${printerCfg.projector.xRes_px}px`;
+    this.canvasElement.style.height = `${printerCfg.projector.yRes_px}px`;
+    this.canvasElement.width = printerCfg.projector.xRes_px;
+    this.canvasElement.height = printerCfg.projector.yRes_px;
     this.slicer = new slicer.AdvancedSlicer(scene,
       pixelWidthMM,
       pixelHeightMM,
@@ -56,11 +69,9 @@ export class HeadlessToZipSlicerJob {
     this.z = this.zStep_mm * this.sliceNum;
     this.slicer.sliceAtToBlob(this.z, blob => {
       // console.log("SLICE!!!");
-      this.zip.file(`${this.sliceNum}.png`, blob, { compression: "store" })
+      let sname = this.sliceNum.toString().padStart(8, "0");
+      this.zip.file(`${sname}.png`, blob, { compression: "store" })
       this.sliceNum++;
-      if (this.sliceNum % 20 == 0) {
-        console.log(`Layer ${this.sliceNum}, height: ${this.z}`);
-      }
       this.scheduleNextSlice();
     });
     ;
@@ -93,11 +104,13 @@ export class HeadlessToZipSlicerJob {
 
   /**
   * Execute the slicing job
+  *
+  * @returns a Promise yiedling a zip compressed blob of slice images 
   */
   execute(validate: boolean = false): Promise<Blob> {
     let config = {
       job: this.jobCfg,
-      printer: this.cfg
+      printer: this.printerCfg
     }
     try {
       this.doSlice();

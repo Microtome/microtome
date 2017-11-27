@@ -2,8 +2,8 @@ import rollupString from 'rollup-plugin-string';
 
 export default {
     entry: 'build/lib/js/index.js',
-    format: 'umd',
-    external: ['THREE'],
+    format: 'es',
+    external: ['three', 'jszip'],
     dest: 'dist/lib/microtome-lib.js',
     sourceMap: true,
     moduleName: "microtome",
@@ -11,7 +11,9 @@ export default {
         // customResolver(),
         rollupString({
             // Required to be specified
-            include: 'lib/**/*.glsl',
+            include: 'build/lib/js/**/*.glsl',
         })
-    ]
+    ],
+    paths: {
+    }
 };
