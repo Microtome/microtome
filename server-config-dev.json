@@ -1,11 +1,14 @@
 {
   "port": 8080,
-  "files": ["./build/**/*.{html,htm,css,js}"],
+  "files": [
+    "./app/**/*.{html,htm,css,js}"
+  ],
   "server": {
-    "baseDir": "./build/app",
+    "baseDir": "./app",
     "routes": {
-      "/bower_components": "./bower_components",
-      "/node_modules": "./node_modules",
+      "/lib/js/three": "./node_modules/three/build/three.module.js",
+      "/lib/js/jszip": "./node_modules/jszip/dist/jszip.js",
+      "/lib/js/microtome-lib": "./dist/lib/microtome-lib.js",
       "/lib/js": "./build/lib/js"
     }
   }

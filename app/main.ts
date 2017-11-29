@@ -1,0 +1,1 @@
+import * as microtome from "../dist/lib/microtome"
