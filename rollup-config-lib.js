@@ -1,4 +1,5 @@
 import rollupString from 'rollup-plugin-string';
+import sourcemaps from 'rollup-plugin-sourcemaps';
 
 export default {
     entry: 'build/lib/js/index.js',
@@ -12,8 +13,11 @@ export default {
         rollupString({
             // Required to be specified
             include: 'build/lib/js/**/*.glsl',
-        })
+        }),
+        sourcemaps()
     ],
     paths: {
+        "three": "/lib/js/three",
+        "jszip": "/lib/js/jszip"
     }
 };
