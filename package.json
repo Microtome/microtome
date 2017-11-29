@@ -11,18 +11,18 @@
     "connect-history-api-fallback": "^1.1.0",
     "jshint-stylish": "^2.0.0",
     "lite-server": "2.2.2",
-    "yarn": "^5.4.2",
     "recursive-copy": "^2.0.7",
-    "rollup": "^0.41.4",
+    "rollup": "^0.50.0",
+    "rollup-plugin-sourcemaps": "^0.4.2",
     "rollup-plugin-string": "^2.0.2",
     "run-sequence": "^1.0.2",
     "typescript": "^2.6.1",
     "vulcanize": "^1.14.12",
-    "watch": "^1.0.1",
-    "wrappy": "^1.0.1"
+    "watch": "^1.0.1"
   },
   "scripts": {
-    "copy:resources": "node ./scripts/copy_resources.js",
+    "copy:definitions": "node ./scripts/copy_definitions.js",
+    "copy:resources": "node ./scripts/copy_shaders.js",
     "clean": "rm -rf ./dist && rm -rf ./build",
     "build:lib": "tsc -p lib/ts && yarn run copy:resources",
     "build:app": "tsc -p app && cp -r app/ build/",
@@ -33,7 +33,7 @@
     "serve:dev": "lite-server -c server-config-dev.json",
     "dev:hot": "concurrently 'yarn run serve:dev' 'yarn run build:lib:watch' 'yarn run build:app:watch'",
     "vulcanize": "mkdir -p dist && vulcanize --inline-scripts --inline-css --redirect '/bower_components|./bower_components' --redirect '/node_modules|./node_modules' --redirect '/lib/js|./build/lib/js' build/app/index.html  > dist/microtome2.html",
-    "rollup:lib": "rollup -c rollup-config-lib.js"
+    "rollup:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions"
   },
   "engines": {
     "node": ">=5.0.0"
@@ -41,7 +41,6 @@
   "dependencies": {
     "file-saverjs": "^1.3.5",
     "jszip": "^3.1.3",
-    "three": "^0.88.0",
-    "typescript-formatter": "^5.1.1"
+    "three": "^0.88.0"
   }
 }
