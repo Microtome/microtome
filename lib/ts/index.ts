@@ -4,6 +4,8 @@ import * as printer from "./printer_config";
 import * as slicer_job from "./slicer_job";
 import * as units from "./units";
 
+console.debug("Microtome Slicing Library loaded.");
+
 export {
     slicer, three_d, printer, slicer_job, units
 }
