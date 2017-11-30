@@ -5,13 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slicer Test App</title>
-    <!-- <script type="module" src="/lib/js/three"></script> -->
+    <script type="module" src="/lib/js/three"></script>
     <script src="/lib/js/jszip" defer></script>
-    <script type="module" src="/lib/js/microtome-lib"></script>
+    <!-- <script type="module" src="/lib/js/microtome-lib"></script> -->
+    <script type="module" src="/lib/js/main"></script>
+    <style>
+        #preview-div {
+            height: 480px;
+            width: 640px;
+            border: none;
+            padding: none;
+            margin: none;
+            background-color: red;
+        }
+
+        #preview-div canvas {
+            background-color: #000
+        }
+    </style>
 </head>
 
 <body>
-    <canvas id="test" width="640" height="480"></canvas>
+    <div id="preview-div"></div>
 </body>
 
 </html>

@@ -4,17 +4,21 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es5",
+    "target": "es2015",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "umd"
+    "module": "es6",
+    "baseUrl": ".",
+    "paths": {
+      "microtome": [
+        "../dist/lib/microtome/index.d.ts"
+      ]
+    }
   },
   "compileOnSave": false,
   "buildOnSave": false,
   "include": [
-    "./**/*.ts",
-    "../dist/lib/*.d.ts",
-    "../local_typings/**/*.d.ts"
+    "./**/*.ts"
   ],
   "formatCodeOptions": {
     "indentSize": 2,
