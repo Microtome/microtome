@@ -10,7 +10,7 @@
     "newLine": "LF",
     "module": "es6",
     "declaration": true,
-    "outDir": "../../build/lib/js",
+    "outDir": "../../build/lib/js/microtome",
     "types": [
       "three",
       "jszip"
