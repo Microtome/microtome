@@ -8,7 +8,8 @@
     "routes": {
       "/lib/js/three": "./node_modules/three/build/three.module.js",
       "/lib/js/jszip": "./node_modules/jszip/dist/jszip.js",
-      "/lib/js/microtome-lib": "./dist/lib/microtome-lib.js",
+      "/lib/js/microtome": "./dist/lib/microtome.js",      
+      "/lib/js/main": "./dist/app/main.js",
       "/lib/js": "./build/lib/js"
     }
   }
