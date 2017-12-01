@@ -14,7 +14,8 @@
     "types": [
       "three",
       "jszip"
-    ]
+    ],
+    "jsx": "preserve"
   },
   "compileOnSave": false,
   "buildOnSave": false,

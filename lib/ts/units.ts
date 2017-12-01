@@ -1,4 +1,4 @@
-export enum LengthUnit { MICRON, MILLIMETER, CENTIMETER, INCH }
+export const enum LengthUnit { MICRON, MILLIMETER, CENTIMETER, INCH }
 
 export function lengthUnitToAbbrev(unit: LengthUnit): String {
   switch (unit) {
@@ -19,9 +19,9 @@ export function lengthUnitToString(unit: LengthUnit): String {
   return unit.toString().toLowerCase();
 }
 
-export var mm_in_cm: number = 10.0;
-export var mm_in_in: number = 25.4;
-export var mm_in_micron: number = 0.001
+export const mm_in_cm: number = 10.0;
+export const mm_in_in: number = 25.4;
+export const mm_in_micron: number = 0.001
 
 export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUnit): number {
   // mm
