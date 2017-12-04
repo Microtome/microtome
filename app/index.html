@@ -10,7 +10,8 @@
     <!-- <script type="module" src="/lib/js/microtome-lib"></script> -->
     <script type="module" src="/lib/js/main"></script>
     <style>
-        #preview-div {
+
+        div.render-target {
             height: 480px;
             width: 640px;
             border: none;
@@ -19,14 +20,20 @@
             background-color: red;
         }
 
-        #preview-div canvas {
+        #pvview-div canvas, #spreview-div canvas {
             background-color: #000
+        }
+
+        #spreview-div {
+            /* display: none */
         }
     </style>
 </head>
 
 <body>
-    <div id="preview-div"></div>
+    <div id="pvview-div" class="render-target"></div>
+    <div id="spreview-div" class="render-target"></div>
+    
 </body>
 
 </html>

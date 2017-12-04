@@ -7,14 +7,10 @@ export default {
     external: ['three', 'jszip', 'microtome'],
     dest: 'dist/app/main.js',
     sourceMap: true,
-    moduleName: "microtome",
+    moduleName: "main",
     plugins: [
         // Relative Paths module 
         // TODO BRING IN!!!
-        rollupString({
-            // Required to be specified
-            include: 'build/lib/js/microtome/**/*.glsl',
-        }),
         sourcemaps()
     ],
     paths: {

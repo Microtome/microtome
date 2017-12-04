@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "moduleResolution": "node",
     "experimentalDecorators": true,
     "noImplicitAny": true,
     "removeComments": true,
@@ -11,7 +12,7 @@
     "baseUrl": ".",
     "paths": {
       "microtome": [
-        "../dist/lib/microtome/index.d.ts"
+        "../build/lib/js/microtome/index.d.ts"
       ]
     }
   },
