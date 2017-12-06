@@ -10,8 +10,12 @@
     <!-- <script type="module" src="/lib/js/microtome-lib"></script> -->
     <script type="module" src="/lib/js/main"></script>
     <style>
+        html {
+            font-family: sans-serif;
+        }
 
         div.render-target {
+            float: left;
             height: 480px;
             width: 640px;
             border: none;
@@ -20,20 +24,65 @@
             background-color: red;
         }
 
-        #pvview-div canvas, #spreview-div canvas {
+        #pvview-div canvas,
+        #spreview-div canvas {
             background-color: #000
         }
 
         #spreview-div {
             /* display: none */
         }
+
+        .flex-h {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .flex-v {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding-top: 5px;
+            vertical-align: middle;
+        }
+
+        label>span{
+            width:100px;
+            text-align: right;
+        }
+
+        label>span::after{
+            content: ": "
+        }
+
+        label>input {
+            flex-grow: 1;
+        }
     </style>
 </head>
 
 <body>
-    <div id="pvview-div" class="render-target"></div>
-    <div id="spreview-div" class="render-target"></div>
-    
+    <div class="flex-h">
+        <div id="pvview-div" class="render-target"></div>
+        <div class="flex-v">
+            <div id="spreview-div" class="render-target"></div>
+            <label><span>Slice At</span>
+                <input id="slice-at" type="range">
+            </label>
+            <label><span>Raft</span>
+                <input type="checkbox">
+            </label>
+            <label><span>Hollow</span>
+                <input type="checkbox">
+            </label>
+        </div>
+    </div>
+
 </body>
 
 </html>
