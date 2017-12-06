@@ -11,6 +11,7 @@
     "connect-history-api-fallback": "^1.1.0",
     "jshint-stylish": "^2.0.0",
     "lite-server": "2.2.2",
+    "nodemon": "^1.12.4",
     "recursive-copy": "^2.0.7",
     "rollup": "^0.50.0",
     "rollup-plugin-sourcemaps": "^0.4.2",
@@ -26,15 +27,13 @@
     "clean": "rm -rf ./dist && rm -rf ./build",
     "build:lib": "tsc -p lib/ts && yarn run copy:resources",
     "build:app": "tsc -p app && cp -r app/ build/",
-    "build": "yarn run build:lib && yarn run build:app",
-    "build:lib:watch": "watch 'yarn run build:lib' ./lib -d --wait=10",
-    "build:app:watch": "watch 'yarn run build:app' ./app -d --wait=10",
+    "build:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib/ts --watch app --ext css,html,ts,glsl",
     "all": "yarn run clean && yarn run build",
+    "dist:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
+    "dist:app": "rollup -c rollup-config-app.js",
     "serve:dev": "lite-server -c server-config-dev.json",
-    "dev:hot": "concurrently 'yarn run serve:dev' 'yarn run build:lib:watch' 'yarn run build:app:watch'",
-    "vulcanize": "mkdir -p dist && vulcanize --inline-scripts --inline-css --redirect '/bower_components|./bower_components' --redirect '/node_modules|./node_modules' --redirect '/lib/js|./build/lib/js' build/app/index.html  > dist/microtome2.html",
-    "rollup:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
-    "rollup:app": "rollup -c rollup-config-app.js"
+    "serve:hot:kafkserwer": "concurrently 'yarn run serve:dev' 'yarn run build:app:watch'",
+    "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run build:all:watch'"
   },
   "engines": {
     "node": ">=5.0.0"
