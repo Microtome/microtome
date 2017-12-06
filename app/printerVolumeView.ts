@@ -91,7 +91,7 @@ export class PrinterVolumeView {
         }
     
         pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
-            console.log(arguments);
+            // console.log(arguments);
             if (newMesh && newMesh.rotation && newMesh.scale) {
                 var rotation = newMesh.rotation;
                 this.rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
@@ -147,7 +147,8 @@ export class PrinterVolumeView {
             this.camNav.target = this.scene.printVolume;
             this.camNav.frameTarget();
             this.startRendering();
-            console.log(this);
+            
+            // console.log(this);
         }
     
         public detached() {

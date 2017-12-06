@@ -80,6 +80,7 @@ export class SlicePreview {
         var pvd = this.scene.printVolume.depth;
         var scaleh = div.clientHeight / pvd;
         var scalew = div.clientWidth / pvw;
+        
         var scale = scaleh < scalew ? scaleh : scalew;
         this._renderer.setSize(pvw * scale, pvd * scale);
         canvas.style.width = `${pvw * scale}px`;
