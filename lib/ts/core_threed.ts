@@ -32,9 +32,9 @@ export class IntegerUniform implements UniformValue<number>{
   }
 }
 
-export class TextureUniform implements UniformValue<THREE.WebGLRenderTarget>{
+export class TextureUniform implements UniformValue<THREE.Texture>{
   type: string = 't'
-  constructor(public value: THREE.WebGLRenderTarget) {
+  constructor(public value: THREE.Texture) {
   }
 }
 
@@ -683,7 +683,7 @@ export class PrinterScene extends THREE.Scene {
   }
 }
 
-
+// TODO Turn into extension method
 export class PrintMesh extends THREE.Mesh {
 
   private _gvolume: number = null;

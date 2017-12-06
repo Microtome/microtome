@@ -200,7 +200,7 @@ export class AdvancedSlicer {
       while (dilatePixels > 0) {
         let pixels = dilatePixels % 10 || 10;
         dilatePixels = dilatePixels - pixels;
-        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1);
+        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1.texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
         this.erodeDialateMaterial.needsUpdate = true;
         this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
@@ -214,6 +214,7 @@ export class AdvancedSlicer {
   }
 
   private renderSlice(z: number) {
+
     this.renderSliceCommon(z);
     if (this.shellErodePixels > 0) {
       this.renderShelledSlice2(z);
@@ -227,8 +228,8 @@ export class AdvancedSlicer {
     this.erodeOrDilate(this.shellErodePixels, false);
     // X-Y shelling to temp target 1
     this.scene.overrideMaterial = this.xorMaterial;
-    this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget);
-    this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1);
+    this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget.texture);
+    this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
     this.xorMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
   }
@@ -255,22 +256,22 @@ export class AdvancedSlicer {
     // Use OR material to combine
     this.sliceBackground.visible = true;
     this.scene.overrideMaterial = this.orMaterial;
-    this.orMaterialUniforms.src1 = new core.TextureUniform(this.tempTarget1);
-    this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget2);
+    this.orMaterialUniforms.src1 = new core.TextureUniform(this.tempTarget1.texture);
+    this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget2.texture);
     this.orMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.zshellTarget, true);
 
     this.erodeOrDilate(this.shellErodePixels, false);
     // X-Y shelling to temp target 1
     this.scene.overrideMaterial = this.xorMaterial;
-    this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget);
-    this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1);
+    this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget.texture);
+    this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
     this.xorMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
     // OR X-Y with Z shell
     this.scene.overrideMaterial = this.orMaterial;
-    this.orMaterialUniforms.src1 = new core.TextureUniform(this.zshellTarget);
-    this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1);
+    this.orMaterialUniforms.src1 = new core.TextureUniform(this.zshellTarget.texture);
+    this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
     this.orMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
   }
@@ -295,11 +296,12 @@ export class AdvancedSlicer {
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
     this.intersectionTestMaterial.needsUpdate = true;
+    // console.log(this.scene, this.sliceCamera, this.tempTarget2);
     this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
     // this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
     // Render slice to maskTarget
     this.scene.overrideMaterial = this.sliceMaterial;
-    this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.tempTarget2);
+    this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.tempTarget2.texture);
     this.sliceMaterialUniforms.cutoff.value = sliceZ;
     this.sliceMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.maskTarget, true);
@@ -328,7 +330,7 @@ export class AdvancedSlicer {
       while (dilatePixels > 0) {
         let pixels = dilatePixels % 10 || 10;
         dilatePixels = dilatePixels - pixels;
-        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1);
+        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1.texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
         this.erodeDialateMaterial.needsUpdate = true;
         this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
@@ -349,7 +351,7 @@ export class AdvancedSlicer {
     this.scene.hidePrintObjects();
     this.sliceBackground.visible = true;
     // this.copyMaterialUniforms.src = new core.TextureUniform(this.finalCompositeTarget);
-    this.copyMaterialUniforms.src = new core.TextureUniform(srcTarget);
+    this.copyMaterialUniforms.src = new core.TextureUniform(srcTarget.texture);
     this.copyMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera);
   }
@@ -392,7 +394,7 @@ export class AdvancedSlicer {
       this.lastWidth = width;
       this.lastHeight = height;
       dirty = true;
-      window.console.log(this);
+      // window.console.log(this);
     }
     return dirty;
   }
