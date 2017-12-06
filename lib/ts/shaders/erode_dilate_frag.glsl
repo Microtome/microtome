@@ -1,6 +1,6 @@
 /**
-* This shader frag supports structuring elements up to 17x17
-* ( pixelRadius = 8) in size, any larger will yield strange results
+* This shader frag supports structuring elements up to 20x20
+* ( pixelRadius = 10) in size, any larger will yield strange results
 * Multiple passes can be used instead for erosion/dilation
 * of large values.
 *
