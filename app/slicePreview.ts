@@ -23,7 +23,7 @@ export class SlicePreview {
     constructor(private _canvasHome: HTMLDivElement, private scene: PrinterScene) {
         this.attached();
         this._slicer = new microtome.slicer.AdvancedSlicer(
-            this.scene, 0.1, 0.1, 1.5, 2.5, 0, _canvasHome);
+            this.scene, 0.1, 0.1, 1.5, 5, 0, _canvasHome);
     }
 
     public attached() {
