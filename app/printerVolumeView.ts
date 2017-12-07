@@ -139,15 +139,12 @@ export class PrinterVolumeView {
 
     public attached() {
         this.canvasElement.addEventListener("mousedown", (e) => {
-            console.log(e);
             this.preparePick(e);
         });
         this.canvasElement.addEventListener("mousemove", (e) => {
-            console.log(e);
             this.cancelPick(e);
         });
         this.canvasElement.addEventListener("mouseup", (e) => {
-            console.log(e);
             this.tryPick(e);
         });
         this.canvasHome.appendChild(this.canvasElement);
