@@ -121,7 +121,8 @@ export class AdvancedSlicer {
     public pixelHeightMM: number,
     public raftThicknessMM: number,
     public raftOffset: number,
-    public shellInset: number) {
+    public shellInset: number,
+    div: HTMLDivElement = undefined) {
     var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
     var planeMaterial = core.CoreMaterialsFactory.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
@@ -137,19 +138,10 @@ export class AdvancedSlicer {
     this.orMaterial.uniforms = this.orMaterialUniforms;
     this.intersectionTestMaterial.uniforms = this.intersectionMaterialUniforms;
     this.sliceMaterial.uniforms = this.sliceMaterialUniforms;
-  }
-
-  /**
-   * Append the canvas element that contains the webgl 
-   * slicing context to the given div. 
-   * 
-   * Existing children of the div are removed!
-   * 
-   * @param div the div to append this element to. 
-   */
-  rehomeTo(div: HTMLDivElement) {
-    div.innerHTML = "";
-    div.appendChild(this.renderer.domElement);
+    if(!!div){
+      div.innerHTML = "";
+      div.appendChild(this.renderer.domElement);
+    }
   }
 
   /**

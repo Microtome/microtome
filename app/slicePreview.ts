@@ -8,17 +8,13 @@ type PrinterScene = microtome.three_d.PrinterScene;
  */
 export class SlicePreview {
 
-    // private _canvasElement: HTMLCanvasElement = this._renderer.domElement;
-
     private static _ORIGIN = new THREE.Vector3(0, 0, 0);
 
     private _pvObjectGroup = new THREE.Group();
 
     private _reqAnimFrameHandle: number;
 
-    // private _slicer: microtome.slicer.Slicer = new microtome.slicer.Slicer(this.scene, this._renderer);
-    private _slicer: microtome.slicer.AdvancedSlicer = new microtome.slicer.AdvancedSlicer(
-        this.scene, 0.1, 0.1, 1.5, 2.5, 0);
+    private _slicer: microtome.slicer.AdvancedSlicer 
 
     public disabled: boolean = false;
 
@@ -26,11 +22,11 @@ export class SlicePreview {
 
     constructor(private _canvasHome: HTMLDivElement, private scene: PrinterScene) {
         this.attached();
+        this._slicer = new microtome.slicer.AdvancedSlicer(
+            this.scene, 0.1, 0.1, 1.5, 2.5, 0, _canvasHome);
     }
 
     public attached() {
-        // this._canvasElement.className += " fit"
-        this._slicer.rehomeTo(this._canvasHome);
         this._startRendering();
     }
 
