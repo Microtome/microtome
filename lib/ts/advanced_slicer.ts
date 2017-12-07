@@ -23,6 +23,9 @@ hollow shells, etc.
 */
 export class AdvancedSlicer {
 
+  // Renderer used for slicing
+  private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ alpha: false, antialias: false, clearColor: 0x000000 });
+
   // Slice camera
   private sliceCamera: THREE.OrthographicCamera = null;
   // z-shell camera
@@ -118,8 +121,7 @@ export class AdvancedSlicer {
     public pixelHeightMM: number,
     public raftThicknessMM: number,
     public raftOffset: number,
-    public shellInset: number,
-    private renderer: THREE.WebGLRenderer) {
+    public shellInset: number) {
     var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
     var planeMaterial = core.CoreMaterialsFactory.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
@@ -135,6 +137,36 @@ export class AdvancedSlicer {
     this.orMaterial.uniforms = this.orMaterialUniforms;
     this.intersectionTestMaterial.uniforms = this.intersectionMaterialUniforms;
     this.sliceMaterial.uniforms = this.sliceMaterialUniforms;
+  }
+
+  /**
+   * Append the canvas element that contains the webgl 
+   * slicing context to the given div. 
+   * 
+   * Existing children of the div are removed!
+   * 
+   * @param div the div to append this element to. 
+   */
+  rehomeTo(div: HTMLDivElement) {
+    div.innerHTML = "";
+    div.appendChild(this.renderer.domElement);
+  }
+
+  /**
+   * Resize the slicer dimensions
+   * 
+   * This controls the final image size
+   * 
+   * @param width new width
+   * @param height new height
+   */
+  setSize(width: number, height: number) {
+    this.renderer.setSize(width, height);
+    let canvas = this.renderer.domElement;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
   }
 
   /**
@@ -291,14 +323,11 @@ export class AdvancedSlicer {
     this.scene.showPrintObjects();
     let buildVolHeight = this.scene.printVolume.boundingBox.max.z;
     let sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + buildVolHeight);
-    // window.console.log(`Render Slice At m:${z} => ${z / buildVolHeight} => ${sliceZ}`);
     // Intersection test material to temp2
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
     this.intersectionTestMaterial.needsUpdate = true;
-    // console.log(this.scene, this.sliceCamera, this.tempTarget2);
     this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-    // this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
     // Render slice to maskTarget
     this.scene.overrideMaterial = this.sliceMaterial;
     this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.tempTarget2.texture);

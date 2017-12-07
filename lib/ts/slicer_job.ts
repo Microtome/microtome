@@ -11,8 +11,6 @@ import * as JSZip from "jszip";
 export class HeadlessToZipSlicerJob {
 
   private readonly slicer: slicer.AdvancedSlicer;
-  private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ alpha: false, antialias: false, clearColor: 0x000000 });
-  private canvasElement: HTMLCanvasElement = this.renderer.domElement;
   private raftThickness_mm: number = 0;
   // private raftZStep_mm: number = 0;
   private zStep_mm: number = 0;
@@ -50,18 +48,13 @@ export class HeadlessToZipSlicerJob {
     let pixelHeightMM = this.scene.printVolume.depth / printerCfg.projector.yRes_px;
     this.raftThickness_mm = this.jobCfg.raftThickness_mm;
     this.zStep_mm = (this.jobCfg.stepDistance_microns * this.jobCfg.stepsPerLayer) / 1000;
-    this.renderer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
-    this.canvasElement.style.width = `${printerCfg.projector.xRes_px}px`;
-    this.canvasElement.style.height = `${printerCfg.projector.yRes_px}px`;
-    this.canvasElement.width = printerCfg.projector.xRes_px;
-    this.canvasElement.height = printerCfg.projector.yRes_px;
+    this.slicer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
     this.slicer = new slicer.AdvancedSlicer(scene,
       pixelWidthMM,
       pixelHeightMM,
       this.raftThickness_mm,
       raftOutset_mm,
-      shellInset_mm,
-      this.renderer)
+      shellInset_mm)
   }
 
   private doSlice() {
