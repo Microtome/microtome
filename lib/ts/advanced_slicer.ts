@@ -17,14 +17,27 @@ export const FAR_Z_PADDING: number = 1.0;
 export const CAMERA_NEAR: number = 1.0;
 export const SLICER_BACKGROUND_Z = -0.1;
 
+interface RenderTargets {
+  mask: THREE.WebGLRenderTarget,
+  scratch: THREE.WebGLRenderTarget,
+  temp1: THREE.WebGLRenderTarget,
+  temp2: THREE.WebGLRenderTarget,
+  temp3: THREE.WebGLRenderTarget
+}
+
+type TargetName = keyof RenderTargets;
+
 /**
-Advanced slicer supporting shelling, support pattern generation,
-hollow shells, etc.
+Advanced slicer supporting intersecting volumes
 */
 export class AdvancedSlicer {
 
   // Renderer used for slicing
-  private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ alpha: false, antialias: false, clearColor: 0x000000 });
+  private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({
+    alpha: false,
+    antialias: false,
+    clearColor: 0x000000
+  });
 
   // Scene containing a single quad for copying data
   // amongst shaders
@@ -35,38 +48,35 @@ export class AdvancedSlicer {
   // z-shell camera
   private zShellCamera: THREE.OrthographicCamera = null;
 
-  // Final composition target where final image is composed
-  private finalCompositeTarget: THREE.WebGLRenderTarget = null;
-
-  // Because of how we slice, we can't use stencil buffer
-  private maskTarget: THREE.WebGLRenderTarget = null;
-
-  // // Depth target
-  // private depthTarget: THREE.WebGLRenderTarget = null;
-
-  // Temp target 1
-  private tempTarget1: THREE.WebGLRenderTarget = null;
-
-  // Temp target 2
-  private tempTarget2: THREE.WebGLRenderTarget = null;
-
-  // Temp target 2
-  private zshellTarget: THREE.WebGLRenderTarget = null;
+  /**
+   * References to contained targets should not be stored
+   * as shaders may swap and reorganize the render targets internally
+   * 
+   * Values should always be accessed by key and not aliased.
+   */
+  private targets: RenderTargets = {
+    mask: null,
+    scratch: null,
+    temp1: null,
+    temp2: null,
+    temp3: null
+  };
 
   // Cache canvas width for dirty checking
   private lastWidth: number = -1;
   // Cache canvas height for dirty checking
   private lastHeight: number = -1;
 
+  // How many pixels do we dialate for rafts
+  private raftDilatePixels = 0;
+
+  // If we are shelling, thickness in pixels
+  // 0 means disabled, min value is 3
+  private shellErodePixels = 0;
+
   // In order for a shell to be fully connected, min pixel
   // count is 3 in x or y.
   private static _MIN_SHELL_PIXELS = 3;
-
-  private raftDilatePixels = 0;
-
-  private shellErodePixels = 0;
-
-  // private dummyReadPixels = new Uint8Array(4);
 
   // Materials ---------------------------------------------------------------------------------
 
@@ -114,9 +124,6 @@ export class AdvancedSlicer {
     new core.IntegerUniform(0),
     new core.IntegerUniform(0));
 
-  /**
-  *
-  */
   constructor(
     private scene: core.PrinterScene,
     public pixelWidthMM: number,
@@ -195,6 +202,7 @@ export class AdvancedSlicer {
 
   private render(z: number) {
     try {
+      this.scene.printVolume.visible = false;
       let dirty = this.prepareRender();
       if (z <= this.raftThicknessMM) {
         this.renderRaftSlice();
@@ -208,104 +216,27 @@ export class AdvancedSlicer {
   }
 
   private renderRaftSlice() {
-    this.scene.printVolume.visible = false
     // Set model color to white,
     this.scene.overrideMaterial = core.CoreMaterialsFactory.flatWhiteMaterial;
-    this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
-
-    // Hide objects, show slice background
-    // 
-    // Apply dialate filter to texture
+    this.renderer.render(this.scene, this.sliceCamera, this.targets.temp1, true);
+    // Apply dilate filter to texture
     if (this.raftDilatePixels > 0) {
       this.shaderScene.overrideMaterial = this.erodeDialateMaterial;
       this.erodeDialateMaterialUniforms.dilate.value = 1;
       let dilatePixels = this.raftDilatePixels;
-      // Repeatedly apply dilate if needed
-      while (dilatePixels > 0) {
-        let pixels = dilatePixels % 10 || 10;
-        dilatePixels = dilatePixels - pixels;
-        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1.texture);
-        this.erodeDialateMaterialUniforms.pixels.value = pixels;
-        this.erodeDialateMaterial.needsUpdate = true;
-        this.renderer.render(this.shaderScene, this.sliceCamera, this.tempTarget2, true);
-        let swapTarget = this.tempTarget2;
-        this.tempTarget2 = this.tempTarget1;
-        this.tempTarget1 = swapTarget;
-      }
+      this.erodeOrDilate("temp1", dilatePixels, true);
     }
     // render texture to view
-    this.renderSliceFinal(this.tempTarget1);
+    this.renderSliceFinal("temp1");
   }
 
   private renderSlice(z: number) {
-
     this.renderSliceCommon(z);
-    // if (this.shellErodePixels > 0) {
-    //   this.renderShelledSlice2(z);
-    //   this.renderSliceFinal(this.finalCompositeTarget);
-    // } else {
-    this.renderSliceFinal(this.maskTarget);
-    // }
+    this.renderSliceFinal("mask");
   }
-
-  // private renderShelledSlice() {
-  //   this.erodeOrDilate(this.shellErodePixels, false);
-  //   // X-Y shelling to temp target 1
-  //   this.shaderScene.overrideMaterial = this.xorMaterial;
-  //   this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget.texture);
-  //   this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
-  //   this.xorMaterial.needsUpdate = true;
-  //   this.renderer.render(this.shaderScene, this.sliceCamera, this.finalCompositeTarget, true);
-  // }
-
-  // private renderShelledSlice2(z: number) {
-  //   // Do Z direction shell step...
-  //   // Look Down
-  //   this.shaderScene.overrideMaterial = core.CoreMaterialsFactory.flatWhiteMaterial;    
-  //   this.sliceMaterialUniforms.cutoff.value = 2.0;
-  //   this.zShellCamera.position.z = this.scene.printVolume.boundingBox.max.z;
-  //   this.zShellCamera.near = z;
-  //   this.zShellCamera.far = z + this.shellInset;
-  //   this.zShellCamera.lookAt(NEG_Z);
-  //   this.zShellCamera.up = POS_Y;
-  //   this.zShellCamera.updateProjectionMatrix();
-  //   this.renderer.render(this.shaderScene, this.zShellCamera, this.tempTarget1, true);
-  //   // Look Up
-  //   this.zShellCamera.position.z = 0;
-  //   this.zShellCamera.near = z;
-  //   this.zShellCamera.far = z + this.shellInset;
-  //   this.zShellCamera.lookAt(POS_Z);
-  //   this.zShellCamera.up = NEG_Y;
-  //   this.zShellCamera.updateProjectionMatrix();
-  //   this.renderer.render(this.shaderScene, this.zShellCamera, this.tempTarget2, true);
-  //   // Use OR material to combine
-  //   this.shaderScene.overrideMaterial = this.orMaterial;
-  //   this.orMaterialUniforms.src1 = new core.TextureUniform(this.tempTarget1.texture);
-  //   this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget2.texture);
-  //   this.orMaterial.needsUpdate = true;
-  //   this.renderer.render(this.shaderScene, this.sliceCamera, this.zshellTarget, true);
-
-  //   this.erodeOrDilate(this.shellErodePixels, false);
-  //   // X-Y shelling to temp target 1
-  //   this.shaderScene.overrideMaterial = this.xorMaterial;
-  //   this.xorMaterialUniforms.src1 = new core.TextureUniform(this.maskTarget.texture);
-  //   this.xorMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
-  //   this.xorMaterial.needsUpdate = true;
-  //   this.renderer.render(this.shaderScene, this.sliceCamera, this.tempTarget1, true);
-  //   // OR X-Y with Z shell
-  //   this.shaderScene.overrideMaterial = this.orMaterial;
-  //   this.orMaterialUniforms.src1 = new core.TextureUniform(this.zshellTarget.texture);
-  //   this.orMaterialUniforms.src2 = new core.TextureUniform(this.tempTarget1.texture);
-  //   this.orMaterial.needsUpdate = true;
-  //   this.renderer.render(this.scene, this.sliceCamera, this.finalCompositeTarget, true);
-  // }
-
-  private renderCombinedSlice() {
-
-  }
-
+  
   /**
-  * Render a slice of scene at z to maskTarget
+  * Render a slice of scene at z to targets.mask
   */
   private renderSliceCommon(z: number) {
     // Hide print volume
@@ -317,28 +248,25 @@ export class AdvancedSlicer {
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
     this.intersectionTestMaterial.needsUpdate = true;
-    this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-    // Render slice to maskTarget
+    this.renderer.render(this.scene, this.sliceCamera, this.targets.temp2, true);
+    // Render slice to targets.mask
     this.scene.overrideMaterial = this.sliceMaterial;
-    this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.tempTarget2.texture);
+    this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.targets.temp2.texture);
     this.sliceMaterialUniforms.cutoff.value = sliceZ;
     this.sliceMaterial.needsUpdate = true;
-    this.renderer.render(this.scene, this.sliceCamera, this.maskTarget, true);
-    // if (this.shellErodePixels > 0) {
-    //   this.renderer.render(this.scene, this.sliceCamera, this.tempTarget1, true);
-    // }
+    this.renderer.render(this.scene, this.sliceCamera, this.targets.mask, true);
   }
 
   /**
-  * Erode or dilate the image in tempTarget1
-  *
-  * The final image is in tempTarget1
-  *
-  * uses tempTarget1 and tempTarget2
-  */
-  private erodeOrDilate(numPixels: number, dilate: boolean) {
-    // Hide objects, show slice background
-    // 
+   * Erode or dialate the image in target, putting the final result back in target
+   * 
+   * Utilizes the scratch target for multiple passes
+   * 
+   * @param target the name of the target to erode/dilate
+   * @param numPixels the number of pixels to erode or dilate by
+   * @param dilate if true dilate, if false erode 
+   */
+  private erodeOrDilate(target: TargetName, numPixels: number, dilate: boolean) {
     // Apply dialate filter to texture
     if (numPixels > 0) {
       this.shaderScene.overrideMaterial = this.erodeDialateMaterial;
@@ -348,13 +276,11 @@ export class AdvancedSlicer {
       while (dilatePixels > 0) {
         let pixels = dilatePixels % 10 || 10;
         dilatePixels = dilatePixels - pixels;
-        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.tempTarget1.texture);
+        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.targets[target].texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
         this.erodeDialateMaterial.needsUpdate = true;
-        this.renderer.render(this.scene, this.sliceCamera, this.tempTarget2, true);
-        let swapTarget = this.tempTarget1;
-        this.tempTarget1 = this.tempTarget2;
-        this.tempTarget2 = swapTarget;
+        this.renderer.render(this.shaderScene, this.sliceCamera, this.targets.scratch, true);
+        this.swapTargets(target,"scratch");
       }
     }
   }
@@ -362,13 +288,10 @@ export class AdvancedSlicer {
   /**
   * Display the final slice image stored in srcTarget copying it to the display
   */
-  private renderSliceFinal(srcTarget: THREE.WebGLRenderTarget) {
+  private renderSliceFinal(srcTarget: TargetName) {
     // Render final image
     this.shaderScene.overrideMaterial = this.copyMaterial;
-    // Hide objects, show slice background
-    
-    // this.copyMaterialUniforms.src = new core.TextureUniform(this.finalCompositeTarget);
-    this.copyMaterialUniforms.src = new core.TextureUniform(srcTarget.texture);
+    this.copyMaterialUniforms.src = new core.TextureUniform(this.targets[srcTarget].texture);
     this.copyMaterial.needsUpdate = true;
     this.renderer.render(this.shaderScene, this.sliceCamera);
   }
@@ -465,66 +388,36 @@ export class AdvancedSlicer {
     this.scene.showPrintObjects();
   }
 
+  private swapTargets(target1: TargetName, target2: TargetName){
+    if (target1 === target2) throw Error ("Targets can not be same!");
+    let scratch = this.targets[target1];
+    this.targets[target1] = this.targets[target2];
+    this.targets[target2] = scratch;
+  }
+
   /**
   * reallocate the rendering Targets
   */
   private reallocateTargets(width: number, height: number) {
-    // Dispose
-    this.finalCompositeTarget && this.finalCompositeTarget.dispose();
-    this.maskTarget && this.maskTarget.dispose();
-    this.tempTarget1 && this.tempTarget1.dispose();
-    this.tempTarget2 && this.tempTarget2.dispose();
-    this.zshellTarget && this.zshellTarget.dispose();
-    // Allocate
-    this.finalCompositeTarget = new THREE.WebGLRenderTarget(width, height, {
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-      stencilBuffer: false,
-      // generateMipMaps: false,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping
-    });
-    this.maskTarget = new THREE.WebGLRenderTarget(width, height, {
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-      stencilBuffer: false,
-      // generateMipMaps: false,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping
-    });
-    this.tempTarget1 = new THREE.WebGLRenderTarget(width, height, {
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-      stencilBuffer: false,
-      // generateMipMaps: false,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping
-    });
-    this.tempTarget2 = new THREE.WebGLRenderTarget(width, height, {
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-      stencilBuffer: false,
-      // generateMipMaps: false,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping
-    });
-    this.zshellTarget = new THREE.WebGLRenderTarget(width, height, {
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-      stencilBuffer: false,
-      // generateMipMaps: false,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping
-    });
+
+    let reallocateTarget = (targetName: TargetName, width: number, height: number) => {
+      this.targets[targetName] && this.targets[targetName].dispose();
+      this.targets[targetName] = new THREE.WebGLRenderTarget(width, height, {
+        format: THREE.RGBAFormat,
+        depthBuffer: true,
+        stencilBuffer: false,
+        // generateMipMaps: false,
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        wrapS: THREE.ClampToEdgeWrapping,
+        wrapT: THREE.ClampToEdgeWrapping
+      });
+    }
+
+    reallocateTarget("mask", width, height);
+    reallocateTarget("scratch", width, height);
+    reallocateTarget("temp1", width, height);
+    reallocateTarget("temp2", width, height);
+    reallocateTarget("temp3", width, height);
   }
 }
