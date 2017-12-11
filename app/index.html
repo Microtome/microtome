@@ -29,10 +29,6 @@
             background-color: #000
         }
 
-        #spreview-div {
-            /* display: none */
-        }
-
         .flex-h {
             display: flex;
             flex-direction: row;
@@ -43,20 +39,29 @@
             flex-direction: column;
         }
 
-        label {
+        label,
+        div.ctrl-row {
             display: flex;
             flex-direction: row;
             align-items: center;
-            padding-top: 5px;
+            /* padding-top: 5px; */
             vertical-align: middle;
         }
 
-        label>span{
-            width:100px;
+        label>span,
+        div.ctrl-row>span {
+            width: 100px;
             text-align: right;
+            vertical-align: middle;
+
         }
 
-        label>span::after{
+        div.ctrl-row>label>span {
+            width: 20px;
+
+        }
+
+        label>span::after {
             content: ": "
         }
 
@@ -67,19 +72,69 @@
 </head>
 
 <body>
-    <div class="flex-h">
-        <div id="pvview-div" class="render-target"></div>
+    <div class="flex-h" style="justify-content: space-around">
+        <div class="flex-v">
+            <div id="pvview-div" class="render-target"></div>
+            <!-- <div class="ctrl-row">
+                <span>Move</span>
+                <label>
+                    <span>X</span>
+                    <input id="move-obj-x" type="range">
+                </label>
+                <label>
+                    <span>Y</span>
+                    <input id="move-obj-y" type="range">
+                </label>
+                <label>
+                    <span>Z</span>
+                    <input id="move-obj-z" type="range">
+                </label>
+            </div>
+            <div class="ctrl-row">
+                <span>Rotate</span>
+                <label>
+                    <span>X</span>
+                    <input id="rot-obj-x" type="range">
+                </label>
+                <label>
+                    <span>Y</span>
+                    <input id="rot-obj-y" type="range">
+                </label>
+                <label>
+                    <span>Z</span>
+                    <input id="rot-obj-z" type="range">
+                </label>
+            </div>
+            <div class="ctrl-row">
+                <span>Scale</span>
+                <label>
+                    <span>X</span>
+                    <input id="scale-obj-x" type="range">
+                </label>
+                <label>
+                    <span>Y</span>
+                    <input id="scale-obj-y" type="range">
+                </label>
+                <label>
+                    <span>Z</span>
+                    <input id="scale-obj-z" type="range">
+                </label>
+            </div> -->
+        </div>
         <div class="flex-v">
             <div id="spreview-div" class="render-target"></div>
-            <label><span>Slice At</span>
+            <label>
+                <span>Slice At</span>
                 <input id="slice-at" type="range">
             </label>
-            <label><span>Raft</span>
+            <!-- <label>
+                <span>Raft</span>
                 <input type="checkbox">
             </label>
-            <label><span>Hollow</span>
+            <label>
+                <span>Hollow</span>
                 <input type="checkbox">
-            </label>
+            </label> -->
         </div>
     </div>
 
