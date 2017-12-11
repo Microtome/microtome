@@ -467,42 +467,6 @@ export class CameraNav {
     return new THREE.Vector3(0, 0, 0);
   }
 
-  // handleKeyboardEventDown( kbe:KeyboardEvent) {
-  //
-  //   // kbe.repeat currently stupidly unimplemented...
-  //   if (kbe.shiftKey &&
-  //     (kbe.keyCode == KeyCode.UP || kbe.keyCode == KeyCode.DOWN)) {
-  //     if (!kbe.repeat && this._zoomActiveKeyCode == null) {
-  //       //print('Zoom START');
-  //       this._zoomActiveKeyCode = kbe.kbeyCode;
-  //       this._zoomStartTime = kbe.timeStamp;
-  //     }
-  //     var sign = 1.0;
-  //     if (kbe.keyCode == '') {
-  //       sign = -1.0;
-  //     }
-  //     var t = (kbe.timeStamp - this._zoomStartTime) / 1000.0 + 0.25;
-  //     this._currZoomSpeed = this._currZoomSpeed + zoomAccelPerS * t;
-  //     if (this._currZoomSpeed > maxZoomSpeed) this._currZoomSpeed = maxZoomSpeed;
-  //     var zoomDistance = sign * this._currZoomSpeed * t;
-  //     var zoomDelta = zoomDistance - this._zoomTotalDistance;
-  //     this._zoomTotalDistance = zoomDistance;
-  //     //print('${kbe.repeat} ${t}: zooming ${zoomDelta} total ${this._zoomTotalDistance}');
-  //     this.zoomToTarget(zoomDelta);
-  //   }
-  // }
-
-  // handleKeyboardEventUp(kbe: KeyboardEvent) {
-  //   //window.console.log(kbe);
-  //   if (ke.shiftKey && (ke.keyCode == _zoomActiveKeyCode)) {
-  //     //print('Zoom Stop');
-  //     this._zoomActiveKeyCode = null;
-  //     this._currZoomSpeed = 0.0;
-  //     this._zoomStartTime = 0;
-  //     this._zoomTotalDistance = 0.0;
-  //   }
-  // }
-
   get target(): CameraTarget {
     return this._target;
   }

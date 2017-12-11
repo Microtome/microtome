@@ -61,7 +61,6 @@ export class HeadlessToZipSlicerJob {
     // TODO Error accumulation
     this.z = this.zStep_mm * this.sliceNum;
     this.slicer.sliceAtToBlob(this.z, blob => {
-      // console.log("SLICE!!!");
       let sname = this.sliceNum.toString().padStart(8, "0");
       this.zip.file(`${sname}.png`, blob, { compression: "store" })
       this.sliceNum++;
