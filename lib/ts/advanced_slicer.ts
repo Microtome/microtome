@@ -258,7 +258,7 @@ export class AdvancedSlicer {
   }
 
   /**
-   * Erode or dialate the image in target, putting the final result back in target
+   * Erode or dilate the image in target, putting the final result back in target
    * 
    * Utilizes the scratch target for multiple passes
    * 
@@ -267,7 +267,7 @@ export class AdvancedSlicer {
    * @param dilate if true dilate, if false erode 
    */
   private erodeOrDilate(target: TargetName, numPixels: number, dilate: boolean) {
-    // Apply dialate filter to texture
+    // Apply erode/dilate filter to texture
     if (numPixels > 0) {
       this.shaderScene.overrideMaterial = this.erodeDialateMaterial;
       this.erodeDialateMaterialUniforms.dilate.value = dilate ? 1 : 0;
