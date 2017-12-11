@@ -12,7 +12,6 @@ export class HeadlessToZipSlicerJob {
 
   private readonly slicer: slicer.AdvancedSlicer;
   private raftThickness_mm: number = 0;
-  // private raftZStep_mm: number = 0;
   private zStep_mm: number = 0;
 
   private z = 0;
@@ -61,14 +60,12 @@ export class HeadlessToZipSlicerJob {
     // TODO Error accumulation
     this.z = this.zStep_mm * this.sliceNum;
     this.slicer.sliceAtToBlob(this.z, blob => {
-      let sname = this.sliceNum.toString().padStart(8, "0");
+      let sname = this.sliceNum.toString().padStart(5, "0");
       this.zip.file(`${sname}.png`, blob, { compression: "store" })
       this.sliceNum++;
       this.scheduleNextSlice();
     });
     ;
-    // return this.zip.generateAsync({ type: "blob" });
-    // TODO Need to generate zip after adding all files. Not quite right still
   }
 
   private scheduleNextSlice() {
@@ -106,7 +103,6 @@ export class HeadlessToZipSlicerJob {
     }
     try {
       this.doSlice();
-      // this.scheduleNextSlice();
     } catch (e) {
       this.reject(e);
     }
