@@ -10,6 +10,7 @@
       "/lib/s-js": "./node_modules/s-js/dist/S.js",
       "/lib/three": "./node_modules/three/build/three.module.js",
       "/lib/jszip": "./node_modules/jszip/dist/jszip.js",
+      "/lib/file-saver": "./node_modules/file-saver/FileSaver.js",
       "/lib/microtome": "./dist/lib/microtome.js",
       "/app/main": "./dist/app/main.js"
     }
