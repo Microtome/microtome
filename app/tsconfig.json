@@ -12,7 +12,7 @@
     "baseUrl": ".",
     "paths": {
       "microtome": [
-        "../build/lib/js/microtome/index.d.ts"
+        "../build/lib/microtome/index.d.ts"
       ]
     }
   },

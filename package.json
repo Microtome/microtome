@@ -25,18 +25,17 @@
     "copy:definitions": "node ./scripts/copy_definitions.js",
     "copy:resources": "node ./scripts/copy_shaders.js",
     "clean": "rm -rf ./dist && rm -rf ./build",
-    "build:lib": "tsc -p lib/ts && yarn run copy:resources",
+    "build:lib": "tsc -p lib && yarn run copy:resources",
     "build:app": "tsc -p app && cp -r app/ build/",
-    "build:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib/ts --watch app --ext css,html,ts,glsl",
+    "build:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib --watch app --ext css,html,ts,glsl",
     "all": "yarn run clean && yarn run build",
     "dist:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
     "dist:app": "rollup -c rollup-config-app.js",
     "serve:dev": "lite-server -c server-config-dev.json",
-    "serve:hot:kafkserwer": "concurrently 'yarn run serve:dev' 'yarn run build:app:watch'",
     "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run build:all:watch'"
   },
   "engines": {
-    "node": ">=5.0.0"
+    "node": ">=8.0.0"
   },
   "dependencies": {
     "file-saverjs": "^1.3.5",

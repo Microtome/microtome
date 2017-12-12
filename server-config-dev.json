@@ -7,11 +7,11 @@
     "baseDir": "./app",
     "routes": {
       "/todo.html": "./todo.html",
-      "/lib/js/s-js": "./node_modules/s-js/dist/S.js",
-      "/lib/js/three": "./node_modules/three/build/three.module.js",
-      "/lib/js/jszip": "./node_modules/jszip/dist/jszip.js",
-      "/lib/js/microtome": "./dist/lib/microtome.js",
-      "/lib/js/main": "./dist/app/main.js"
+      "/lib/s-js": "./node_modules/s-js/dist/S.js",
+      "/lib/three": "./node_modules/three/build/three.module.js",
+      "/lib/jszip": "./node_modules/jszip/dist/jszip.js",
+      "/lib/microtome": "./dist/lib/microtome.js",
+      "/app/main": "./dist/app/main.js"
     }
   }
 }

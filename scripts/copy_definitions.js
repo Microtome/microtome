@@ -11,7 +11,7 @@ var options = {
     ]
 };
 
-copy('./build/lib/js/microtome', './dist/lib/microtome', options)
+copy('./build/lib/microtome', './dist/lib/microtome', options)
     .on(copy.events.COPY_FILE_START, function (copyOperation) {
         console.info('Copying file ' + copyOperation.src + '...');
     })

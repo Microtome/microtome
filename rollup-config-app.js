@@ -1,4 +1,3 @@
-import rollupString from 'rollup-plugin-string';
 import sourcemaps from 'rollup-plugin-sourcemaps';
 
 export default {
@@ -9,13 +8,11 @@ export default {
     sourceMap: true,
     moduleName: "main",
     plugins: [
-        // Relative Paths module 
-        // TODO BRING IN!!!
         sourcemaps()
     ],
     paths: {
-        "three": "/lib/js/three",
-        "jszip": "/lib/js/jszip",
-        "microtome": "/lib/js/microtome"
+        "three": "/lib/three",
+        "jszip": "/lib/jszip",
+        "microtome": "/lib/microtome"
     }
 };
