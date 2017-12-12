@@ -3,7 +3,7 @@ import * as printer from "./printer_config";
 import * as three_d from "./core_threed";
 
 import * as THREE from "three";
-import * as JSZip from "jszip";
+import "jszip";
 
 /**
 * Class that actually handles the slicing job. Not reusable
@@ -25,7 +25,7 @@ export class HeadlessToZipSlicerJob {
     this.resolve = resolve;
     this.reject = reject;
   })
-  private readonly SLICE_TIME = 20;
+  private readonly SLICE_TIME = 5;
   private cancelled = false;
 
   /**
@@ -47,20 +47,21 @@ export class HeadlessToZipSlicerJob {
     let pixelHeightMM = this.scene.printVolume.depth / printerCfg.projector.yRes_px;
     this.raftThickness_mm = this.jobCfg.raftThickness_mm;
     this.zStep_mm = (this.jobCfg.stepDistance_microns * this.jobCfg.stepsPerLayer) / 1000;
-    this.slicer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
     this.slicer = new slicer.AdvancedSlicer(scene,
       pixelWidthMM,
       pixelHeightMM,
       this.raftThickness_mm,
       raftOutset_mm,
-      shellInset_mm)
+      shellInset_mm);
+    this.slicer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
   }
 
   private doSlice() {
     // TODO Error accumulation
     this.z = this.zStep_mm * this.sliceNum;
+    // console.debug(`Slicing ${this.sliceNum} at ${this.z}mm`)
     this.slicer.sliceAtToBlob(this.z, blob => {
-      let sname = this.sliceNum.toString().padStart(5, "0");
+      let sname = this.sliceNum.toString().padStart(8, "0");
       this.zip.file(`${sname}.png`, blob, { compression: "store" })
       this.sliceNum++;
       this.scheduleNextSlice();

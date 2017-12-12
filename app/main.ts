@@ -2,6 +2,7 @@ import { PrinterVolumeView } from "./printerVolumeView";
 import { SlicePreview } from "./slicePreview";
 import * as microtome from "microtome";
 import { SphereGeometry, Mesh } from "three";
+import "file-saver";
 
 let PrintMesh = microtome.three_d.PrintMesh;
 
@@ -28,9 +29,9 @@ printerScene.printObjects.push(sphere1);
 printerScene.printObjects.push(sphere2);
 printerScene.printObjects.push(sphere3);
 
-var pvView = new PrinterVolumeView(PrintVolViewDiv, printerScene);
-var slicePreview = new SlicePreview(SlicePreviewDiv, printerScene);
-var sliceAtSlider = <HTMLInputElement>document.getElementById("slice-at");
+const pvView = new PrinterVolumeView(PrintVolViewDiv, printerScene);
+const slicePreview = new SlicePreview(SlicePreviewDiv, printerScene);
+const sliceAtSlider = <HTMLInputElement>document.getElementById("slice-at");
 sliceAtSlider.min = "0";
 sliceAtSlider.max = "96";
 sliceAtSlider.step = "0.1";
@@ -40,4 +41,52 @@ sliceAtSlider.oninput = (e: Event) => {
     slicePreview.sliceAt = parseInt((<HTMLInputElement>e.target).value, 10)
 };
 
+const sliceToFileBtn = <HTMLButtonElement> document.getElementById("slice-to-file-btn");
+sliceToFileBtn.onclick = async (e: Event) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+    
+    sliceToFileBtn.disabled = true;
 
+    const printerCfg = {
+        name: "Dummy",
+        description: "Dummy Printer",
+        lastModified: 0,
+        volume: {
+            width_mm: 128,
+            height_mm: 96,
+            depth_mm: 96
+        },
+        zStage: {
+            lead_mm: 0.1,
+            stepsPerRev: 128,
+            microsteps: 1
+        },
+        projector: {
+            xRes_px: 640,
+            yRes_px: 480
+        }
+    };
+
+    const jobCfg = {
+        name: "Dummy Job",
+        description: "Dummy Slicing Job",
+        stepDistance_microns: 1,
+        stepsPerLayer: 100,
+        settleTime_ms: 5000,
+        layerExposureTime_ms: 8000,
+        blankTime_ms: 500,
+        retractDistance_mm: 28,
+        zOffset_mm: 5,
+        raftThickness_mm: 1.5,
+        raftOutset_mm: 1.5
+    }
+
+    const fileSlicer = new microtome.slicer_job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
+
+    const blob = await fileSlicer.execute();
+    saveAs(blob,`${(new Date).toISOString()}.zip`,true)
+
+    sliceToFileBtn.disabled = false;    
+} 
