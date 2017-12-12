@@ -7,6 +7,7 @@
     <title>Slicer Test App</title>
     <script type="module" src="/lib/three"></script>
     <script src="/lib/jszip" defer></script>
+    <script src="/lib/file-saver" defer></script>    
     <!-- <script type="module" src="/lib/js/microtome-lib"></script> -->
     <script type="module" src="/app/main"></script>
     <style>
@@ -127,6 +128,9 @@
                 <span>Slice At</span>
                 <input id="slice-at" type="range">
             </label>
+            <button id="slice-to-file-btn" style="width:100px">
+                Slice To File
+            </button>
             <!-- <label>
                 <span>Raft</span>
                 <input type="checkbox">
