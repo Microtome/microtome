@@ -17,6 +17,7 @@ export default {
     ],
     paths: {
         "three": "/lib/three",
-        "jszip": "/lib/jszip"
+        "jszip": "/lib/jszip",
+        "file-saver": "/lib/file-saver"
     }
 };

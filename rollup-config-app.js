@@ -13,6 +13,7 @@ export default {
     paths: {
         "three": "/lib/three",
         "jszip": "/lib/jszip",
-        "microtome": "/lib/microtome"
+        "microtome": "/lib/microtome",
+        "file-saver": "/lib/file-saver"
     }
 };
