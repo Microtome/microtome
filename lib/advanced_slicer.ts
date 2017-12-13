@@ -172,18 +172,17 @@ export class AdvancedSlicer {
   }
 
   /**
-  * Slice the scene at the given z offset in mm.
-  */
+   * Slice the scene at the given z offset in mm.
+   */
   sliceAt(z: number) {
     this.render(z);
   }
 
   /**
-  * Slice to an image
-  * Returns a dataurl of the image
-  * 
-  * TODOPromisify
-  */
+   * Slice to an image
+   * Returns a dataurl of the image
+   * 
+   */
   sliceAtToImageBase64(z: number): String {
     this.render(z);
     // let gl = this.renderer.context
@@ -192,11 +191,11 @@ export class AdvancedSlicer {
   }
 
   /**
-  * Slice to an image
-  * Returns a dataurl of the image
-  * 
-  * TODO Promisify
-  */
+   * Slice to an image
+   * Returns a dataurl of the image
+   * 
+   * TODO Promisify
+   */
   sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
     let gl = this.renderer.context
     this.render(z);
@@ -239,7 +238,7 @@ export class AdvancedSlicer {
     this.renderSliceCommon(z);
     this.renderSliceFinal("mask");
   }
-  
+
   /**
   * Render a slice of scene at z to targets.mask
   */
@@ -285,7 +284,7 @@ export class AdvancedSlicer {
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
         this.erodeDialateMaterial.needsUpdate = true;
         this.renderer.render(this.shaderScene, this.sliceCamera, this.targets.scratch, true);
-        this.swapTargets(target,"scratch");
+        this.swapTargets(target, "scratch");
       }
     }
   }
@@ -391,8 +390,8 @@ export class AdvancedSlicer {
     this.scene.showPrintObjects();
   }
 
-  private swapTargets(target1: TargetName, target2: TargetName){
-    if (target1 === target2) throw Error ("Targets can not be same!");
+  private swapTargets(target1: TargetName, target2: TargetName) {
+    if (target1 === target2) throw Error("Targets can not be same!");
     let scratch = this.targets[target1];
     this.targets[target1] = this.targets[target2];
     this.targets[target2] = scratch;
