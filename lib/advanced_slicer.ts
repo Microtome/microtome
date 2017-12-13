@@ -178,9 +178,11 @@ export class AdvancedSlicer {
     this.render(z);
   }
 
-  /***
+  /**
   * Slice to an image
   * Returns a dataurl of the image
+  * 
+  * TODOPromisify
   */
   sliceAtToImageBase64(z: number): String {
     this.render(z);
@@ -189,13 +191,16 @@ export class AdvancedSlicer {
     return this.renderer.domElement.toDataURL("image/png");
   }
 
-  /***
+  /**
   * Slice to an image
   * Returns a dataurl of the image
+  * 
+  * TODO Promisify
   */
   sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
+    let gl = this.renderer.context
     this.render(z);
-    // let gl = this.renderer.context
+    gl.finish();
     // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
     this.renderer.domElement.toBlob(callback, "image/png");
   }
@@ -329,8 +334,6 @@ export class AdvancedSlicer {
       this.reallocateTargets(width, height);
       this.prepareCameras(width, height);
       this.prepareShaders(width, height);
-      this.lastWidth = width;
-      this.lastHeight = height;
       dirty = true;
     }
     return dirty;
