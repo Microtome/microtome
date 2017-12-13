@@ -7,20 +7,14 @@
 1. `nvm install stable`
 1. `nvm alias default stable`
 1. `npm install yarn` cuz npm sucks. [Yarn](https://yarnpkg.com/) is faster.
-1. This command will start a daughter shell and modify path to add the result of `npm bin` to it so the commands can be found
-    1. `source setup_env.sh`
-1. `yarn`
-1. `typings install`
-1. `bower install`
+1. `yarn` to install dependencies
+
 
 ## Running / Building
 
-**Under active development as things are quickly changing right now**
-
 see package.json for commands
 
-* `npm run clean` to remove build/ and dist/
-* `npm run build` to build app and lib and copy to /build
-* `npm run serve:dev` to serve from build/
-* `npm dev:hot` which will build and then serve from build/, recompiling as needed as files are edited or changed.
-* dist target is not finished yet
+* `yarn run clean` to remove build/ and dist/
+* `yarn run build:lib` to build app and lib and copy to /build/lib/microtome
+* `yarn run dist:lib` to bundle lib with shaders as es6 module under dist/lib/microtome.js
+* `npm serve:hot` which will build the library, and sample app, and server on localhost:8080 with hot reloading of all ts, html, and css edits

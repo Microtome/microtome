@@ -1,59 +1,41 @@
 # Microtome
 
 Microtome is a gpu accelerated model slicer intended for generating slice images for
-use in DLP style 3D printers. Eventually it will be expanded to control 3D printers
-using Chrome App serial port support
+use in DLP style 3D printers. It is NOT intended for SLA style printers. It does not
+produce vector images, but bitmaps, using shader and scene tricks.
 
 # Status
 
-I am currently in the process of porting Microtome from Dart to Typescript. This is being done due to various
-issues with the Dart platform and Chrome Apps; specifically in the mistaken belief to make it more "secure", inter
-window communication even inside a self-contained chrome app is severely crippled.
+I've spent the past several weeks, cleaning up, simplifying, and updating three.js
+dependencies. The old polymer app was a time sink, and discarded for a much simpler
+vanillajs demo app whose sole purpose is to test the library and serve as an example. 
+Build process was simplified.
 
-- [X] For z axis change pitch to lead as its what really matters
-- [X] Slice to zip file via zipjs and filejs, create a download containing PNG slices
-- [X] Enable scrollwheel in slice preview
-- [ ] Add Job configuration object
-  - [ ] Specify slice thickness as multiples of minimum printer slice
-  - [X] Job name
-  - [X] Job desc
-  - [X] Layer exposure times
-  - [X] Layer blank / move times
-  - [ ] Job length estimate
-  - [X] Specify raft thickness
-  - [X] Specify initial z-offset offset for all loaded meshes
-  - [ ] Export/Import job spec
-- [ ] Slice shader improvements
-  - [ ] Specify thickness of support grind in mm
-  - [ ] Specify support cube lattice spacing in mm
-  - [ ] Allow rotation of support cube matrix
-  - [X] Generate raft
-  - [ ] Support multi-step layer exposure patterns to reduce heat generation for large slice areas.
-- [ ] Print volume preview
-  - [X] Move
-  - [X] Rotate
-  - [X] Scale
-  - [X] Select
-  - [X] Add
-  - [X] Delete
-  - [X] Copy
-- [ ] Export / Import project
-  - [ ] Job settings
-  - [ ] Printer config
-  - [ ] Current project layout
-- [ ] Support generation improvements
-  - [ ] Find low points that need support
-  - [ ] Find other flat areas requiring support
-  - [ ] Sample randomly, then use s-hull to create dealauny triangulation
-  - [ ] Use delauny triangulation then as support pattern.
+The scope has been shrunk to be 'just a library' in the near term. 
+
+## What works?
+
+- Basic Slicing
+  - It's FAST! Can slice at 2560 x 1920 at ~100ms per slice on Chrome, and ~200ms
+  on FireFox. 500 slices takes about 50s on chrome.
+- Robust, handles self-intersecting and intersecting geometry.
+  - You don't need to 'union' your meshes with support geometry before slicing,
+  or union pieces together.
+- Volume estimation
+  - Please note that large overlap in intersecting geometry, or shelling will throw this off, 
+  but it will give you a worst case estimate.
+- Slice job support. Just feed it some configuration and away you go!
+  - Will peg your cpu and may cause browser lag, but goes fast.
+
 
 ## Future Directions
 
-- Generate paths for conventional printers via potracing the slice images?
-  - https://github.com/kilobtye/potrace  
-  - Seems to be a recent port and works well.
 - Mesh union
 - Mesh repair utilities
+- Support generation utilities
+- Shelling at slice time.
+- Exposure masks for brightness leveling ( simple radial fill, and custom images )
+- Multi-exposure per slice to reduce cooking/heating of resin via cure heat
 
 ## Donations
 
