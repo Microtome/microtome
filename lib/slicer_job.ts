@@ -18,13 +18,13 @@ export class HeadlessToZipSlicerJob {
   private sliceNum = 1;
   private startTime = Date.now();
   private zip = new JSZip();
-  private handle: number = null;
   private resolve: Function = null;
   private reject: Function = null;
-  private zipBlob: Promise<Blob> = new Promise((resolve, reject) => {
+  private jobStartTime: Date = null;
+  private zipBlob = new Promise<Blob>((resolve, reject) => {
     this.resolve = resolve;
     this.reject = reject;
-  })
+  });
   // private readonly SLICE_TIME = 5;
   private cancelled = false;
   private maxSliceHeight = 0;
@@ -80,17 +80,30 @@ export class HeadlessToZipSlicerJob {
 
   private scheduleNextSlice() {
     if (this.z <= this.maxSliceHeight && !this.cancelled) {
-      // TODO Cleanup
-      // this.handle = setTimeout(this.doSlice.bind(this), this.SLICE_TIME);
       this.doSlice();
     } else {
-      if (this.handle) {
-        clearTimeout(this.handle);
-      }
       if (this.cancelled) {
         this.reject();
       } else {
-        this.zip.generateAsync({ type: "blob" }).then(blob => this.resolve(blob));
+        let config = JSON.stringify({
+          job: this.jobCfg,
+          printer: this.printerCfg
+        }, null, 2);
+        this.zip.file(`slice-config.json`, config);
+        let slicingFinished = Date.now();
+        this.zip.generateAsync({ type: "blob" }).then((blob) => {
+          let zipEnd = Date.now();
+          let sliceTime = ((slicingFinished - this.startTime) / 1000);
+          let zipFinishedTime = ((zipEnd - slicingFinished) / 1000);
+          let totalTime = sliceTime + zipFinishedTime;
+          console.debug(`Slicing Job Complete!`);
+          console.debug(`  Sliced ${this.sliceNum + 1} layers`)
+          console.debug(`  Slicing took ${sliceTime.toFixed(2)}s, ${(sliceTime * 1000 / (this.sliceNum + 1)).toFixed(2)}ms / layer`);
+          console.debug(`  Zip generation took ${zipFinishedTime.toFixed(2)}s`);
+          console.debug(`  Total time took ${totalTime.toFixed(2)}s, amortized ${(totalTime * 1000 / (this.sliceNum + 1)).toFixed(2)}ms / layer`);
+          this.resolve(blob)
+        });
+
       }
     }
   }
@@ -109,10 +122,7 @@ export class HeadlessToZipSlicerJob {
   * @returns a Promise yiedling a zip compressed blob of slice images 
   */
   execute(validate: boolean = false): Promise<Blob> {
-    let config = {
-      job: this.jobCfg,
-      printer: this.printerCfg
-    }
+    this.startTime = Date.now();
     try {
       this.doSlice();
     } catch (e) {

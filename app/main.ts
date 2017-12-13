@@ -66,8 +66,8 @@ sliceToFileBtn.onclick = async (e: Event) => {
             microsteps: 1
         },
         projector: {
-            xRes_px: 640,
-            yRes_px: 480
+            xRes_px: 4*640,
+            yRes_px: 4*480
         }
     };
 
@@ -87,9 +87,7 @@ sliceToFileBtn.onclick = async (e: Event) => {
 
     const fileSlicer = new microtome.slicer_job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
 
-    let jobStart = Date.now();
     const blob = await fileSlicer.execute();
-    console.log(`Job took ${((Date.now()-jobStart)/1000)} seconds`)
     saveAs(blob,`${jobCfg.name.replace(" ","-")}-${(new Date).toISOString()}.zip`,true)
 
     sliceToFileBtn.disabled = false;    
