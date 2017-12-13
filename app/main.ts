@@ -25,6 +25,8 @@ let sphere3 = new PrintMesh(new SphereGeometry(15, 16, 16), CoreMaterialsFactory
 sphere3.position.set(15, 23, 35);
 
 // Add some dummy objects
+// TODO swap to addPrintObject method
+// TODO add removePrintObject method
 printerScene.printObjects.push(sphere1);
 printerScene.printObjects.push(sphere2);
 printerScene.printObjects.push(sphere3);
@@ -85,8 +87,10 @@ sliceToFileBtn.onclick = async (e: Event) => {
 
     const fileSlicer = new microtome.slicer_job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
 
+    let jobStart = Date.now();
     const blob = await fileSlicer.execute();
-    saveAs(blob,`${(new Date).toISOString()}.zip`,true)
+    console.log(`Job took ${((Date.now()-jobStart)/1000)} seconds`)
+    saveAs(blob,`${jobCfg.name.replace(" ","-")}-${(new Date).toISOString()}.zip`,true)
 
     sliceToFileBtn.disabled = false;    
 } 
