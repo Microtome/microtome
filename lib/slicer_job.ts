@@ -25,8 +25,9 @@ export class HeadlessToZipSlicerJob {
     this.resolve = resolve;
     this.reject = reject;
   })
-  private readonly SLICE_TIME = 5;
+  // private readonly SLICE_TIME = 5;
   private cancelled = false;
+  private maxSliceHeight = 0;
 
   /**
    * Create a headless slicing job that slices to
@@ -54,6 +55,15 @@ export class HeadlessToZipSlicerJob {
       raftOutset_mm,
       shellInset_mm);
     this.slicer.setSize(printerCfg.projector.xRes_px, printerCfg.projector.yRes_px);
+    // TODO Remove once more intelligent print volume methods are added
+    this.maxSliceHeight = this.scene.printObjects
+      .map((mesh) => {
+        mesh.geometry.computeBoundingBox();
+        return mesh.position.z + mesh.geometry.boundingBox.max.z
+      })
+      .reduce((prev, curr) => {
+        return Math.max(prev, curr);
+      }, 0) + this.zStep_mm;
   }
 
   private doSlice() {
@@ -66,12 +76,13 @@ export class HeadlessToZipSlicerJob {
       this.sliceNum++;
       this.scheduleNextSlice();
     });
-    ;
   }
 
   private scheduleNextSlice() {
-    if (this.z <= this.scene.printVolume.height && !this.cancelled) {
-      this.handle = setTimeout(this.doSlice.bind(this), this.SLICE_TIME);
+    if (this.z <= this.maxSliceHeight && !this.cancelled) {
+      // TODO Cleanup
+      // this.handle = setTimeout(this.doSlice.bind(this), this.SLICE_TIME);
+      this.doSlice();
     } else {
       if (this.handle) {
         clearTimeout(this.handle);
