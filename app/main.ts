@@ -46,12 +46,12 @@ sliceAtSlider.oninput = (e: Event) => {
     document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
 };
 
-const sliceToFileBtn = <HTMLButtonElement> document.getElementById("slice-to-file-btn");
+const sliceToFileBtn = <HTMLButtonElement>document.getElementById("slice-to-file-btn");
 sliceToFileBtn.onclick = async (e: Event) => {
     e.preventDefault();
     e.stopImmediatePropagation();
     e.stopPropagation();
-    
+
     sliceToFileBtn.disabled = true;
 
     const printerCfg = {
@@ -91,7 +91,7 @@ sliceToFileBtn.onclick = async (e: Event) => {
     const fileSlicer = new microtome.slicer_job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
 
     const blob = await fileSlicer.execute();
-    saveAs(blob,`${jobCfg.name.replace(" ","-")}-${(new Date).toISOString()}.zip`,true)
+    saveAs(blob, `${jobCfg.name.replace(" ", "-")}-${(new Date).toISOString()}.zip`, true)
 
-    sliceToFileBtn.disabled = false;    
+    sliceToFileBtn.disabled = false;
 } 
