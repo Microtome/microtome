@@ -39,8 +39,11 @@ sliceAtSlider.max = "96";
 sliceAtSlider.step = "0.1";
 sliceAtSlider.value = "25";
 slicePreview.sliceAt = 25;
+document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
 sliceAtSlider.oninput = (e: Event) => {
-    slicePreview.sliceAt = parseInt((<HTMLInputElement>e.target).value, 10)
+    let sliceAt = parseInt((<HTMLInputElement>e.target).value, 10)
+    slicePreview.sliceAt = sliceAt
+    document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
 };
 
 const sliceToFileBtn = <HTMLButtonElement> document.getElementById("slice-to-file-btn");

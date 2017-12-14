@@ -62,7 +62,7 @@
 
         }
 
-        label>span::after {
+        label>span:first-of-type::after {
             content: ": "
         }
 
@@ -127,6 +127,7 @@
             <label>
                 <span>Slice At</span>
                 <input id="slice-at" type="range">
+                <span style="width: 100px; float:right"><span id="display-mm">0.00</span>mm</span>
             </label>
             <button id="slice-to-file-btn" style="width:100px">
                 Slice To File
