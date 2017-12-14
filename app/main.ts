@@ -66,8 +66,8 @@ sliceToFileBtn.onclick = async (e: Event) => {
             microsteps: 1
         },
         projector: {
-            xRes_px: 4*640,
-            yRes_px: 4*480
+            xRes_px: 640,
+            yRes_px: 480
         }
     };
 
