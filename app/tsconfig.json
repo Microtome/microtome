@@ -5,16 +5,19 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es2015",
+    "target": "es2017",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "es6",
+    "module": "esnext",
     "baseUrl": ".",
     "paths": {
       "microtome": [
         "../build/lib/microtome/index.d.ts"
+      ],
+      "@three/*": [
+        "../node_modules/three/examples/js/*"
       ]
-    }
+    },
   },
   "compileOnSave": false,
   "buildOnSave": false,

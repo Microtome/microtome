@@ -8,7 +8,10 @@
     "routes": {
       "/todo.html": "./todo.html",
       "/lib/s-js": "./node_modules/s-js/dist/S.js",
+      "/lib/three-es6": "./node_modules/threejs-full-es6/builds/Three.es.js",
       "/lib/three": "./node_modules/three/build/three.module.js",
+      "/lib/OBJLoader.js": "./node_modules/three/examples/js/loaders/OBJLoader.js",
+      "/lib/STLLoader.js": "./node_modules/three/examples/js/loaders/STLLoader.js",
       "/lib/jszip": "./node_modules/jszip/dist/jszip.js",
       "/lib/file-saver": "./node_modules/file-saver/FileSaver.js",
       "/lib/microtome": "./dist/lib/microtome.js",
