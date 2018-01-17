@@ -199,7 +199,7 @@ export class AdvancedSlicer {
   sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
     let gl = this.renderer.context
     this.render(z);
-    gl.finish();
+    // gl.finish();
     // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
     this.renderer.domElement.toBlob(callback, "image/png");
   }
