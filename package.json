@@ -27,12 +27,12 @@
     "clean": "rm -rf ./dist && rm -rf ./build",
     "build:lib": "tsc -p lib && yarn run copy:resources",
     "build:app": "tsc -p app && cp -r app/ build/",
-    "build:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib --watch app --ext css,html,ts,glsl",
-    "all": "yarn run clean && yarn run build",
     "dist:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
     "dist:app": "rollup -c rollup-config-app.js",
+    "dist:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib --watch app --ext css,html,ts,glsl",
+    "all": "yarn run clean && yarn run dist:app && yarn run dist:lib",
     "serve:dev": "lite-server -c server-config-dev.json",
-    "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run build:all:watch'"
+    "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run dist:all:watch'"
   },
   "engines": {
     "node": ">=8.0.0"
