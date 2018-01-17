@@ -6,15 +6,12 @@ node_js:
 - "5.12.0"
 os:
 - linux
-before_cache:
-#  - rm -f $HOME/.gradle/caches/modules-2/modules-2.lock
 cache:
-  yarn: true
-  directories:
-    - node_modules
+  yarn
 install:
   # - nvm install 5.12.0
   # - nvm alias default 5.12.0
   - export PATH=`npm bin`:$PATH
 script:
+  - yarn 
   - yarn run all
