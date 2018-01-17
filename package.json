@@ -13,7 +13,7 @@
     "lite-server": "2.2.2",
     "nodemon": "^1.12.4",
     "recursive-copy": "^2.0.7",
-    "rollup": "^0.50.0",
+    "rollup": "^0.54.0",
     "rollup-plugin-sourcemaps": "^0.4.2",
     "rollup-plugin-string": "^2.0.2",
     "run-sequence": "^1.0.2",
