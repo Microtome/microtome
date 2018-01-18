@@ -26,21 +26,22 @@ void (async () => {
     // const objLoader = new THREE.OBJLoader;
     const stlLoader = new THREE.STLLoader;
 
-    let PrintMesh = microtome.three_d.PrintMesh;
+    let PrintMesh = microtome.printer.PrintMesh;
 
-    let PrinterScene = microtome.three_d.PrinterScene;
-    let  = microtome.three_d.;
+    let PrinterScene = microtome.printer.PrinterScene;
+
+    let materials = microtome.materials;
 
     let PrintVolViewDiv = <HTMLDivElement>document.getElementById("pvview-div")
     let SlicePreviewDiv = <HTMLDivElement>document.getElementById("spreview-div")
 
     let printerScene = new PrinterScene();
     printerScene.printVolume.resize(128, 96, 96);
-    let sphere1 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), objectMaterial)
+    let sphere1 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), materials.objectMaterial)
     sphere1.position.set(15, 15, 15);
-    let sphere2 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), objectMaterial)
+    let sphere2 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), materials.objectMaterial)
     sphere2.position.set(15, 24, 20);
-    let sphere3 = new PrintMesh(new THREE.SphereGeometry(15, 16, 16), objectMaterial)
+    let sphere3 = new PrintMesh(new THREE.SphereGeometry(15, 16, 16), materials.objectMaterial)
     sphere3.position.set(15, 23, 35);
 
     // Add some dummy objects
@@ -111,7 +112,7 @@ void (async () => {
             raftOutset_mm: 1.5
         }
 
-        const fileSlicer = new microtome.slicer_job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
+        const fileSlicer = new microtome.job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
 
         const blob = await fileSlicer.execute();
         saveAs(blob, `${jobCfg.name.replace(" ", "-")}-${(new Date).toISOString()}.zip`, true)
@@ -137,7 +138,7 @@ void (async () => {
                 if (file.name.endsWith(".stl")) {
                     const geom = new THREE.Geometry().
                         fromBufferGeometry(stlLoader.parse(arrayBuffer));
-                    let mesh = new PrintMesh(geom, objectMaterial)
+                    let mesh = new PrintMesh(geom, materials.objectMaterial)
                     // mesh.position.set(15, 23, 35);
                     // printerScene.
                     printerScene.add(mesh);

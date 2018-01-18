@@ -1,7 +1,7 @@
 import * as microtome from "microtome"
 import * as THREE from "three"
 
-type PrinterScene = microtome.three_d.PrinterScene;
+type PrinterScene = microtome.printer.PrinterScene;
 
 /**
  * This class handles managing, displaying, and manipulating
@@ -29,7 +29,7 @@ export class PrinterVolumeView {
 
     private reqAnimFrameHandle: number;
 
-    private camNav: microtome.three_d.CameraNav;
+    private camNav: microtome.camera.CameraNav;
 
     //--------------------------------------------------------
     // Properties
@@ -152,7 +152,7 @@ export class PrinterVolumeView {
         this.pvCamera.position.set(0, 350, 250);
         this.configureLighting();
         this.pvCamera.lookAt(this.scene.printVolume.position);
-        this.camNav = new microtome.three_d.CameraNav(this.pvCamera, this.canvasElement, true)
+        this.camNav = new microtome.camera.CameraNav(this.pvCamera, this.canvasElement, true)
         this.camNav.target = this.scene.printVolume;
         this.camNav.frameTarget();
         this.startRendering();
@@ -246,13 +246,13 @@ export class PrinterVolumeView {
         if (this.pickedMesh) {
             this.unpickMesh();
         }
-        mesh.material = microtome.three_d.selectMaterial;
+        mesh.material = microtome.materials.selectMaterial;
         this.pickedMesh = mesh;
     }
 
     private unpickMesh() {
         if (!this.pickedMesh) return;
-        this.pickedMesh.material = microtome.three_d.objectMaterial;
+        this.pickedMesh.material = microtome.materials.objectMaterial;
         this.pickedMesh = null;
     }
 

@@ -1,7 +1,7 @@
 import * as microtome from "microtome"
 import * as THREE from "three"
 
-type PrinterScene = microtome.three_d.PrinterScene;
+type PrinterScene = microtome.printer.PrinterScene;
 
 /**
  * The slice preview previews slices
