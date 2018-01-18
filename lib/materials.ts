@@ -81,37 +81,36 @@ export class ErodeDialateShaderUniforms extends BaseUniforms {
   ) { super(); }
 }
 
-export class CoreMaterialsFactory {
-  private static _basicVertex = `
+   let basicVertex = `
 void main(void) {
    // compute position
    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-  static xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
-  static yLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
-  static zLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
-  static bBoxMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
-  static whiteMaterial: THREE.MeshLambertMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
-  static flatWhiteMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  static objectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
-  static selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
+  export const xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
+  export const yLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
+  export const zLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x2962ff, linewidth: 2 });
+  export const bBoxMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
+  export const whiteMaterial: THREE.MeshLambertMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide });
+  export const flatWhiteMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  export const objectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0xcfcfcf, side: THREE.DoubleSide });//, ambient:0xcfcfcf});
+  export const selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial({ color: 0x00cfcf, side: THREE.DoubleSide });//, ambient:0x00cfcf});
 
   /**
   Material for encoding z depth in image rgba
   */
-  static depthMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const depthMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: depthShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     blending: THREE.NoBlending
   });
 
   /**
   Material for alpha rendering object intersections.
   */
-  static intersectionMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const intersectionMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: intersectionShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
@@ -123,18 +122,18 @@ void main(void) {
   /**
   Material for slicing
   */
-  static sliceMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const sliceMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: sliceShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     side: THREE.DoubleSide,
     blending: THREE.NoBlending,
   });
   /**
   Material for erode/dialate
   */
-  static erodeOrDialateMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const erodeOrDialateMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: erodeDilateShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     side: THREE.DoubleSide,
     blending: THREE.NoBlending,
     uniforms: {}
@@ -143,9 +142,9 @@ void main(void) {
   /**
   Material for copy
   */
-  static copyMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const copyMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: copyShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     side: THREE.FrontSide,
     blending: THREE.NoBlending,
     uniforms: {}
@@ -154,9 +153,9 @@ void main(void) {
   /**
   Material for xor
   */
-  static xorMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const xorMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: xorShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
     uniforms: {}
@@ -165,11 +164,11 @@ void main(void) {
   /**
   Material for or
   */
-  static orMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  export const orMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
     fragmentShader: orShaderFrag.default,
-    vertexShader: CoreMaterialsFactory._basicVertex,
+    vertexShader: basicVertex,
     side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
     uniforms: {}
   });
-}
+

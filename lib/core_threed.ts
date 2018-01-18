@@ -326,7 +326,7 @@ export class PrintVolumeView extends THREE.Group {
     this._recalcBBox();
     // this.add(this._pvGroup);
     var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
-    var planeMaterial = mats.CoreMaterialsFactory.whiteMaterial.clone();
+    var planeMaterial = mats.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
     var bed = new THREE.Mesh(planeGeom, planeMaterial);
     this.add(bed);
@@ -340,10 +340,10 @@ export class PrintVolumeView extends THREE.Group {
     var xlineGeometry = new THREE.Geometry();
     xlineGeometry.vertices = xlinesPts;
     var xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
-      mats.CoreMaterialsFactory.xLineMaterial);
+      mats.xLineMaterial);
     this.add(xLines1);
     var xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
-      mats.CoreMaterialsFactory.xLineMaterial);
+      mats.xLineMaterial);
     xLines2.position.set(0.0, 0.0, 1.0);
     this.add(xLines2);
 
@@ -356,10 +356,10 @@ export class PrintVolumeView extends THREE.Group {
     var ylineGeometry = new THREE.Geometry();
     ylineGeometry.vertices = ylinesPts;
     var yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
-      mats.CoreMaterialsFactory.yLineMaterial);
+      mats.yLineMaterial);
     this.add(yLines1);
     var yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
-      mats.CoreMaterialsFactory.yLineMaterial);
+      mats.yLineMaterial);
     yLines2.position.set(0.0, 0.0, 1.0);
     this.add(yLines2);
 
@@ -372,10 +372,10 @@ export class PrintVolumeView extends THREE.Group {
     var zlineGeometry = new THREE.Geometry();
     zlineGeometry.vertices = zlinesPts;
     var zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
-      mats.CoreMaterialsFactory.zLineMaterial);
+      mats.zLineMaterial);
     this.add(zLines1);
     var zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
-      mats.CoreMaterialsFactory.zLineMaterial);
+      mats.zLineMaterial);
     zLines2.position.set(0.0, -1.0, 0.0);
     this.add(zLines2);
   }

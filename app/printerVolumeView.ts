@@ -246,13 +246,13 @@ export class PrinterVolumeView {
         if (this.pickedMesh) {
             this.unpickMesh();
         }
-        mesh.material = microtome.three_d.CoreMaterialsFactory.selectMaterial;
+        mesh.material = microtome.three_d.selectMaterial;
         this.pickedMesh = mesh;
     }
 
     private unpickMesh() {
         if (!this.pickedMesh) return;
-        this.pickedMesh.material = microtome.three_d.CoreMaterialsFactory.objectMaterial;
+        this.pickedMesh.material = microtome.three_d.objectMaterial;
         this.pickedMesh = null;
     }
 

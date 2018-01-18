@@ -29,18 +29,18 @@ void (async () => {
     let PrintMesh = microtome.three_d.PrintMesh;
 
     let PrinterScene = microtome.three_d.PrinterScene;
-    let CoreMaterialsFactory = microtome.three_d.CoreMaterialsFactory;
+    let  = microtome.three_d.;
 
     let PrintVolViewDiv = <HTMLDivElement>document.getElementById("pvview-div")
     let SlicePreviewDiv = <HTMLDivElement>document.getElementById("spreview-div")
 
     let printerScene = new PrinterScene();
     printerScene.printVolume.resize(128, 96, 96);
-    let sphere1 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), CoreMaterialsFactory.objectMaterial)
+    let sphere1 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), objectMaterial)
     sphere1.position.set(15, 15, 15);
-    let sphere2 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), CoreMaterialsFactory.objectMaterial)
+    let sphere2 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), objectMaterial)
     sphere2.position.set(15, 24, 20);
-    let sphere3 = new PrintMesh(new THREE.SphereGeometry(15, 16, 16), CoreMaterialsFactory.objectMaterial)
+    let sphere3 = new PrintMesh(new THREE.SphereGeometry(15, 16, 16), objectMaterial)
     sphere3.position.set(15, 23, 35);
 
     // Add some dummy objects
@@ -137,7 +137,7 @@ void (async () => {
                 if (file.name.endsWith(".stl")) {
                     const geom = new THREE.Geometry().
                         fromBufferGeometry(stlLoader.parse(arrayBuffer));
-                    let mesh = new PrintMesh(geom, CoreMaterialsFactory.objectMaterial)
+                    let mesh = new PrintMesh(geom, objectMaterial)
                     // mesh.position.set(15, 23, 35);
                     // printerScene.
                     printerScene.add(mesh);

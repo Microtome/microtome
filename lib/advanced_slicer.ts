@@ -81,7 +81,7 @@ export class AdvancedSlicer {
 
   // Materials ---------------------------------------------------------------------------------
 
-  private erodeDialateMaterial = mats.CoreMaterialsFactory.erodeOrDialateMaterial.clone();
+  private erodeDialateMaterial = mats.erodeOrDialateMaterial.clone();
 
   private erodeDialateMaterialUniforms = new mats.ErodeDialateShaderUniforms(
     new mats.IntegerUniform(1),
@@ -90,34 +90,34 @@ export class AdvancedSlicer {
     new mats.IntegerUniform(0),
     new mats.IntegerUniform(0));
 
-  private copyMaterial = mats.CoreMaterialsFactory.copyMaterial.clone();
+  private copyMaterial = mats.copyMaterial.clone();
 
   private copyMaterialUniforms = new mats.CopyShaderUniforms(
     new mats.TextureUniform(null),
     new mats.IntegerUniform(0),
     new mats.IntegerUniform(0));
 
-  private xorMaterial = mats.CoreMaterialsFactory.xorMaterial.clone();
+  private xorMaterial = mats.xorMaterial.clone();
   private xorMaterialUniforms = new mats.BoolOpShaderUniforms(
     new mats.TextureUniform(null),
     new mats.TextureUniform(null),
     new mats.IntegerUniform(0),
     new mats.IntegerUniform(0));
 
-  private orMaterial = mats.CoreMaterialsFactory.orMaterial.clone();
+  private orMaterial = mats.orMaterial.clone();
   private orMaterialUniforms = new mats.BoolOpShaderUniforms(
     new mats.TextureUniform(null),
     new mats.TextureUniform(null),
     new mats.IntegerUniform(0),
     new mats.IntegerUniform(0));
 
-  private intersectionTestMaterial = mats.CoreMaterialsFactory.intersectionMaterial.clone();
+  private intersectionTestMaterial = mats.intersectionMaterial.clone();
 
   private intersectionMaterialUniforms = new mats.IntersectionShaderUniforms(
     new mats.FloatUniform(0)
   );
 
-  private sliceMaterial = mats.CoreMaterialsFactory.sliceMaterial.clone();
+  private sliceMaterial = mats.sliceMaterial.clone();
 
   private sliceMaterialUniforms = new mats.SliceShaderUniforms(
     new mats.FloatUniform(0),
@@ -135,7 +135,7 @@ export class AdvancedSlicer {
     div: HTMLDivElement = undefined) {
     // Can handle printer dimensions of 10x10 meters. :)
     var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(10000, 10000);
-    var planeMaterial = mats.CoreMaterialsFactory.whiteMaterial.clone();
+    var planeMaterial = mats.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
     this.shaderScene = new THREE.Scene();
     let sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
@@ -222,7 +222,7 @@ export class AdvancedSlicer {
 
   private renderRaftSlice() {
     // Set model color to white,
-    this.scene.overrideMaterial = mats.CoreMaterialsFactory.flatWhiteMaterial;
+    this.scene.overrideMaterial = mats.flatWhiteMaterial;
     this.renderer.render(this.scene, this.sliceCamera, this.targets.temp1, true);
     // Apply dilate filter to texture
     if (this.raftDilatePixels > 0) {
