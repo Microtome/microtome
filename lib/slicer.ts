@@ -1,3 +1,7 @@
+/**
+ * This module contains slicing related classes.
+ */
+
 import * as THREE from "three";
 
 import * as printer from "./printer";

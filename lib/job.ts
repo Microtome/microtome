@@ -1,3 +1,7 @@
+/**
+ * This module contains classes for managing asynchronous model slicing jobs.
+ */
+
 import * as slicer from "./slicer";
 import * as config from "./config";
 import * as printer from "./printer";

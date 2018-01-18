@@ -1,3 +1,7 @@
+/**
+ * This module contains various Threejs material definitions
+ */
+
 import * as THREE from "three";
 
 // bring in frag shaders

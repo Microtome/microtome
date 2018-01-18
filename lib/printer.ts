@@ -1,3 +1,7 @@
+/**
+ * This module contains classes for modeling and displaying printer volumes.
+ */
+
 import * as printer from "./config";
 import * as THREE from "three";
 import * as mats from "./materials";

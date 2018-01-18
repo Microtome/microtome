@@ -1,3 +1,7 @@
+/**
+ * This module contains camera navigation related classes.
+ */
+
 import * as THREE from "three";
 
 import {PrintVolumeView} from "./printer";

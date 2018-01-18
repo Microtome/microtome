@@ -1,3 +1,6 @@
+/**
+ * This module contains classes for expressing printer configurations
+ */
 
 // export enum GpioPinUse {
 //
