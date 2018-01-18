@@ -1,6 +1,7 @@
-import * as core from "./core_threed";
-
 import * as THREE from "three";
+
+import * as core from "./core_threed";
+import * as mats from "./materials";
 
 // TODO Move to threed?
 export const Z_DOWN: THREE.Vector3 = new THREE.Vector3(0, 0, -1000000);
@@ -80,49 +81,49 @@ export class AdvancedSlicer {
 
   // Materials ---------------------------------------------------------------------------------
 
-  private erodeDialateMaterial = core.CoreMaterialsFactory.erodeOrDialateMaterial.clone();
+  private erodeDialateMaterial = mats.CoreMaterialsFactory.erodeOrDialateMaterial.clone();
 
-  private erodeDialateMaterialUniforms = new core.ErodeDialateShaderUniforms(
-    new core.IntegerUniform(1),
-    new core.IntegerUniform(0),
-    new core.TextureUniform(null),
-    new core.IntegerUniform(0),
-    new core.IntegerUniform(0));
+  private erodeDialateMaterialUniforms = new mats.ErodeDialateShaderUniforms(
+    new mats.IntegerUniform(1),
+    new mats.IntegerUniform(0),
+    new mats.TextureUniform(null),
+    new mats.IntegerUniform(0),
+    new mats.IntegerUniform(0));
 
-  private copyMaterial = core.CoreMaterialsFactory.copyMaterial.clone();
+  private copyMaterial = mats.CoreMaterialsFactory.copyMaterial.clone();
 
-  private copyMaterialUniforms = new core.CopyShaderUniforms(
-    new core.TextureUniform(null),
-    new core.IntegerUniform(0),
-    new core.IntegerUniform(0));
+  private copyMaterialUniforms = new mats.CopyShaderUniforms(
+    new mats.TextureUniform(null),
+    new mats.IntegerUniform(0),
+    new mats.IntegerUniform(0));
 
-  private xorMaterial = core.CoreMaterialsFactory.xorMaterial.clone();
-  private xorMaterialUniforms = new core.BoolOpShaderUniforms(
-    new core.TextureUniform(null),
-    new core.TextureUniform(null),
-    new core.IntegerUniform(0),
-    new core.IntegerUniform(0));
+  private xorMaterial = mats.CoreMaterialsFactory.xorMaterial.clone();
+  private xorMaterialUniforms = new mats.BoolOpShaderUniforms(
+    new mats.TextureUniform(null),
+    new mats.TextureUniform(null),
+    new mats.IntegerUniform(0),
+    new mats.IntegerUniform(0));
 
-  private orMaterial = core.CoreMaterialsFactory.orMaterial.clone();
-  private orMaterialUniforms = new core.BoolOpShaderUniforms(
-    new core.TextureUniform(null),
-    new core.TextureUniform(null),
-    new core.IntegerUniform(0),
-    new core.IntegerUniform(0));
+  private orMaterial = mats.CoreMaterialsFactory.orMaterial.clone();
+  private orMaterialUniforms = new mats.BoolOpShaderUniforms(
+    new mats.TextureUniform(null),
+    new mats.TextureUniform(null),
+    new mats.IntegerUniform(0),
+    new mats.IntegerUniform(0));
 
-  private intersectionTestMaterial = core.CoreMaterialsFactory.intersectionMaterial.clone();
+  private intersectionTestMaterial = mats.CoreMaterialsFactory.intersectionMaterial.clone();
 
-  private intersectionMaterialUniforms = new core.IntersectionShaderUniforms(
-    new core.FloatUniform(0)
+  private intersectionMaterialUniforms = new mats.IntersectionShaderUniforms(
+    new mats.FloatUniform(0)
   );
 
-  private sliceMaterial = core.CoreMaterialsFactory.sliceMaterial.clone();
+  private sliceMaterial = mats.CoreMaterialsFactory.sliceMaterial.clone();
 
-  private sliceMaterialUniforms = new core.SliceShaderUniforms(
-    new core.FloatUniform(0),
-    new core.TextureUniform(null),
-    new core.IntegerUniform(0),
-    new core.IntegerUniform(0));
+  private sliceMaterialUniforms = new mats.SliceShaderUniforms(
+    new mats.FloatUniform(0),
+    new mats.TextureUniform(null),
+    new mats.IntegerUniform(0),
+    new mats.IntegerUniform(0));
 
   constructor(
     private scene: core.PrinterScene,
@@ -134,7 +135,7 @@ export class AdvancedSlicer {
     div: HTMLDivElement = undefined) {
     // Can handle printer dimensions of 10x10 meters. :)
     var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(10000, 10000);
-    var planeMaterial = core.CoreMaterialsFactory.whiteMaterial.clone();
+    var planeMaterial = mats.CoreMaterialsFactory.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
     this.shaderScene = new THREE.Scene();
     let sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
@@ -221,7 +222,7 @@ export class AdvancedSlicer {
 
   private renderRaftSlice() {
     // Set model color to white,
-    this.scene.overrideMaterial = core.CoreMaterialsFactory.flatWhiteMaterial;
+    this.scene.overrideMaterial = mats.CoreMaterialsFactory.flatWhiteMaterial;
     this.renderer.render(this.scene, this.sliceCamera, this.targets.temp1, true);
     // Apply dilate filter to texture
     if (this.raftDilatePixels > 0) {
@@ -255,7 +256,7 @@ export class AdvancedSlicer {
     this.renderer.render(this.scene, this.sliceCamera, this.targets.temp2, true);
     // Render slice to targets.mask
     this.scene.overrideMaterial = this.sliceMaterial;
-    this.sliceMaterialUniforms.iTex = new core.TextureUniform(this.targets.temp2.texture);
+    this.sliceMaterialUniforms.iTex = new mats.TextureUniform(this.targets.temp2.texture);
     this.sliceMaterialUniforms.cutoff.value = sliceZ;
     this.sliceMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.targets.mask, true);
@@ -280,7 +281,7 @@ export class AdvancedSlicer {
       while (dilatePixels > 0) {
         let pixels = dilatePixels % 10 || 10;
         dilatePixels = dilatePixels - pixels;
-        this.erodeDialateMaterialUniforms.src = new core.TextureUniform(this.targets[target].texture);
+        this.erodeDialateMaterialUniforms.src = new mats.TextureUniform(this.targets[target].texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
         this.erodeDialateMaterial.needsUpdate = true;
         this.renderer.render(this.shaderScene, this.sliceCamera, this.targets.scratch, true);
@@ -295,7 +296,7 @@ export class AdvancedSlicer {
   private renderSliceFinal(srcTarget: TargetName) {
     // Render final image
     this.shaderScene.overrideMaterial = this.copyMaterial;
-    this.copyMaterialUniforms.src = new core.TextureUniform(this.targets[srcTarget].texture);
+    this.copyMaterialUniforms.src = new mats.TextureUniform(this.targets[srcTarget].texture);
     this.copyMaterial.needsUpdate = true;
     this.renderer.render(this.shaderScene, this.sliceCamera);
   }
