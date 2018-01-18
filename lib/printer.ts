@@ -2,15 +2,15 @@
  * This module contains classes for modeling and displaying printer volumes.
  */
 
-import * as printer from "./config";
 import * as THREE from "three";
+import * as printer from "./config";
 import * as mats from "./materials";
 
 /**
-* Utility class for displaying print volume
-* All dimensions are in mm
-* R-G-B => X-Y-Z
-*/
+ * Utility class for displaying print volume
+ * All dimensions are in mm
+ * R-G-B => X-Y-Z
+ */
 export class PrintVolumeView extends THREE.Group {
   private _bbox: THREE.Box3;
 
@@ -19,78 +19,78 @@ export class PrintVolumeView extends THREE.Group {
     this.scale.set(width, depth, height);
     this._recalcBBox();
     // this.add(this._pvGroup);
-    var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
-    var planeMaterial = mats.whiteMaterial.clone();
+    const planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
+    const planeMaterial = mats.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
-    var bed = new THREE.Mesh(planeGeom, planeMaterial);
+    const bed = new THREE.Mesh(planeGeom, planeMaterial);
     this.add(bed);
 
-    var xlinesPts = [
+    const xlinesPts = [
       new THREE.Vector3(-0.5, 0.5, 0.0),
       new THREE.Vector3(0.5, 0.5, 0.0),
       new THREE.Vector3(-0.5, -0.5, 0.0),
-      new THREE.Vector3(0.5, -0.5, 0.0)
+      new THREE.Vector3(0.5, -0.5, 0.0),
     ];
-    var xlineGeometry = new THREE.Geometry();
+    const xlineGeometry = new THREE.Geometry();
     xlineGeometry.vertices = xlinesPts;
-    var xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
+    const xLines1 = new THREE.LineSegments(xlineGeometry.clone(),
       mats.xLineMaterial);
     this.add(xLines1);
-    var xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
+    const xLines2 = new THREE.LineSegments(xlineGeometry.clone(),
       mats.xLineMaterial);
     xLines2.position.set(0.0, 0.0, 1.0);
     this.add(xLines2);
 
-    var ylinesPts = [
+    const ylinesPts = [
       new THREE.Vector3(0.5, 0.5, 0.0),
       new THREE.Vector3(0.5, -0.5, 0.0),
       new THREE.Vector3(-0.5, -0.5, 0.0),
-      new THREE.Vector3(-0.5, 0.5, 0.0)
+      new THREE.Vector3(-0.5, 0.5, 0.0),
     ];
-    var ylineGeometry = new THREE.Geometry();
+    const ylineGeometry = new THREE.Geometry();
     ylineGeometry.vertices = ylinesPts;
-    var yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
+    const yLines1 = new THREE.LineSegments(ylineGeometry.clone(),
       mats.yLineMaterial);
     this.add(yLines1);
-    var yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
+    const yLines2 = new THREE.LineSegments(ylineGeometry.clone(),
       mats.yLineMaterial);
     yLines2.position.set(0.0, 0.0, 1.0);
     this.add(yLines2);
 
-    var zlinesPts = [
+    const zlinesPts = [
       new THREE.Vector3(0.5, 0.5, 0.0),
       new THREE.Vector3(0.5, 0.5, 1.0),
       new THREE.Vector3(-0.5, 0.5, 0.0),
-      new THREE.Vector3(-0.5, 0.5, 1.0)
+      new THREE.Vector3(-0.5, 0.5, 1.0),
     ];
-    var zlineGeometry = new THREE.Geometry();
+    const zlineGeometry = new THREE.Geometry();
     zlineGeometry.vertices = zlinesPts;
-    var zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
+    const zLines1 = new THREE.LineSegments(zlineGeometry.clone(),
       mats.zLineMaterial);
     this.add(zLines1);
-    var zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
+    const zLines2 = new THREE.LineSegments(zlineGeometry.clone(),
       mats.zLineMaterial);
     zLines2.position.set(0.0, -1.0, 0.0);
     this.add(zLines2);
   }
 
-  resize(pv: printer.PrintVolume): void
-  resize(width: number, depth: number, height: number): void
-  resize(widthOrPv: number | printer.PrintVolume, depth?: number, height?: number): void {
-    if (typeof widthOrPv == "number") {
+  public resize(pv: printer.PrintVolume): void;
+  public resize(width: number, depth: number, height: number): void;
+  public resize(widthOrPv: number | printer.PrintVolume, depth?: number, height?: number): void {
+    if (typeof widthOrPv === "number") {
       this.scale.set(widthOrPv as number, depth, height);
     } else {
-      var pv = widthOrPv as printer.PrintVolume
-      this.scale.set(pv.width_mm, pv.depth_mm, pv.height_mm)
+      const pv = widthOrPv as printer.PrintVolume;
+      this.scale.set(pv.width_mm, pv.depth_mm, pv.height_mm);
     }
     this._recalcBBox();
   }
 
   private _recalcBBox(): void {
-    var halfWidth = this.scale.x / 2.0;
-    var halfDepth = this.scale.y / 2.0;
-    var min = new THREE.Vector3(-halfWidth, -halfDepth, 0.0);
-    var max = new THREE.Vector3(halfWidth, halfDepth, this.scale.z);
+    const halfWidth = this.scale.x / 2.0;
+    const halfDepth = this.scale.y / 2.0;
+    const min = new THREE.Vector3(-halfWidth, -halfDepth, 0.0);
+    const max = new THREE.Vector3(halfWidth, halfDepth, this.scale.z);
     this._bbox = new THREE.Box3(min, max);
   }
 
@@ -110,22 +110,11 @@ export class PrintVolumeView extends THREE.Group {
     return this.scale.z;
   }
 
-  // /**
-  // * Set up print volume for slicing if enable is
-  // * true, otherwise set it up to display the printvolume
-  // * normally
-  // */
-  // public prepareForSlicing(enable: boolean) {
-  //   this._pvGroup.visible = !enable;
-  //   this._sliceBackground.visible = enable;
-  // }
-
 }
 
-
 /**
-* Subclass of THREE.Scene with several convenience methods
-*/
+ * Subclass of THREE.Scene with several convenience methods
+ */
 export class PrinterScene extends THREE.Scene {
 
   private _printVolume: PrintVolumeView;
@@ -165,51 +154,42 @@ export class PrinterScene extends THREE.Scene {
 // TODO Turn into extension method
 export class PrintMesh extends THREE.Mesh {
 
-  private _gvolume: number = null;
+  public static fromMesh(mesh: THREE.Mesh) {
+    let geom: THREE.Geometry;
+    if (mesh.geometry instanceof THREE.BufferGeometry) {
+      geom = new THREE.Geometry().fromBufferGeometry(mesh.geometry as THREE.BufferGeometry);
+    } else {
+      geom = mesh.geometry as THREE.Geometry;
+    }
+    geom.computeBoundingBox();
+    return new PrintMesh(geom, mesh.material);
+  }
+
+  private _geometryVolume: number = null;
 
   constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
     super(geometry, material);
     this._calculateVolume();
   }
 
-  public static fromMesh(mesh: THREE.Mesh) {
-    var geom: THREE.Geometry;
-    if (mesh.geometry instanceof THREE.BufferGeometry) {
-      geom = new THREE.Geometry().fromBufferGeometry(<THREE.BufferGeometry>mesh.geometry);
-    } else {
-      geom = <THREE.Geometry>mesh.geometry
-    }
-    return new PrintMesh(geom, mesh.material);
-  }
-
-
   /**
-  * Gets the volume of the mesh. Only works if Geometry is
-  * PrintGeometry, else returns null;
-  */
+   * Gets the volume of the mesh. Only works if Geometry is
+   * PrintGeometry, else returns null;
+   */
   public get volume(): number {
     // The true volume is the geom volume multiplied by the scale factors
-    return this._gvolume * (this.scale.x * this.scale.y * this.scale.z);
+    return this._geometryVolume * (this.scale.x * this.scale.y * this.scale.z);
   }
 
-
   private _calculateVolume() {
-    let geom: THREE.Geometry = <THREE.Geometry>this.geometry
-    var faces = geom.faces;
-    var vertices = geom.vertices;
-
-    var face: THREE.Face3;
-    var v1: THREE.Vector3;
-    var v2: THREE.Vector3;
-    var v3: THREE.Vector3;
-
-    for (var i = 0; i < faces.length; i++) {
-      face = faces[i];
-
-      v1 = vertices[face.a];
-      v2 = vertices[face.b];
-      v3 = vertices[face.c];
-      this._gvolume += (
+    const geom: THREE.Geometry = this.geometry as THREE.Geometry;
+    const faces = geom.faces;
+    const vertices = geom.vertices;
+    for (const face of faces) {
+      const v1 = vertices[face.a];
+      const v2 = vertices[face.b];
+      const v3 = vertices[face.c];
+      this._geometryVolume += (
         -(v3.x * v2.y * v1.z)
         + (v2.x * v3.y * v1.z)
         + (v3.x * v1.y * v2.z)

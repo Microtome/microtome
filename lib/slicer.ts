@@ -4,44 +4,38 @@
 
 import * as THREE from "three";
 
-import * as printer from "./printer";
+import * as c from "./common";
 import * as mats from "./materials";
-
-// TODO Move to threed?
-export const Z_DOWN: THREE.Vector3 = new THREE.Vector3(0, 0, -1000000);
-export const Z_UP: THREE.Vector3 = new THREE.Vector3(0, 0, 1000000);
-export const ORIGIN: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-export const POS_X: THREE.Vector3 = new THREE.Vector3(1, 0, 0);
-export const NEG_X: THREE.Vector3 = new THREE.Vector3(-1, 0, 0);
-export const POS_Y: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
-export const NEG_Y: THREE.Vector3 = new THREE.Vector3(0, -1, 0);
-export const POS_Z: THREE.Vector3 = new THREE.Vector3(0, 0, 1);
-export const NEG_Z: THREE.Vector3 = new THREE.Vector3(0, 0, -1);
+import * as printer from "./printer";
 
 export const FAR_Z_PADDING: number = 1.0;
 export const CAMERA_NEAR: number = 1.0;
 export const SLICER_BACKGROUND_Z = -0.1;
 
+// In order for a shell to be fully connected, min pixel
+// count is 3 in x or y.
+const MIN_SHELL_PIXELS = 3;
+
 interface RenderTargets {
-  mask: THREE.WebGLRenderTarget,
-  scratch: THREE.WebGLRenderTarget,
-  temp1: THREE.WebGLRenderTarget,
-  temp2: THREE.WebGLRenderTarget,
-  temp3: THREE.WebGLRenderTarget
+  mask: THREE.WebGLRenderTarget;
+  scratch: THREE.WebGLRenderTarget;
+  temp1: THREE.WebGLRenderTarget;
+  temp2: THREE.WebGLRenderTarget;
+  temp3: THREE.WebGLRenderTarget;
 }
 
 type TargetName = keyof RenderTargets;
 
 /**
-Advanced slicer supporting intersecting volumes
-*/
+ * Advanced slicer supporting intersecting volumes
+ */
 export class AdvancedSlicer {
 
   // Renderer used for slicing
   private renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({
     alpha: false,
     antialias: false,
-    clearColor: 0x000000
+    clearColor: 0x000000,
   });
 
   // Scene containing a single quad for copying data
@@ -56,7 +50,7 @@ export class AdvancedSlicer {
   /**
    * References to contained targets should not be stored
    * as shaders may swap and reorganize the render targets internally
-   * 
+   *
    * Values should always be accessed by key and not aliased.
    */
   private targets: RenderTargets = {
@@ -64,7 +58,7 @@ export class AdvancedSlicer {
     scratch: null,
     temp1: null,
     temp2: null,
-    temp3: null
+    temp3: null,
   };
 
   // Cache canvas width for dirty checking
@@ -78,10 +72,6 @@ export class AdvancedSlicer {
   // If we are shelling, thickness in pixels
   // 0 means disabled, min value is 3
   private shellErodePixels = 0;
-
-  // In order for a shell to be fully connected, min pixel
-  // count is 3 in x or y.
-  private static _MIN_SHELL_PIXELS = 3;
 
   // Materials ---------------------------------------------------------------------------------
 
@@ -118,7 +108,7 @@ export class AdvancedSlicer {
   private intersectionTestMaterial = mats.intersectionMaterial.clone();
 
   private intersectionMaterialUniforms = new mats.IntersectionShaderUniforms(
-    new mats.FloatUniform(0)
+    new mats.FloatUniform(0),
   );
 
   private sliceMaterial = mats.sliceMaterial.clone();
@@ -136,13 +126,13 @@ export class AdvancedSlicer {
     public raftThicknessMM: number,
     public raftOffset: number,
     public shellInset: number,
-    div: HTMLDivElement = undefined) {
+    div?: HTMLDivElement) {
     // Can handle printer dimensions of 10x10 meters. :)
-    var planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(10000, 10000);
-    var planeMaterial = mats.whiteMaterial.clone();
+    const planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(10000, 10000);
+    const planeMaterial = mats.whiteMaterial.clone();
     planeMaterial.side = THREE.DoubleSide;
     this.shaderScene = new THREE.Scene();
-    let sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
+    const sliceBackground = new THREE.Mesh(planeGeom, planeMaterial);
     sliceBackground.position.z = SLICER_BACKGROUND_Z;
     this.shaderScene.add(sliceBackground);
     this.sliceCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5);
@@ -161,15 +151,15 @@ export class AdvancedSlicer {
 
   /**
    * Resize the slicer dimensions
-   * 
+   *
    * This controls the final image size
-   * 
+   *
    * @param width new width
    * @param height new height
    */
-  setSize(width: number, height: number) {
+  public setSize(width: number, height: number) {
     this.renderer.setSize(width, height);
-    let canvas = this.renderer.domElement;
+    const canvas = this.renderer.domElement;
     canvas.width = width;
     canvas.height = height;
     canvas.style.width = `${width}px`;
@@ -179,16 +169,16 @@ export class AdvancedSlicer {
   /**
    * Slice the scene at the given z offset in mm.
    */
-  sliceAt(z: number) {
+  public sliceAt(z: number) {
     this.render(z);
   }
 
   /**
    * Slice to an image
    * Returns a dataurl of the image
-   * 
+   *
    */
-  sliceAtToImageBase64(z: number): String {
+  public sliceAtToImageBase64(z: number): string {
     this.render(z);
     // let gl = this.renderer.context
     // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
@@ -198,11 +188,11 @@ export class AdvancedSlicer {
   /**
    * Slice to an image
    * Returns a dataurl of the image
-   * 
+   *
    * TODO Promisify
    */
-  sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
-    let gl = this.renderer.context
+  public sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
+    const gl = this.renderer.context;
     this.render(z);
     // gl.finish();
     // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
@@ -212,7 +202,7 @@ export class AdvancedSlicer {
   private render(z: number) {
     try {
       this.scene.printVolume.visible = false;
-      let dirty = this.prepareRender();
+      const dirty = this.prepareRender();
       if (z <= this.raftThicknessMM) {
         this.renderRaftSlice();
       } else {
@@ -232,7 +222,7 @@ export class AdvancedSlicer {
     if (this.raftDilatePixels > 0) {
       this.shaderScene.overrideMaterial = this.erodeDialateMaterial;
       this.erodeDialateMaterialUniforms.dilate.value = 1;
-      let dilatePixels = this.raftDilatePixels;
+      const dilatePixels = this.raftDilatePixels;
       this.erodeOrDilate("temp1", dilatePixels, true);
     }
     // render texture to view
@@ -245,14 +235,14 @@ export class AdvancedSlicer {
   }
 
   /**
-  * Render a slice of scene at z to targets.mask
-  */
+   * Render a slice of scene at z to targets.mask
+   */
   private renderSliceCommon(z: number) {
     // Hide print volume
-    this.scene.printVolume.visible = false
+    this.scene.printVolume.visible = false;
     // Hide slice background
-    let buildVolHeight = this.scene.printVolume.boundingBox.max.z;
-    let sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + buildVolHeight);
+    const buildVolHeight = this.scene.printVolume.boundingBox.max.z;
+    const sliceZ = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + buildVolHeight);
     // Intersection test material to temp2
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
@@ -268,12 +258,12 @@ export class AdvancedSlicer {
 
   /**
    * Erode or dilate the image in target, putting the final result back in target
-   * 
+   *
    * Utilizes the scratch target for multiple passes
-   * 
+   *
    * @param target the name of the target to erode/dilate
    * @param numPixels the number of pixels to erode or dilate by
-   * @param dilate if true dilate, if false erode 
+   * @param dilate if true dilate, if false erode
    */
   private erodeOrDilate(target: TargetName, numPixels: number, dilate: boolean) {
     // Apply erode/dilate filter to texture
@@ -283,7 +273,7 @@ export class AdvancedSlicer {
       let dilatePixels = numPixels;
       // Repeatedly apply dilate if needed
       while (dilatePixels > 0) {
-        let pixels = dilatePixels % 10 || 10;
+        const pixels = dilatePixels % 10 || 10;
         dilatePixels = dilatePixels - pixels;
         this.erodeDialateMaterialUniforms.src = new mats.TextureUniform(this.targets[target].texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
@@ -295,8 +285,8 @@ export class AdvancedSlicer {
   }
 
   /**
-  * Display the final slice image stored in srcTarget copying it to the display
-  */
+   * Display the final slice image stored in srcTarget copying it to the display
+   */
   private renderSliceFinal(srcTarget: TargetName) {
     // Render final image
     this.shaderScene.overrideMaterial = this.copyMaterial;
@@ -305,18 +295,17 @@ export class AdvancedSlicer {
     this.renderer.render(this.shaderScene, this.sliceCamera);
   }
 
-
   /**
-  * Handle reallocating render targets if dimensions have changed and
-  * return true if changes have occured
-  */
+   * Handle reallocating render targets if dimensions have changed and
+   * return true if changes have occured
+   */
   private prepareRender(): boolean {
     let dirty = false;
     // Get canvasElement height
-    let width = this.renderer.domElement.width;
-    let height = this.renderer.domElement.height;
+    const width = this.renderer.domElement.width;
+    const height = this.renderer.domElement.height;
     // If its changed...
-    if (width != this.lastWidth || height != this.lastHeight) {
+    if (width !== this.lastWidth || height !== this.lastHeight) {
       this.lastWidth = width;
       this.lastHeight = height;
       // Recalc pixel width, and shelling parameters
@@ -329,8 +318,8 @@ export class AdvancedSlicer {
       }
       if (this.shellInset && this.shellInset > 0) {
         this.shellErodePixels = Math.round(this.shellInset / this.pixelWidthMM);
-        if (this.shellErodePixels < AdvancedSlicer._MIN_SHELL_PIXELS) {
-          this.shellErodePixels = AdvancedSlicer._MIN_SHELL_PIXELS;
+        if (this.shellErodePixels < MIN_SHELL_PIXELS) {
+          this.shellErodePixels = MIN_SHELL_PIXELS;
         }
       } else {
         this.shellErodePixels = 0;
@@ -344,38 +333,38 @@ export class AdvancedSlicer {
   }
 
   /**
-  * Update camera dimensions
-  */
+   * Update camera dimensions
+   */
   private prepareCameras(newWidth: number, newHeight: number) {
-    var pVolumeBBox = this.scene.printVolume.boundingBox;
-    var widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
-    var heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
-    var scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
-    let right = (scale * newWidth) / 2.0;
-    let left = -right;
-    let top = (scale * newHeight) / 2.0;
-    let bottom = -top
-    let targetZ = this.scene.printVolume.boundingBox.max.z;
+    const pVolumeBBox = this.scene.printVolume.boundingBox;
+    const widthRatio: number = Math.abs(pVolumeBBox.max.x - pVolumeBBox.min.x) / newWidth;
+    const heightRatio: number = Math.abs(pVolumeBBox.max.y - pVolumeBBox.min.y) / newHeight;
+    const scale: number = widthRatio > heightRatio ? widthRatio : heightRatio;
+    const right = (scale * newWidth) / 2.0;
+    const left = -right;
+    const top = (scale * newHeight) / 2.0;
+    const bottom = -top;
+    const targetZ = this.scene.printVolume.boundingBox.max.z;
     this.sliceCamera.position.z = targetZ + CAMERA_NEAR;
     this.sliceCamera.near = CAMERA_NEAR;
     // We add a little padding to the camera far so that if
     // slice geometry is right on the 0 xy plane, when
     // we draw in the colors and textures we don't get ambiguity
     this.sliceCamera.far = FAR_Z_PADDING + targetZ + CAMERA_NEAR;
-    for (let camera of [this.sliceCamera, this.zShellCamera]) {
+    for (const camera of [this.sliceCamera, this.zShellCamera]) {
       camera.right = right;
       camera.left = left;
       camera.top = top;
       camera.bottom = bottom;
-      camera.lookAt(Z_DOWN);
-      camera.up = POS_Y;
+      camera.lookAt(c.Z_DOWN);
+      camera.up = c.POS_Y;
       camera.updateProjectionMatrix();
     }
   }
 
   /**
-  * Update shader uniforms such as dimensions
-  */
+   * Update shader uniforms such as dimensions
+   */
   private prepareShaders(newWidth: number, newHeight: number) {
     this.erodeDialateMaterialUniforms.viewWidth.value = newWidth;
     this.erodeDialateMaterialUniforms.viewHeight.value = newHeight;
@@ -396,35 +385,37 @@ export class AdvancedSlicer {
   }
 
   private swapTargets(target1: TargetName, target2: TargetName) {
-    if (target1 === target2) throw Error("Targets can not be same!");
-    let scratch = this.targets[target1];
+    if (target1 === target2) { throw Error("Targets can not be same!"); }
+    const scratch = this.targets[target1];
     this.targets[target1] = this.targets[target2];
     this.targets[target2] = scratch;
   }
 
   /**
-  * reallocate the rendering Targets
-  */
+   * reallocate the rendering Targets
+   */
   private reallocateTargets(width: number, height: number) {
 
-    let reallocateTarget = (targetName: TargetName, width: number, height: number) => {
-      this.targets[targetName] && this.targets[targetName].dispose();
+    function reallocateTarget(targetName: TargetName) {
+      if (this.targets[targetName]) {
+        this.targets[targetName].dispose();
+      }
       this.targets[targetName] = new THREE.WebGLRenderTarget(width, height, {
-        format: THREE.RGBAFormat,
         depthBuffer: true,
-        stencilBuffer: false,
+        format: THREE.RGBAFormat,
         // generateMipMaps: false,
-        minFilter: THREE.NearestFilter,
         magFilter: THREE.NearestFilter,
+        minFilter: THREE.NearestFilter,
+        stencilBuffer: false,
         wrapS: THREE.ClampToEdgeWrapping,
-        wrapT: THREE.ClampToEdgeWrapping
+        wrapT: THREE.ClampToEdgeWrapping,
       });
     }
 
-    reallocateTarget("mask", width, height);
-    reallocateTarget("scratch", width, height);
-    reallocateTarget("temp1", width, height);
-    reallocateTarget("temp2", width, height);
-    reallocateTarget("temp3", width, height);
+    reallocateTarget("mask");
+    reallocateTarget("scratch");
+    reallocateTarget("temp1");
+    reallocateTarget("temp2");
+    reallocateTarget("temp3");
   }
 }

@@ -6,7 +6,12 @@
     "jsRules": {},
     "rules": {
         "interface-name": [true, "never-prefix"],
-        "max-classes-per-file": [false]
+        "max-classes-per-file": [false],
+        "variable-name":[
+          true,
+          "check-format",
+          "allow-leading-underscore"
+        ]
     },
     "rulesDirectory": []
 }

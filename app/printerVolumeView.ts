@@ -1,5 +1,5 @@
-import * as microtome from "microtome"
-import * as THREE from "three"
+import * as microtome from "microtome";
+import * as THREE from "three";
 
 type PrinterScene = microtome.printer.PrinterScene;
 
@@ -9,7 +9,8 @@ type PrinterScene = microtome.printer.PrinterScene;
  */
 export class PrinterVolumeView {
 
-    private renderer: THREE.Renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, clearColor: 0x000000, clearAlpha: 0 });
+    private renderer: THREE.Renderer = new THREE.WebGLRenderer(
+      { alpha: true, antialias: true, clearColor: 0x000000, clearAlpha: 0 });
 
     private raycaster: THREE.Raycaster = new THREE.Raycaster();
 
@@ -23,25 +24,23 @@ export class PrinterVolumeView {
 
     private pvCamera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(37, 1.0, 1.0, 2000.0);
 
-    private static ORIGIN = new THREE.Vector3(0, 0, 0);
-
     private pvObjectGroup = new THREE.Group();
 
     private reqAnimFrameHandle: number;
 
     private camNav: microtome.camera.CameraNav;
 
-    //--------------------------------------------------------
+    // --------------------------------------------------------
     // Properties
-    //--------------------------------------------------------
+    // --------------------------------------------------------
 
     public disabled: boolean = false;
 
-    public scatterColor: string = "#777777"
+    public scatterColor: string = "#777777";
 
-    public skyColor: string = "#AACCFF"
+    public skyColor: string = "#AACCFF";
 
-    public groundColor: string = "#775533"
+    public groundColor: string = "#775533";
 
     public pickedMesh: THREE.Mesh;
 
@@ -62,10 +61,9 @@ export class PrinterVolumeView {
         this.attached();
     }
 
-
-    //-----------------------------------------------------------
+    // -----------------------------------------------------------
     // Observers
-    //-----------------------------------------------------------
+    // -----------------------------------------------------------
 
     // disabledChanged(newValue: boolean, oldValue: boolean) {
     //     if (!newValue) {
@@ -78,26 +76,26 @@ export class PrinterVolumeView {
     //     }
     // }
 
-    scatterColorChanged(newValue: string, oldValue: string) {
+    public scatterColorChanged(newValue: string, oldValue: string) {
         this.scatterLight.color.setStyle(newValue);
     }
 
-    skyColorChanged(newValue: string, oldValue: string) {
+    public skyColorChanged(newValue: string, oldValue: string) {
         this.skyLight.color.setStyle(newValue);
     }
 
-    groundColorChanged(newValue: string, oldValue: string) {
+    public groundColorChanged(newValue: string, oldValue: string) {
         this.groundLight.color.setStyle(newValue);
     }
 
-    pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
+    public pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
         // console.log(arguments);
         if (newMesh && newMesh.rotation && newMesh.scale) {
-            var rotation = newMesh.rotation;
+            const rotation = newMesh.rotation;
             this.rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
             this.rotY = (((rotation.y / (2 * Math.PI)) * 360) % 360).toFixed(0);
             this.rotZ = (((rotation.z / (2 * Math.PI)) * 360) % 360).toFixed(0);
-            var scale = newMesh.scale;
+            const scale = newMesh.scale;
             this.sX = scale.x.toFixed(2);
             this.sY = scale.y.toFixed(2);
             this.sZ = scale.z.toFixed(2);
@@ -107,8 +105,8 @@ export class PrinterVolumeView {
         }
     }
 
-    rotationChanged(rotX: string, rotY: string, rotZ: string) {
-        if (!this.pickedMesh) return;
+    public rotationChanged(rotX: string, rotY: string, rotZ: string) {
+        if (!this.pickedMesh) { return; }
         if (rotX) {
             this.pickedMesh.rotation.x = (parseFloat(rotX) / 360) * 2 * Math.PI;
         }
@@ -120,8 +118,8 @@ export class PrinterVolumeView {
         }
     }
 
-    scaleChanged(sX: string, sY: string, sZ: string) {
-        if (!this.pickedMesh) return;
+    public scaleChanged(sX: string, sY: string, sZ: string) {
+        if (!this.pickedMesh) { return; }
         if (sX) {
             this.pickedMesh.scale.x = parseFloat(sX);
         }
@@ -133,9 +131,9 @@ export class PrinterVolumeView {
         }
     }
 
-    //----------------------------------------------------------
+    // ----------------------------------------------------------
     // Lifecycle methods
-    //----------------------------------------------------------
+    // ----------------------------------------------------------
 
     public attached() {
         this.canvasElement.addEventListener("mousedown", (e) => {
@@ -152,7 +150,7 @@ export class PrinterVolumeView {
         this.pvCamera.position.set(0, 350, 250);
         this.configureLighting();
         this.pvCamera.lookAt(this.scene.printVolume.position);
-        this.camNav = new microtome.camera.CameraNav(this.pvCamera, this.canvasElement, true)
+        this.camNav = new microtome.camera.CameraNav(this.pvCamera, this.canvasElement, true);
         this.camNav.target = this.scene.printVolume;
         this.camNav.frameTarget();
         this.startRendering();
@@ -177,23 +175,23 @@ export class PrinterVolumeView {
         this.scene.add(this.groundLight);
     }
 
-    //---------------------------------------------------------
+    // ---------------------------------------------------------
     // Rendering lifecycle hooks
-    //---------------------------------------------------------
+    // ---------------------------------------------------------
 
     private stopRendering() {
-        if (this.reqAnimFrameHandle) window.cancelAnimationFrame(this.reqAnimFrameHandle)
+        if (this.reqAnimFrameHandle) { window.cancelAnimationFrame(this.reqAnimFrameHandle); }
     }
 
     private startRendering() {
-        if (this.reqAnimFrameHandle) window.cancelAnimationFrame(this.reqAnimFrameHandle);
+        if (this.reqAnimFrameHandle) { window.cancelAnimationFrame(this.reqAnimFrameHandle); }
         this.reqAnimFrameHandle = window.requestAnimationFrame(this.render.bind(this));
     }
 
     private render(timestamp: number) {
-        var canvas = this.canvasElement;
-        var div = this.canvasHome
-        if (canvas.height != div.clientHeight || canvas.width != div.clientWidth) {
+        const canvas = this.canvasElement;
+        const div = this.canvasHome;
+        if (canvas.height !== div.clientHeight || canvas.width !== div.clientWidth) {
             canvas.width = div.clientWidth;
             canvas.height = div.clientHeight;
             this.pvCamera.aspect = div.clientWidth / div.clientHeight;
@@ -204,9 +202,9 @@ export class PrinterVolumeView {
         this.reqAnimFrameHandle = window.requestAnimationFrame(this.render.bind(this));
     }
 
-    //---------------------------------------------------------
+    // ---------------------------------------------------------
     // Picking support
-    //---------------------------------------------------------
+    // ---------------------------------------------------------
 
     private mouseXY = new THREE.Vector2();
 
@@ -224,17 +222,17 @@ export class PrinterVolumeView {
 
     public tryPick(e: MouseEvent) {
         if (this.doPick) {
-            var bounds = this.canvasHome.getBoundingClientRect();
-            var x = (e.clientX / bounds.width) * 2 - 1;
-            var y = - (e.clientY / bounds.height) * 2 + 1;
+            const bounds = this.canvasHome.getBoundingClientRect();
+            const x = (e.clientX / bounds.width) * 2 - 1;
+            const y = - (e.clientY / bounds.height) * 2 + 1;
             // update the picking ray with the camera and mouse position
             this.mouseXY.x = x;
             this.mouseXY.y = y;
             this.raycaster.setFromCamera(this.mouseXY, this.pvCamera);
             // calculate objects intersecting the picking ray
-            var intersects = this.raycaster.intersectObjects(this.scene.printObjects);
+            const intersects = this.raycaster.intersectObjects(this.scene.printObjects);
             if (intersects.length > 0) {
-                let mesh = intersects[0].object as THREE.Mesh;
+                const mesh = intersects[0].object as THREE.Mesh;
                 this.pickMesh(mesh);
             } else {
                 this.unpickMesh();
@@ -251,7 +249,7 @@ export class PrinterVolumeView {
     }
 
     private unpickMesh() {
-        if (!this.pickedMesh) return;
+        if (!this.pickedMesh) { return; }
         this.pickedMesh.material = microtome.materials.objectMaterial;
         this.pickedMesh = null;
     }

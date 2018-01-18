@@ -1,6 +1,6 @@
 export const enum LengthUnit { MICRON, MILLIMETER, CENTIMETER, INCH }
 
-export function lengthUnitToAbbrev(unit: LengthUnit): String {
+export function lengthUnitToAbbrev(unit: LengthUnit): string {
   switch (unit) {
     case LengthUnit.MICRON:
       return "µm";
@@ -15,33 +15,33 @@ export function lengthUnitToAbbrev(unit: LengthUnit): String {
   }
 }
 
-export function lengthUnitToString(unit: LengthUnit): String {
+export function lengthUnitToString(unit: LengthUnit): string {
   return unit.toString().toLowerCase();
 }
 
-export const mm_in_cm: number = 10.0;
-export const mm_in_in: number = 25.4;
-export const mm_in_micron: number = 0.001
+export const MM_IN_CM: number = 10.0;
+export const MM_IN_INCH: number = 25.4;
+export const MM_IN_MICRON: number = 0.001;
 
 export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUnit): number {
   // mm
-  var conversion = 0.0;
+  let conversion = 0.0;
   if (from === to) {
     return value;
   }
 
   switch (from) {
     case LengthUnit.MICRON:
-      conversion = value * mm_in_micron;
+      conversion = value * MM_IN_MICRON;
       break;
     case LengthUnit.MILLIMETER:
       conversion = value;
       break;
     case LengthUnit.CENTIMETER:
-      conversion = value * mm_in_cm;
+      conversion = value * MM_IN_CM;
       break;
     case LengthUnit.INCH:
-      conversion = value * mm_in_in;
+      conversion = value * MM_IN_INCH;
       break;
     default:
       break;
@@ -49,15 +49,15 @@ export function convertLengthUnit(value: number, from: LengthUnit, to: LengthUni
 
   switch (to) {
     case LengthUnit.MICRON:
-      conversion /= mm_in_micron;
+      conversion /= MM_IN_MICRON;
       break;
     case LengthUnit.MILLIMETER:
       break;
     case LengthUnit.CENTIMETER:
-      conversion /= mm_in_cm;
+      conversion /= MM_IN_CM;
       break;
     case LengthUnit.INCH:
-      conversion /= mm_in_in;
+      conversion /= MM_IN_INCH;
       break;
     default:
       break;
