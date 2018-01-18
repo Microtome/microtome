@@ -1,6 +1,6 @@
-import * as slicer from "./advanced_slicer";
-import * as printer from "./printer_config";
-import * as three_d from "./core_threed";
+import * as slicer from "./slicer";
+import * as config from "./config";
+import * as printer from "./printer";
 
 import * as THREE from "three";
 import "jszip";
@@ -39,9 +39,9 @@ export class HeadlessToZipSlicerJob {
    * @param printerCfg printer configuration 
    * @param jobCfg job configuration
    */
-  constructor(private scene: three_d.PrinterScene,
-    private printerCfg: printer.PrinterConfig,
-    private jobCfg: printer.PrintJobConfig) {
+  constructor(private scene: printer.PrinterScene,
+    private printerCfg: config.PrinterConfig,
+    private jobCfg: config.PrintJobConfig) {
     let shellInset_mm = -1;
     let raftOutset_mm = jobCfg.raftOutset_mm || 0;
     let pixelWidthMM = this.scene.printVolume.width / printerCfg.projector.xRes_px;

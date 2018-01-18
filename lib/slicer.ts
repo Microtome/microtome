@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-import * as core from "./core_threed";
+import * as printer from "./printer";
 import * as mats from "./materials";
 
 // TODO Move to threed?
@@ -126,7 +126,7 @@ export class AdvancedSlicer {
     new mats.IntegerUniform(0));
 
   constructor(
-    private scene: core.PrinterScene,
+    private scene: printer.PrinterScene,
     public pixelWidthMM: number,
     public pixelHeightMM: number,
     public raftThicknessMM: number,
