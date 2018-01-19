@@ -246,13 +246,11 @@ export class AdvancedSlicer {
     // Intersection test material to temp2
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
-    this.intersectionTestMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.targets.temp2, true);
     // Render slice to targets.mask
     this.scene.overrideMaterial = this.sliceMaterial;
     this.sliceMaterialUniforms.iTex = new mats.TextureUniform(this.targets.temp2.texture);
     this.sliceMaterialUniforms.cutoff.value = sliceZ;
-    this.sliceMaterial.needsUpdate = true;
     this.renderer.render(this.scene, this.sliceCamera, this.targets.mask, true);
   }
 
@@ -277,7 +275,6 @@ export class AdvancedSlicer {
         dilatePixels = dilatePixels - pixels;
         this.erodeDialateMaterialUniforms.src = new mats.TextureUniform(this.targets[target].texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
-        this.erodeDialateMaterial.needsUpdate = true;
         this.renderer.render(this.shaderScene, this.sliceCamera, this.targets.scratch, true);
         this.swapTargets(target, "scratch");
       }
@@ -291,7 +288,6 @@ export class AdvancedSlicer {
     // Render final image
     this.shaderScene.overrideMaterial = this.copyMaterial;
     this.copyMaterialUniforms.src = new mats.TextureUniform(this.targets[srcTarget].texture);
-    this.copyMaterial.needsUpdate = true;
     this.renderer.render(this.shaderScene, this.sliceCamera);
   }
 
