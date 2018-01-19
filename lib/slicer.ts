@@ -396,8 +396,8 @@ export class AdvancedSlicer {
    */
   private reallocateTargets(width: number, height: number) {
 
-    function reallocateTarget(targetName: TargetName) {
-      if (this.targets[targetName]) {
+    const reallocateTarget = (targetName: TargetName) => {
+      if (this.targets && this.targets[targetName]) {
         this.targets[targetName].dispose();
       }
       this.targets[targetName] = new THREE.WebGLRenderTarget(width, height, {
@@ -410,7 +410,7 @@ export class AdvancedSlicer {
         wrapS: THREE.ClampToEdgeWrapping,
         wrapT: THREE.ClampToEdgeWrapping,
       });
-    }
+    };
 
     reallocateTarget("mask");
     reallocateTarget("scratch");
