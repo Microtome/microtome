@@ -8,17 +8,15 @@ type PrinterScene = microtome.printer.PrinterScene;
  */
 export class SlicePreview {
 
-  private static _ORIGIN = new THREE.Vector3(0, 0, 0);
+  public disabled: boolean = false;
+
+  public sliceAt: number;
 
   private _pvObjectGroup = new THREE.Group();
 
   private _reqAnimFrameHandle: number;
 
   private _slicer: microtome.slicer.AdvancedSlicer;
-
-  public disabled: boolean = false;
-
-  public sliceAt: number;
 
   constructor(private _canvasHome: HTMLDivElement, private scene: PrinterScene) {
     this.attached();
