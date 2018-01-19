@@ -180,8 +180,6 @@ export class AdvancedSlicer {
    */
   public sliceAtToImageBase64(z: number): string {
     this.render(z);
-    // let gl = this.renderer.context
-    // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
     return this.renderer.domElement.toDataURL("image/png");
   }
 
@@ -192,10 +190,7 @@ export class AdvancedSlicer {
    * TODO Promisify
    */
   public sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
-    const gl = this.renderer.context;
     this.render(z);
-    // gl.finish();
-    // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.dummyReadPixels);
     this.renderer.domElement.toBlob(callback, "image/png");
   }
 
