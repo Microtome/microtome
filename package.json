@@ -24,13 +24,14 @@
   "scripts": {
     "copy:definitions": "node ./scripts/copy_definitions.js",
     "copy:resources": "node ./scripts/copy_shaders.js",
-    "clean": "rm -rf ./dist && rm -rf ./build",
+    "assemble": "node ./scripts/assemble_resources.js",
+    "clean": "rm -rf ./dist && rm -rf ./build && rm -rf ./public",
     "build:lib": "tsc -p lib && yarn run copy:resources",
     "build:app": "tsc -p app && cp -r app/ build/",
     "dist:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
     "dist:app": "rollup -c rollup-config-app.js",
     "dist:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib --watch app --ext css,html,ts,glsl",
-    "all": "yarn run clean && yarn run build:lib && yarn run build:app && yarn run dist:lib && yarn run dist:app",
+    "all": "yarn run clean && yarn run build:lib && yarn run build:app && yarn run dist:lib && yarn run dist:app && yarn run assemble",
     "serve:dev": "lite-server -c server-config-dev.json",
     "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run dist:all:watch'"
   },

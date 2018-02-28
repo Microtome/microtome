@@ -83,8 +83,8 @@ void (async () => {
       lastModified: 0,
       name: "Dummy",
       projector: {
-        xRes_px: 4 * 640,
-        yRes_px: 4 * 480,
+        xRes_px: 640,
+        yRes_px: 480,
       },
       volume: {
         depth_mm: 96,
@@ -141,7 +141,7 @@ void (async () => {
           const mesh = new PrintMesh(geom, materials.objectMaterial);
           // mesh.position.set(15, 23, 35);
           // printerScene.
-          printerScene.add(mesh);
+          printerScene.printObjects.push(mesh);
         } else {
           alert(`File '${file.name}' is unsupported.`);
         }
