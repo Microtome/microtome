@@ -93,7 +93,6 @@ export class PrinterVolumeView {
   }
 
   public pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
-    // console.log(arguments);
     if (newMesh && newMesh.rotation && newMesh.scale) {
       const rotation = newMesh.rotation;
       this.rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
@@ -157,9 +156,8 @@ export class PrinterVolumeView {
     this.camNav = new microtome.camera.CameraNav(this.pvCamera, this.canvasElement, true);
     this.camNav.target = this.scene.printVolume;
     this.camNav.frameTarget();
+    this.camNav.enabled = true;
     this.startRendering();
-
-    // console.log(this);
   }
 
   public detached() {
@@ -182,9 +180,9 @@ export class PrinterVolumeView {
 
   public tryPick(e: MouseEvent) {
     if (this.doPick) {
-      const bounds = this.canvasHome.getBoundingClientRect();
-      const x = (e.clientX / bounds.width) * 2 - 1;
-      const y = - (e.clientY / bounds.height) * 2 + 1;
+      const bounds = this.canvasElement.getBoundingClientRect();
+      const x = (e.offsetX / bounds.width) * 2 - 1;
+      const y = - (e.offsetY / bounds.height) * 2 + 1;
       // update the picking ray with the camera and mouse position
       this.mouseXY.x = x;
       this.mouseXY.y = y;
