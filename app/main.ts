@@ -37,11 +37,11 @@ void (async () => {
 
   const printerScene = new PrinterScene();
   printerScene.printVolume.resize(128, 96, 96);
-  const sphere1 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), materials.objectMaterial);
+  const sphere1 = PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
   sphere1.position.set(15, 15, 15);
-  const sphere2 = new PrintMesh(new THREE.SphereGeometry(10, 16, 16), materials.objectMaterial);
+  const sphere2 = PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
   sphere2.position.set(15, 24, 20);
-  const sphere3 = new PrintMesh(new THREE.SphereGeometry(15, 16, 16), materials.objectMaterial);
+  const sphere3 = PrintMesh.fromGeometry(new THREE.SphereGeometry(15, 16, 16));
   sphere3.position.set(15, 23, 35);
 
   // Add some dummy objects
@@ -138,7 +138,7 @@ void (async () => {
         if (file.name.endsWith(".stl")) {
           const geom = new THREE.Geometry().
             fromBufferGeometry(stlLoader.parse(arrayBuffer));
-          const mesh = new PrintMesh(geom, materials.objectMaterial);
+          const mesh = PrintMesh.fromGeometry(geom);
           // mesh.position.set(15, 23, 35);
           // printerScene.
           printerScene.printObjects.push(mesh);

@@ -154,20 +154,19 @@ export class PrinterScene extends THREE.Scene {
 // TODO Turn into extension method
 export class PrintMesh extends THREE.Mesh {
 
-  public static fromMesh(mesh: THREE.Mesh) {
-    let geom: THREE.Geometry;
-    if (mesh.geometry instanceof THREE.BufferGeometry) {
-      geom = new THREE.Geometry().fromBufferGeometry(mesh.geometry as THREE.BufferGeometry);
+  public static fromGeometry(geom: THREE.Geometry) {
+    if (geom instanceof THREE.BufferGeometry) {
+      geom = new THREE.Geometry().fromBufferGeometry(geom as THREE.BufferGeometry);
     } else {
-      geom = mesh.geometry as THREE.Geometry;
+      geom = geom as THREE.Geometry;
     }
     geom.computeBoundingBox();
-    return new PrintMesh(geom, mesh.material);
+    return new PrintMesh(geom, mats.objectMaterial);
   }
 
   private _geometryVolume: number = null;
 
-  constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
+  private constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
     super(geometry, material);
     this._calculateVolume();
   }
