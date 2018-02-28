@@ -19,7 +19,6 @@
     "run-sequence": "^1.0.2",
     "tslint": "^5.9.1",
     "typescript": "^2.6.1",
-    "vulcanize": "^1.14.12",
     "watch": "^1.0.1"
   },
   "scripts": {
