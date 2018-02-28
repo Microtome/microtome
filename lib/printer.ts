@@ -119,18 +119,18 @@ export class PrinterScene extends THREE.Scene {
 
   private _printVolume: PrintVolumeView;
   private _printObjectsHolder: THREE.Group;
-  private _printObjects: THREE.Mesh[];
+  private _printObjects: PrintMesh[];
 
   constructor() {
     super();
     this._printVolume = new PrintVolumeView(100, 100, 100);
-    this.add(this._printVolume);
+    super.add(this._printVolume);
     this._printObjectsHolder = new THREE.Group();
-    this.add(this._printObjectsHolder);
-    this._printObjects = this._printObjectsHolder.children as THREE.Mesh[];
+    super.add(this._printObjectsHolder);
+    this._printObjects = this._printObjectsHolder.children as PrintMesh[];
   }
 
-  get printObjects(): THREE.Mesh[] {
+  get printObjects(): PrintMesh[] {
     return this._printObjects;
   }
 
@@ -138,7 +138,7 @@ export class PrinterScene extends THREE.Scene {
     return this._printVolume;
   }
 
-  public removePrintObject(child: THREE.Object3D) {
+  public removePrintObject(child: PrintMesh) {
     this._printObjectsHolder.remove(child);
   }
 
