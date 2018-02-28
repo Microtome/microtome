@@ -8,3 +8,5 @@ typings
 !lib/ts/globals.d.ts
 *.js
 *.js.map
+public
+
