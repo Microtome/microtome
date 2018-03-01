@@ -160,7 +160,6 @@ export class PrintMesh extends THREE.Mesh {
     } else {
       geom = geom as THREE.Geometry;
     }
-    geom.computeBoundingBox();
     return new PrintMesh(geom, mats.objectMaterial);
   }
 
@@ -168,12 +167,12 @@ export class PrintMesh extends THREE.Mesh {
 
   private constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
     super(geometry, material);
+    geometry.computeBoundingBox();
     this._calculateVolume();
   }
 
   /**
-   * Gets the volume of the mesh. Only works if Geometry is
-   * PrintGeometry, else returns null;
+   * Gets the volume of the mesh.
    */
   public get volume(): number {
     // The true volume is the geom volume multiplied by the scale factors
