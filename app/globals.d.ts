@@ -7,6 +7,14 @@ declare global {
   interface Window {
     THREE: typeof threeObj
   }
+
+  namespace JSX {
+    // Needed so that Surplus typechecks as it produces real dom nodes
+    // not fake ones.
+    interface Element extends HTMLElement{
+
+    }
+  }
 }
 
 declare module "@three/*" {

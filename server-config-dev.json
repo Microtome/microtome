@@ -1,6 +1,7 @@
 {
   "port": 8080,
   "files": [
+    "./app/index-surplus.html",
     "./app/index.html"
   ],
   "server": {
@@ -10,9 +11,12 @@
       "/lib/OBJLoader.js": "./node_modules/three/examples/js/loaders/OBJLoader.js",
       "/lib/STLLoader.js": "./node_modules/three/examples/js/loaders/STLLoader.js",
       "/lib/jszip.js": "./node_modules/jszip/dist/jszip.js",
+      "/lib/surplus.js": "./node_modules/surplus/es/index.js",
+      "/lib/s.js": "./node_modules/s-js/dist/es/index.js",
       "/lib/file-saver.js": "./node_modules/file-saver/FileSaver.js",
       "/lib/microtome.js": "./dist/lib/microtome.js",
-      "/app/main.js": "./dist/app/main.js"
+      "/app/main.js": "./dist/app/main.js",
+      "/app/microtomeApp.js": "./dist/app/microtomeApp.js"
     }
   }
 }

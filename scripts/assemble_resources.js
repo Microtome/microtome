@@ -24,7 +24,6 @@ fs.copyFile("./node_modules/three/examples/js/loaders/STLLoader.js",
 fs.copyFile("./node_modules/jszip/dist/jszip.js", "./public/lib/jszip.js", errHandler);
 fs.copyFile("./node_modules/file-saver/FileSaver.js", "./public/lib/file-saver.js", errHandler);
 fs.copyFile("./dist/lib/microtome.js", "./public/lib/microtome.js", errHandler);
-fs.copyFile("./dist/app/main.js", "./public/app/main.js", errHandler);
-
+// fs.copyFile("./dist/app/main.js", "./public/app/main.js", errHandler);
 fs.copyFile("./app/index.html", "./public/index.html", errHandler);
 

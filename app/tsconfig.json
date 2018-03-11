@@ -8,8 +8,10 @@
     "target": "es2017",
     "sourceMap": true,
     "newLine": "LF",
+    "outDir": "../build/app",
     "module": "esnext",
     "baseUrl": ".",
+    "jsx": "preserve",
     "paths": {
       "microtome": [
         "../build/lib/microtome/index.d.ts"
@@ -22,6 +24,7 @@
   "compileOnSave": false,
   "buildOnSave": false,
   "include": [
-    "./**/*.ts"
+    "./**/*.ts",
+    "./**/*.tsx"
   ]
 }
