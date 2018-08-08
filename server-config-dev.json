@@ -6,9 +6,7 @@
   "server": {
     "baseDir": "./app",
     "routes": {
-      "/lib/three.js": "./node_modules/three/build/three.module.js",
-      "/lib/OBJLoader.js": "./node_modules/three/examples/js/loaders/OBJLoader.js",
-      "/lib/STLLoader.js": "./node_modules/three/examples/js/loaders/STLLoader.js",
+      "/lib/three.js": "./node_modules/three-full/builds/Three.es.js",
       "/lib/jszip.js": "./node_modules/jszip/dist/jszip.js",
       "/lib/file-saver.js": "./node_modules/file-saver/FileSaver.js",
       "/lib/microtome.js": "./dist/lib/microtome.js",

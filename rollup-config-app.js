@@ -7,8 +7,6 @@ export default {
     format: 'es',
     external: ['three', 'jszip', 'microtome'],
     paths: {
-      "@three/loaders/OBJLoader.js": "/lib/OBJLoader.js",
-      "@three/loaders/STLLoader.js": "/lib/STLLoader.js",
       "three": "/lib/three.js",
       "jszip": "/lib/jszip.js",
       "microtome": "/lib/microtome.js",

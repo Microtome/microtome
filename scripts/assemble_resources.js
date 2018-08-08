@@ -15,12 +15,7 @@ fs.mkdirSync("./public");
 fs.mkdirSync("./public/lib");
 fs.mkdirSync("./public/app");
 
-// fs.copyFile("./node_modules/threejs-full-es6/builds/Three.es.js","./public/lib/three-es6");
-fs.copyFile("./node_modules/three/build/three.module.js", "./public/lib/three.js", errHandler);
-fs.copyFile("./node_modules/three/examples/js/loaders/OBJLoader.js",
-  "./public/lib/OBJLoader.js", errHandler);
-fs.copyFile("./node_modules/three/examples/js/loaders/STLLoader.js",
-  "./public/lib/STLLoader.js", errHandler);
+fs.copyFile("./node_modules/three-full/builds/Three.es.js","./public/lib/three-es6", errHandler);
 fs.copyFile("./node_modules/jszip/dist/jszip.js", "./public/lib/jszip.js", errHandler);
 fs.copyFile("./node_modules/file-saver/FileSaver.js", "./public/lib/file-saver.js", errHandler);
 fs.copyFile("./dist/lib/microtome.js", "./public/lib/microtome.js", errHandler);

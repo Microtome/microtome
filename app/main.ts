@@ -1,11 +1,9 @@
 import "file-saver";
 import * as microtome from "microtome";
-import * as three from "three";
 import { PrinterVolumeView } from "./printerVolumeView";
 import { SlicePreview } from "./slicePreview";
-
-// Legacy three js examples expect a global THREE object
-(window as any).THREE = { ...three };
+import * as THREE from "three";
+import { STLLoader } from "three";
 
 /**
  * custom async require using dynamic imports
@@ -16,137 +14,126 @@ async function require(path: string) {
   await import(path);
 }
 
-void (async () => {
+const PrinterScene = microtome.printer.PrinterScene;
 
-  // We have to await these as legacy threejs examples
-  // require a global/window THREE instance to exist
-  // await require("/lib/OBJLoader.js")
-  await require("/lib/STLLoader.js");
+const materials = microtome.materials;
 
-  // const objLoader = new THREE.OBJLoader;
-  const stlLoader = new THREE.STLLoader();
+const printVolViewDiv = document.getElementById("pvview-div") as HTMLDivElement;
+const slicePreviewDiv = document.getElementById("spreview-div") as HTMLDivElement;
 
-  const PrintMesh = microtome.printer.PrintMesh;
+const printerScene = new PrinterScene();
+printerScene.printVolume.resize(128, 96, 96);
+const sphere1 = microtome.printer.PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
+sphere1.position.set(15, 15, 15);
+const sphere2 = microtome.printer.PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
+sphere2.position.set(15, 24, 20);
+const sphere3 = microtome.printer.PrintMesh.fromGeometry(new THREE.SphereGeometry(15, 16, 16));
+sphere3.position.set(15, 23, 35);
 
-  const PrinterScene = microtome.printer.PrinterScene;
+// Add some dummy objects
+// TODO swap to addPrintObject method
+// TODO add removePrintObject method
+printerScene.printObjects.push(sphere1);
+printerScene.printObjects.push(sphere2);
+printerScene.printObjects.push(sphere3);
 
-  const materials = microtome.materials;
+// Views
+const pvView = new PrinterVolumeView(printVolViewDiv, printerScene);
+const slicePreview = new SlicePreview(slicePreviewDiv, printerScene);
+const stlLoader = new STLLoader();
 
-  const printVolViewDiv = document.getElementById("pvview-div") as HTMLDivElement;
-  const slicePreviewDiv = document.getElementById("spreview-div") as HTMLDivElement;
+// Slice preview slider
+const sliceAtSlider = document.getElementById("slice-at") as HTMLInputElement;
+sliceAtSlider.min = "0";
+sliceAtSlider.max = "96";
+sliceAtSlider.step = "0.1";
+sliceAtSlider.value = "25";
+slicePreview.sliceAt = 25;
+document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
+sliceAtSlider.oninput = (e: Event) => {
+  const sliceAt = parseFloat((e.target as HTMLInputElement).value);
+  slicePreview.sliceAt = sliceAt;
+  document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
+};
 
-  const printerScene = new PrinterScene();
-  printerScene.printVolume.resize(128, 96, 96);
-  const sphere1 = PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
-  sphere1.position.set(15, 15, 15);
-  const sphere2 = PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
-  sphere2.position.set(15, 24, 20);
-  const sphere3 = PrintMesh.fromGeometry(new THREE.SphereGeometry(15, 16, 16));
-  sphere3.position.set(15, 23, 35);
+// Slice to file
+const sliceToFileBtn = document.getElementById("slice-to-file-btn") as HTMLButtonElement;
+sliceToFileBtn.onclick = async (e: Event) => {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  e.stopPropagation();
 
-  // Add some dummy objects
-  // TODO swap to addPrintObject method
-  // TODO add removePrintObject method
-  printerScene.printObjects.push(sphere1);
-  printerScene.printObjects.push(sphere2);
-  printerScene.printObjects.push(sphere3);
+  sliceToFileBtn.disabled = true;
 
-  // Views
-  const pvView = new PrinterVolumeView(printVolViewDiv, printerScene);
-  const slicePreview = new SlicePreview(slicePreviewDiv, printerScene);
-
-  // Slice preview slider
-  const sliceAtSlider = document.getElementById("slice-at") as HTMLInputElement;
-  sliceAtSlider.min = "0";
-  sliceAtSlider.max = "96";
-  sliceAtSlider.step = "0.1";
-  sliceAtSlider.value = "25";
-  slicePreview.sliceAt = 25;
-  document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
-  sliceAtSlider.oninput = (e: Event) => {
-    const sliceAt = parseFloat((e.target as HTMLInputElement).value);
-    slicePreview.sliceAt = sliceAt;
-    document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
+  const printerCfg = {
+    description: "Dummy Printer",
+    lastModified: 0,
+    name: "Dummy",
+    projector: {
+      xRes_px: 640,
+      yRes_px: 480,
+    },
+    volume: {
+      depth_mm: 96,
+      height_mm: 96,
+      width_mm: 128,
+    },
+    zStage: {
+      lead_mm: 0.1,
+      microsteps: 1,
+      stepsPerRev: 128,
+    },
   };
 
-  // Slice to file
-  const sliceToFileBtn = document.getElementById("slice-to-file-btn") as HTMLButtonElement;
-  sliceToFileBtn.onclick = async (e: Event) => {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.stopPropagation();
+  const jobCfg = {
+    blankTime_ms: 500,
+    description: "Dummy Slicing Job",
+    layerExposureTime_ms: 8000,
+    name: "Dummy Job",
+    raftOutset_mm: 1.5,
+    raftThickness_mm: 1.5,
+    retractDistance_mm: 28,
+    settleTime_ms: 5000,
+    stepDistance_microns: 1,
+    stepsPerLayer: 100,
+    zOffset_mm: 5,
+  };
 
-    sliceToFileBtn.disabled = true;
+  const fileSlicer = new microtome.job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
 
-    const printerCfg = {
-      description: "Dummy Printer",
-      lastModified: 0,
-      name: "Dummy",
-      projector: {
-        xRes_px: 640,
-        yRes_px: 480,
-      },
-      volume: {
-        depth_mm: 96,
-        height_mm: 96,
-        width_mm: 128,
-      },
-      zStage: {
-        lead_mm: 0.1,
-        microsteps: 1,
-        stepsPerRev: 128,
-      },
+  const blob = await fileSlicer.execute();
+  saveAs(blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
+
+  sliceToFileBtn.disabled = false;
+};
+
+// Load model
+const fileChooserInput = document.getElementById("file-chooser") as HTMLInputElement;
+fileChooserInput.onchange = (e: Event) => {
+  const file = fileChooserInput.files[0];
+  if (!!file) {
+    const fileReader = new FileReader();
+    fileReader.onloadend = (loadEndEvent) => {
+      const arrayBuffer = (loadEndEvent.target as any).result;
+      // var mesh:Group = null;
+      // if (file.name.endsWith(".obj")) {
+      //     const decoder = new TextDecoder();
+      //     const objContent = decoder.decode(arrayBuffer);
+      //     const group = objLoader.parse(objContent);
+      //     console.log(group);
+      // } else
+      if (file.name.endsWith(".stl")) {
+        const geom = new THREE.Geometry().
+          fromBufferGeometry(stlLoader.parse(arrayBuffer));
+        const mesh = microtome.printer.PrintMesh.fromGeometry(geom);
+        // mesh.position.set(15, 23, 35);
+        // printerScene.
+        printerScene.printObjects.push(mesh);
+      } else {
+        alert(`File '${file.name}' is unsupported.`);
+      }
     };
+    fileReader.readAsArrayBuffer(file);
+  }
+};
 
-    const jobCfg = {
-      blankTime_ms: 500,
-      description: "Dummy Slicing Job",
-      layerExposureTime_ms: 8000,
-      name: "Dummy Job",
-      raftOutset_mm: 1.5,
-      raftThickness_mm: 1.5,
-      retractDistance_mm: 28,
-      settleTime_ms: 5000,
-      stepDistance_microns: 1,
-      stepsPerLayer: 100,
-      zOffset_mm: 5,
-    };
-
-    const fileSlicer = new microtome.job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
-
-    const blob = await fileSlicer.execute();
-    saveAs(blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
-
-    sliceToFileBtn.disabled = false;
-  };
-
-  // Load model
-  const fileChooserInput = document.getElementById("file-chooser") as HTMLInputElement;
-  fileChooserInput.onchange = (e: Event) => {
-    const file = fileChooserInput.files[0];
-    if (!!file) {
-      const fileReader = new FileReader();
-      fileReader.onloadend = (loadEndEvent) => {
-        const arrayBuffer = (loadEndEvent.target as any).result;
-        // var mesh:Group = null;
-        // if (file.name.endsWith(".obj")) {
-        //     const decoder = new TextDecoder();
-        //     const objContent = decoder.decode(arrayBuffer);
-        //     const group = objLoader.parse(objContent);
-        //     console.log(group);
-        // } else
-        if (file.name.endsWith(".stl")) {
-          const geom = new THREE.Geometry().
-            fromBufferGeometry(stlLoader.parse(arrayBuffer));
-          const mesh = PrintMesh.fromGeometry(geom);
-          // mesh.position.set(15, 23, 35);
-          // printerScene.
-          printerScene.printObjects.push(mesh);
-        } else {
-          alert(`File '${file.name}' is unsupported.`);
-        }
-      };
-      fileReader.readAsArrayBuffer(file);
-    }
-  };
-})();
