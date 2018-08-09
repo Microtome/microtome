@@ -6,7 +6,7 @@
   "server": {
     "baseDir": "./app",
     "routes": {
-      "/lib/three.js": "./node_modules/three-full/builds/Three.es.js",
+      "/lib/three-full.js": "./node_modules/three-full/builds/Three.es.js",
       "/lib/jszip.js": "./node_modules/jszip/dist/jszip.js",
       "/lib/file-saver.js": "./node_modules/file-saver/FileSaver.js",
       "/lib/microtome.js": "./dist/lib/microtome.js",

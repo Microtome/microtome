@@ -5,21 +5,21 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es2017",
+    "target": "es2015",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "esnext",
-    "baseUrl": ".",
-    "outDir": "../build/app",
-    "paths": {
-      "microtome": [
-        "../build/lib/microtome/index.d.ts"
-      ]
-    },
+    "module": "es6",
+    "declaration": true,
+    "outDir": "../../build/lib/microtome",
+    "types": [
+      "three",
+      "jszip"
+    ],
+    "jsx": "preserve"
   },
   "compileOnSave": false,
   "buildOnSave": false,
   "include": [
-    "./**/*.ts"
+    "**/*.ts"
   ]
 }

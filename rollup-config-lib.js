@@ -8,7 +8,7 @@ export default {
         format: 'es',
         file: 'dist/lib/microtome.js',
         paths: {
-            "three": "/lib/three.js",
+            "three": "/lib/three-full.js",
             "jszip": "/lib/jszip.js",
             "file-saver": "/lib/file-saver.js"
         },

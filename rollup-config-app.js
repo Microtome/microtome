@@ -7,7 +7,7 @@ export default {
     format: 'es',
     external: ['three', 'jszip', 'microtome'],
     paths: {
-      "three": "/lib/three.js",
+      "three": "/lib/three-full.js",
       "jszip": "/lib/jszip.js",
       "microtome": "/lib/microtome.js",
       "file-saver": "/lib/file-saver.js",
