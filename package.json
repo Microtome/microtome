@@ -32,6 +32,7 @@
     "dist:app": "rollup -c rollup-config-app.js",
     "dist:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch app/index.html' --watch lib --watch app --ext css,html,ts,glsl",
     "all": "yarn run clean && yarn run build:lib && yarn run build:app && yarn run dist:lib && yarn run dist:app && yarn run assemble",
+    "full": "yarn run clean && yarn run all",
     "serve:dev": "lite-server -c server-config-dev.json",
     "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run dist:all:watch'"
   },
