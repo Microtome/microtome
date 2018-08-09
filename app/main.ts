@@ -4,15 +4,6 @@ import { PrinterVolumeView } from "./printerVolumeView";
 import { SlicePreview } from "./slicePreview";
 import * as THREE from "three";
 
-/**
- * custom async require using dynamic imports
- *
- * @param path module path to load
- */
-async function require(path: string) {
-  await import(path);
-}
-
 const PrinterScene = microtome.printer.PrinterScene;
 
 const materials = microtome.materials;
