@@ -10,12 +10,10 @@
     "newLine": "LF",
     "module": "esnext",
     "baseUrl": ".",
+    "outDir": "../build/app",
     "paths": {
       "microtome": [
         "../build/lib/microtome/index.d.ts"
-      ],
-      "@three/*": [
-        "../node_modules/three/examples/js/*"
       ]
     },
   },

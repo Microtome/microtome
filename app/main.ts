@@ -3,7 +3,6 @@ import * as microtome from "microtome";
 import { PrinterVolumeView } from "./printerVolumeView";
 import { SlicePreview } from "./slicePreview";
 import * as THREE from "three";
-import { STLLoader } from "three";
 
 /**
  * custom async require using dynamic imports
@@ -30,17 +29,10 @@ sphere2.position.set(15, 24, 20);
 const sphere3 = microtome.printer.PrintMesh.fromGeometry(new THREE.SphereGeometry(15, 16, 16));
 sphere3.position.set(15, 23, 35);
 
-// Add some dummy objects
-// TODO swap to addPrintObject method
-// TODO add removePrintObject method
-printerScene.printObjects.push(sphere1);
-printerScene.printObjects.push(sphere2);
-printerScene.printObjects.push(sphere3);
-
 // Views
 const pvView = new PrinterVolumeView(printVolViewDiv, printerScene);
 const slicePreview = new SlicePreview(slicePreviewDiv, printerScene);
-const stlLoader = new STLLoader();
+const stlLoader = new THREE.STLLoader();
 
 // Slice preview slider
 const sliceAtSlider = document.getElementById("slice-at") as HTMLInputElement;
