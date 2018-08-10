@@ -4,6 +4,13 @@ import * as THREE from "three";
 import { PrinterVolumeView } from "./printerVolumeView";
 import { SlicePreview } from "./slicePreview";
 
+const PRINTER_VOLUME_DEPTH = 96;
+const PRINTER_VOLUME_WIDTH = 128;
+const PRINTER_VOLUME_HEIGHT = 96;
+
+const PRINTER_X_RES = 640;
+const PRINTER_Y_RES = 480;
+
 const PrinterScene = microtome.printer.PrinterScene;
 
 const printVolViewDiv = document.getElementById("pvview-div") as HTMLDivElement;
@@ -24,13 +31,13 @@ const printerCfg = {
   lastModified: 0,
   name: "Dummy",
   projector: {
-    xRes_px: 640,
-    yRes_px: 480,
+    xRes_px: PRINTER_X_RES,
+    yRes_px: PRINTER_Y_RES,
   },
   volume: {
-    depth_mm: 96,
-    height_mm: 96,
-    width_mm: 128,
+    depth_mm: PRINTER_VOLUME_DEPTH,
+    height_mm: PRINTER_VOLUME_HEIGHT,
+    width_mm: PRINTER_VOLUME_WIDTH,
   },
   zStage: {
     lead_mm: 0.1,
@@ -70,10 +77,10 @@ const stlLoader = new THREE.STLLoader();
 // Slice preview slider
 const sliceAtSlider = document.getElementById("slice-at") as HTMLInputElement;
 sliceAtSlider.min = "0";
-sliceAtSlider.max = "96";
+sliceAtSlider.max = `${PRINTER_VOLUME_HEIGHT}`;
 sliceAtSlider.step = "0.1";
-sliceAtSlider.value = "25";
-slicePreview.sliceAt = 25;
+slicePreview.sliceAt = Math.floor(PRINTER_VOLUME_HEIGHT / 4);
+sliceAtSlider.value =  `${slicePreview.sliceAt}`;
 document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
 sliceAtSlider.oninput = (e: Event) => {
   const sliceAt = parseFloat((e.target as HTMLInputElement).value);
