@@ -2,12 +2,12 @@
  * This module contains classes for managing asynchronous model slicing jobs.
  */
 
+import * as THREE from "three";
 import * as config from "./config";
 import * as printer from "./printer";
 import * as slicer from "./slicer";
 
 import "jszip";
-import * as THREE from "three";
 
 /**
  * Class that actually handles the slicing job. Not reusable
@@ -24,7 +24,6 @@ export class HeadlessToZipSlicerJob {
   private zip = new JSZip();
   private resolve: (blob: Blob) => void = null;
   private reject: (e?: Error) => void = null;
-  private jobStartTime: Date = null;
   private zipBlob = new Promise<Blob>((resolve, reject) => {
     this.resolve = resolve;
     this.reject = reject;
@@ -98,7 +97,9 @@ export class HeadlessToZipSlicerJob {
   private doSlice() {
     // TODO Error accumulation
     this.z = this.zStepMM * this.sliceNum;
-    // console.debug(`Slicing ${this.sliceNum} at ${this.z}mm`)
+    if (this.sliceNum % 10 === 1) {
+      console.info(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
+    }
     this.slicer.sliceAtToBlob(this.z, (blob) => {
       const sname = this.sliceNum.toString().padStart(8, "0");
       this.zip.file(`${sname}.png`, blob, { compression: "store" });
@@ -125,13 +126,16 @@ export class HeadlessToZipSlicerJob {
           const sliceTime = ((slicingFinished - this.startTime) / 1000);
           const zipFinishedTime = ((zipEnd - slicingFinished) / 1000);
           const totalTime = sliceTime + zipFinishedTime;
-          // console.debug(`Slicing Job Complete!`);
-          // console.debug(`  Sliced ${this.sliceNum + 1} layers`);
-          // console.debug(`  Slicing took ${sliceTime.toFixed(2)}s,
-          // ${(sliceTime * 1000 / (this.sliceNum + 1)).toFixed(2)}ms / layer`);
-          // console.debug(`  Zip generation took ${zipFinishedTime.toFixed(2)}s`);
-          // console.debug(`  Total time took ${totalTime.toFixed(2)}s,
-          // amortized ${(totalTime * 1000 / (this.sliceNum + 1)).toFixed(2)}ms / layer`);
+          const sliceTimeLayer = (sliceTime * 1000 / (this.sliceNum + 1)).toFixed(2);
+          const amortizedTimeLayer = (totalTime * 1000 / (this.sliceNum + 1)).toFixed(2);
+          const consoleGroupName = "Slice Timing";
+          console.group(consoleGroupName);
+          console.info(`Slicing Job Complete!`);
+          console.info(`  Sliced ${this.sliceNum + 1} layers`);
+          console.info(`  Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
+          console.info(`  Zip generation took ${zipFinishedTime.toFixed(2)}s`);
+          console.info(`  Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
+          console.groupEnd();
           this.resolve(blob);
         });
 
