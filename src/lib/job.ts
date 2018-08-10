@@ -89,8 +89,6 @@ export class HeadlessToZipSlicerJob {
       this.reject(e);
     }
     return this.zipBlob;
-    // // Store config
-    // this.zip.file("config.json", JSON.stringify(config))
   }
 
   private doSlice() {
