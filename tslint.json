@@ -3,15 +3,17 @@
     "extends": [
         "tslint:recommended"
     ],
-    "jsRules": {},
+    "jsRules": {
+    },
     "rules": {
+        "no-console": false,
         "interface-name": [true, "never-prefix"],
-        "max-classes-per-file": [false],
         "variable-name":[
           true,
           "check-format",
           "allow-leading-underscore"
-        ]
+        ],
+        "max-classes-per-file": false
     },
     "rulesDirectory": []
 }
