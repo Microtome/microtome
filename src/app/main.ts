@@ -6,8 +6,6 @@ import { SlicePreview } from "./slicePreview";
 
 const PrinterScene = microtome.printer.PrinterScene;
 
-const materials = microtome.materials;
-
 const printVolViewDiv = document.getElementById("pvview-div") as HTMLDivElement;
 const slicePreviewDiv = document.getElementById("spreview-div") as HTMLDivElement;
 
@@ -96,7 +94,7 @@ sliceToFileBtn.onclick = async (e: Event) => {
 
 // Load model
 const fileChooserInput = document.getElementById("file-chooser") as HTMLInputElement;
-fileChooserInput.onchange = (e: Event) => {
+fileChooserInput.onchange = () => {
   const file = fileChooserInput.files[0];
   if (!!file) {
     const fileReader = new FileReader();

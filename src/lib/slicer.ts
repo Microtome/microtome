@@ -197,7 +197,7 @@ export class AdvancedSlicer {
   private render(z: number) {
     try {
       this.scene.printVolume.visible = false;
-      const dirty = this.prepareRender();
+      this.prepareRender();
       if (z <= this.raftThicknessMM) {
         this.renderRaftSlice();
       } else {

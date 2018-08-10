@@ -2,7 +2,6 @@
  * This module contains classes for managing asynchronous model slicing jobs.
  */
 
-import * as THREE from "three";
 import * as config from "./config";
 import * as printer from "./printer";
 import * as slicer from "./slicer";
@@ -82,7 +81,7 @@ export class HeadlessToZipSlicerJob {
    *
    * @returns a Promise yiedling a zip compressed blob of slice images
    */
-  public execute(validate: boolean = false): Promise<Blob> {
+  public execute(): Promise<Blob> {
     this.startTime = Date.now();
     try {
       this.doSlice();

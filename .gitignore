@@ -5,7 +5,6 @@ bower_components
 .tmp
 app/scripts/gen
 typings
-!lib/ts/globals.d.ts
 *.js
 *.js.map
 public

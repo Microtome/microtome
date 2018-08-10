@@ -50,8 +50,6 @@ export class PrinterVolumeView {
 
   private pvCamera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(37, 1.0, 1.0, 2000.0);
 
-  private pvObjectGroup = new THREE.Group();
-
   private reqAnimFrameHandle: number;
 
   private camNav: microtome.camera.CameraNav;
@@ -61,7 +59,7 @@ export class PrinterVolumeView {
   private doPick = false;
 
   constructor(private canvasHome: HTMLDivElement, private scene: PrinterScene) {
-    this.render(0);
+    this.render();
     this.attached();
   }
 
@@ -69,30 +67,19 @@ export class PrinterVolumeView {
   // Observers
   // -----------------------------------------------------------
 
-  // disabledChanged(newValue: boolean, oldValue: boolean) {
-  //     if (!newValue) {
-  //         this.async(this.startRendering.bind(this), 100)
-  //     } else {
-  //         this.stopRendering();
-  //     }
-  //     if (this.camNav) {
-  //         this.camNav.enabled = !newValue;
-  //     }
-  // }
-
-  public scatterColorChanged(newValue: string, oldValue: string) {
+  public scatterColorChanged(newValue: string) {
     this.scatterLight.color.setStyle(newValue);
   }
 
-  public skyColorChanged(newValue: string, oldValue: string) {
+  public skyColorChanged(newValue: string) {
     this.skyLight.color.setStyle(newValue);
   }
 
-  public groundColorChanged(newValue: string, oldValue: string) {
+  public groundColorChanged(newValue: string) {
     this.groundLight.color.setStyle(newValue);
   }
 
-  public pickedMeshChanged(newMesh: THREE.Mesh, oldMesh: THREE.Mesh) {
+  public pickedMeshChanged(newMesh: THREE.Mesh) {
     if (newMesh && newMesh.rotation && newMesh.scale) {
       const rotation = newMesh.rotation;
       this.rotX = (((rotation.x / (2 * Math.PI)) * 360) % 360).toFixed(0);
@@ -143,7 +130,7 @@ export class PrinterVolumeView {
       this.preparePick(e);
     });
     this.canvasElement.addEventListener("mousemove", (e) => {
-      this.cancelPick(e);
+      this.cancelPick();
     });
     this.canvasElement.addEventListener("mouseup", (e) => {
       this.tryPick(e);
@@ -174,7 +161,7 @@ export class PrinterVolumeView {
     }
   }
 
-  public cancelPick(e: MouseEvent) {
+  public cancelPick() {
     this.doPick = false;
   }
 
@@ -229,7 +216,7 @@ export class PrinterVolumeView {
     this.reqAnimFrameHandle = window.requestAnimationFrame(this.render.bind(this));
   }
 
-  private render(timestamp: number) {
+  private render() {
     const canvas = this.canvasElement;
     const div = this.canvasHome;
     if (canvas.height !== div.clientHeight || canvas.width !== div.clientWidth) {

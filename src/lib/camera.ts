@@ -224,11 +224,11 @@ export class CameraNav {
     this.startPhi = Math.acos(camTargetDelta.z);
   }
 
-  private handleSceneDomElementMouseEnter = (e: MouseEvent) => {
+  private handleSceneDomElementMouseEnter = () => {
     this.inSceneDomElement = true;
   }
 
-  private handleSceneDomElementMouseLeave = (e: MouseEvent) => {
+  private handleSceneDomElementMouseLeave = () => {
     this.inSceneDomElement = false;
   }
 
