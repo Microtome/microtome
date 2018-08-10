@@ -5,12 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slicer Test App</title>
-    <!-- <script type="module" src="/lib/three"></script> -->
     <script src="/lib/jszip.js" defer></script>
     <script src="/lib/file-saver.js" defer></script>   
-    <!-- <script src="/lib/three/loaders/OBJLoader"></script>
-    <script src="/lib/three/loaders/STLLoader"></script> -->
-    <!-- <script type="module" src="/lib/js/microtome-lib"></script> -->
     <script type="module" src="/app/main.js"></script>
     <style>
         html {
@@ -81,51 +77,6 @@
             <label>
                 <input id="file-chooser" type="file" title="Choose File" placeholder="Choose File">
             </label>
-            <!-- <div class="ctrl-row">
-                <span>Move</span>
-                <label>
-                    <span>X</span>
-                    <input id="move-obj-x" type="range">
-                </label>
-                <label>
-                    <span>Y</span>
-                    <input id="move-obj-y" type="range">
-                </label>
-                <label>
-                    <span>Z</span>
-                    <input id="move-obj-z" type="range">
-                </label>
-            </div>
-            <div class="ctrl-row">
-                <span>Rotate</span>
-                <label>
-                    <span>X</span>
-                    <input id="rot-obj-x" type="range">
-                </label>
-                <label>
-                    <span>Y</span>
-                    <input id="rot-obj-y" type="range">
-                </label>
-                <label>
-                    <span>Z</span>
-                    <input id="rot-obj-z" type="range">
-                </label>
-            </div>
-            <div class="ctrl-row">
-                <span>Scale</span>
-                <label>
-                    <span>X</span>
-                    <input id="scale-obj-x" type="range">
-                </label>
-                <label>
-                    <span>Y</span>
-                    <input id="scale-obj-y" type="range">
-                </label>
-                <label>
-                    <span>Z</span>
-                    <input id="scale-obj-z" type="range">
-                </label>
-            </div> -->
         </div>
         <div class="flex-v">
             <div id="spreview-div" class="render-target"></div>
@@ -137,14 +88,6 @@
             <button id="slice-to-file-btn" style="width:100px">
                 Slice To File
             </button>
-            <!-- <label>
-                <span>Raft</span>
-                <input type="checkbox">
-            </label>
-            <label>
-                <span>Hollow</span>
-                <input type="checkbox">
-            </label> -->
         </div>
     </div>
 
