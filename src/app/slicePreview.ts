@@ -1,5 +1,4 @@
 import * as microtome from "microtome";
-import * as THREE from "three";
 
 type PrinterScene = microtome.printer.PrinterScene;
 
@@ -11,8 +10,6 @@ export class SlicePreview {
   public disabled: boolean = false;
 
   public sliceAt: number;
-
-  private _pvObjectGroup = new THREE.Group();
 
   private _reqAnimFrameHandle: number;
 
@@ -32,7 +29,7 @@ export class SlicePreview {
     this._stopRendering();
   }
 
-  public disabledChanged(newValue: boolean, oldValue: boolean) {
+  public disabledChanged(newValue: boolean) {
     if (!newValue) {
       this._startRendering();
     } else {
@@ -59,7 +56,7 @@ export class SlicePreview {
     this._reqAnimFrameHandle = window.requestAnimationFrame(this._render.bind(this));
   }
 
-  private _render(timestamp: number) {
+  private _render() {
     if (this.disabled) {
       this._stopRendering();
       return;

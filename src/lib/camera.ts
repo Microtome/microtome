@@ -114,7 +114,7 @@ export class CameraNav {
       const angle = (pCamera.fov / 360.0) * 2.0 * Math.PI;
       const frameDist =
         ((len / 2.0) / Math.sin(angle / 2.0)) * Math.cos(angle / 2.0);
-      this.zoomToTarget(frameDist, true);
+      this.zoomToTarget(frameDist);
 
     } else if (this._target instanceof THREE.Mesh) {
       // TODO, with orthographic camera we could 'zoom in'
@@ -136,7 +136,7 @@ export class CameraNav {
       const angle = (pCamera.fov / 360.0) * 2.0 * Math.PI;
       const frameDist =
         ((len / 2.0) / Math.sin(angle / 2.0)) * Math.cos(angle / 2.0);
-      this.zoomToTarget(frameDist, true);
+      this.zoomToTarget(frameDist);
     }
   }
 
@@ -150,8 +150,7 @@ export class CameraNav {
   /// Positive zooms in,
   /// Negative zooms out
   /// zoomAmount is treated as relative to current position
-  /// unless absolute is true
-  public zoomToTarget(zoomAmount: number, absolute: boolean = false) {
+  public zoomToTarget(zoomAmount: number) {
     if (!this._enabled) { return; }
     const cameraTargetDelta = this.targetPosition().clone().sub(this.camera.position);
     const vecToTarget = cameraTargetDelta.clone().normalize();
