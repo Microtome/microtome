@@ -1,10 +1,10 @@
 {
   "port": 8080,
   "files": [
-    "./app/index.html"
+    "./src/app/index.html"
   ],
   "server": {
-    "baseDir": "./app",
+    "baseDir": "./src/app",
     "routes": {
       "/lib/three-full.js": "./node_modules/three-full/builds/Three.es.js",
       "/lib/jszip.js": "./node_modules/jszip/dist/jszip.js",
