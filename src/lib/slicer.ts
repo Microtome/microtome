@@ -189,9 +189,11 @@ export class AdvancedSlicer {
    *
    * TODO Promisify
    */
-  public sliceAtToBlob(z: number, callback: (blob: Blob) => void): void {
+  public async sliceAtToBlob(z: number): Promise<Blob> {
     this.render(z);
-    this.renderer.domElement.toBlob(callback, "image/png");
+    return new Promise<Blob>((resolve) => {
+      this.renderer.domElement.toBlob(resolve, "image/png");
+    });
   }
 
   private render(z: number) {

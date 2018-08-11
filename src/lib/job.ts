@@ -97,12 +97,14 @@ export class HeadlessToZipSlicerJob {
     if (this.sliceNum % 10 === 1) {
       console.info(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
     }
-    this.slicer.sliceAtToBlob(this.z, (blob) => {
-      const sname = this.sliceNum.toString().padStart(8, "0");
-      this.zip.file(`${sname}.png`, blob, { compression: "store" });
-      this.sliceNum++;
-      this.scheduleNextSlice();
-    });
+    // const blob = await this.slicer.sliceAtToBlob(this.z);
+    const dataURL = this.slicer.sliceAtToImageBase64(this.z);
+    const imgData = dataURL.substr(dataURL.indexOf(",") + 1);
+    // zipFolder.file(fileName, imgData, { base64: true });
+    const sname = this.sliceNum.toString().padStart(8, "0");
+    this.zip.file(`${sname}.png`, imgData, { compression: "store", base64: true });
+    this.sliceNum++;
+    this.scheduleNextSlice();
   }
 
   private scheduleNextSlice() {
