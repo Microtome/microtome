@@ -80,7 +80,7 @@ sliceAtSlider.min = "0";
 sliceAtSlider.max = `${PRINTER_VOLUME_HEIGHT}`;
 sliceAtSlider.step = "0.1";
 slicePreview.sliceAt = Math.floor(PRINTER_VOLUME_HEIGHT / 4);
-sliceAtSlider.value =  `${slicePreview.sliceAt}`;
+sliceAtSlider.value = `${slicePreview.sliceAt}`;
 document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
 sliceAtSlider.oninput = (e: Event) => {
   const sliceAt = parseFloat((e.target as HTMLInputElement).value);
@@ -116,11 +116,9 @@ fileChooserInput.onchange = () => {
       const arrayBuffer = (loadEndEvent.target as any).result;
 
       if (file.name.endsWith(".stl")) {
-        const geom = new THREE.Geometry().
-          fromBufferGeometry(stlLoader.parse(arrayBuffer));
+        const geom = new THREE.Geometry()
+          .fromBufferGeometry(stlLoader.parse(arrayBuffer));
         const mesh = microtome.printer.PrintMesh.fromGeometry(geom);
-        // mesh.position.set(15, 23, 35);
-        // printerScene.
         printerScene.printObjects.push(mesh);
 
       } else {
