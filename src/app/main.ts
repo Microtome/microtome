@@ -8,8 +8,8 @@ const PRINTER_VOLUME_DEPTH = 96;
 const PRINTER_VOLUME_WIDTH = 128;
 const PRINTER_VOLUME_HEIGHT = 96;
 
-const PRINTER_X_RES = 640;
-const PRINTER_Y_RES = 480;
+const PRINTER_X_RES = 640 * 4;
+const PRINTER_Y_RES = 480 * 4;
 
 const PrinterScene = microtome.printer.PrinterScene;
 
@@ -91,10 +91,19 @@ sliceToFileBtn.onclick = async (e: Event) => {
 
   sliceToFileBtn.disabled = true;
 
-  const fileSlicer = new microtome.job.HeadlessToZipSlicerJob(printerScene, printerCfg, jobCfg);
+  const fileSlicer = microtome.job.executeSlicingJob(printerScene, printerCfg, jobCfg);
 
-  const blob = await fileSlicer.execute();
-  saveAs(blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
+  const handle = setInterval(() => {
+    const jobProgress = fileSlicer.next();
+    if (jobProgress.done) {
+      console.log("Slicing complete!", jobProgress.value);
+      window.clearInterval(handle);
+      const blob = jobProgress.value;
+      saveAs(blob as Blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
+    } else {
+      console.log(`Slicing is ${(jobProgress.value as number * 100).toFixed(2)}% done.`);
+    }
+  }, 3000);
 
   sliceToFileBtn.disabled = false;
 };

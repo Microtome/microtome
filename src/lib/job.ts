@@ -11,7 +11,7 @@ import "jszip";
 /**
  * Class that actually handles the slicing job. Not reusable
  */
-export class HeadlessToZipSlicerJob {
+class HeadlessToZipSlicerJob {
 
   private readonly slicer: slicer.AdvancedSlicer;
   private raftThicknessMM: number = 0;
@@ -68,6 +68,10 @@ export class HeadlessToZipSlicerJob {
       }, 0) + this.zStepMM;
   }
 
+  public get progress(): number {
+    return this.z / this.maxSliceHeight;
+  }
+
   /**
    * Cancel the slicing job. Will cause the promise returned by
    * execute to fail
@@ -94,14 +98,10 @@ export class HeadlessToZipSlicerJob {
   private doSlice() {
     // TODO Error accumulation
     this.z = this.zStepMM * this.sliceNum;
-    if (this.sliceNum % 10 === 1) {
-      console.info(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
-    }
-    // const blob = await this.slicer.sliceAtToBlob(this.z);
     const dataURL = this.slicer.sliceAtToImageBase64(this.z);
     const imgData = dataURL.substr(dataURL.indexOf(",") + 1);
-    // zipFolder.file(fileName, imgData, { base64: true });
     const sname = this.sliceNum.toString().padStart(8, "0");
+    console.log(`Slice num ${this.sliceNum}`);
     this.zip.file(`${sname}.png`, imgData, { compression: "store", base64: true });
     this.sliceNum++;
     this.scheduleNextSlice();
@@ -109,10 +109,10 @@ export class HeadlessToZipSlicerJob {
 
   private scheduleNextSlice() {
     if (this.z <= this.maxSliceHeight && !this.cancelled) {
-      this.doSlice();
+      window.setTimeout(() => this.doSlice(), 1);
     } else {
       if (this.cancelled) {
-        this.reject();
+        this.reject(new Error("Slicing job was cancelled!"));
       } else {
         const cfgObj = JSON.stringify({
           job: this.jobCfg,
@@ -141,4 +141,24 @@ export class HeadlessToZipSlicerJob {
       }
     }
   }
+}
+
+export function* executeSlicingJob(scene: printer.PrinterScene,
+                                   printerCfg: config.PrinterConfig,
+                                   jobCfg: config.PrintJobConfig) {
+
+  const job = new HeadlessToZipSlicerJob(scene, printerCfg, jobCfg);
+  const jobPromise = job.execute();
+  let jobResult: Blob = null;
+
+  jobPromise
+    .then((zipBlob) => jobResult = zipBlob)
+    .catch((error) => { throw error; });
+
+  while (!jobResult) {
+    yield job.progress;
+  }
+
+  console.log("JOB RESULT", jobResult);
+  return jobResult;
 }
