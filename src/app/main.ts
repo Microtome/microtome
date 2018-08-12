@@ -61,12 +61,6 @@ const jobCfg = {
   zOffset_mm: 5,
 };
 
-function derp() {
-  return 1;
-}
-
-derp();
-
 // Views
 new PrinterVolumeView(printVolViewDiv, printerScene);
 const slicePreview = new SlicePreview(slicePreviewDiv, printerScene);
