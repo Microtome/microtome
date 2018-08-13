@@ -151,13 +151,22 @@ export function* executeSlicingJob(scene: printer.PrinterScene,
   const job = new HeadlessToZipSlicerJob(scene, printerCfg, jobCfg);
   const jobPromise = job.execute();
   let jobResult: Blob = null;
+  let jobError: Error = null;
 
   jobPromise
     .then((zipBlob) => jobResult = zipBlob)
-    .catch((error) => { throw error; });
+    .catch((error) => jobError = error);
 
-  while (!jobResult) {
-    yield job.progress;
+  while (!jobResult && !jobError) {
+    const cancel: boolean = yield job.progress;
+    if (cancel) {
+      job.cancel();
+    }
   }
+
+  if (jobError) {
+    throw jobError;
+  }
+
   return jobResult;
 }

@@ -94,18 +94,21 @@ sliceToFileBtn.onclick = async (e: Event) => {
   const fileSlicer = microtome.job.executeSlicingJob(printerScene, printerCfg, jobCfg);
 
   const handle = setInterval(() => {
-    const jobProgress = fileSlicer.next();
+    const jobProgress = fileSlicer.next(true);
+    console.log(jobProgress);
     if (jobProgress.done) {
+      sliceToFileBtn.disabled = false;
       console.log("Slicing complete!", jobProgress.value);
       window.clearInterval(handle);
       const blob = jobProgress.value;
-      saveAs(blob as Blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
+      if (blob) {
+        saveAs(blob as Blob, `${jobCfg.name.replace(" ", "-")}-${(new Date()).toISOString()}.zip`, true);
+      }
     } else {
       console.log(`Slicing is ${(jobProgress.value as number * 100).toFixed(2)}% done.`);
     }
-  }, 3000);
+  }, 1000);
 
-  sliceToFileBtn.disabled = false;
 };
 
 // Load model
