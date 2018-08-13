@@ -109,7 +109,9 @@ export class HeadlessToZipSlicerJob {
 
   private scheduleNextSlice() {
     if (this.z <= this.maxSliceHeight && !this.cancelled) {
-      this.doSlice();
+      // We need this slight timeout so the main UI doesn't starve when doing the slicing
+      // TODO: When offScreenCanvas lands, we can move this to webworkers.
+      window.setTimeout(() => this.doSlice(), 1);
     } else {
       if (this.cancelled) {
         this.reject();
