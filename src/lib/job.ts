@@ -159,7 +159,5 @@ export function* executeSlicingJob(scene: printer.PrinterScene,
   while (!jobResult) {
     yield job.progress;
   }
-
-  console.log("JOB RESULT", jobResult);
   return jobResult;
 }
