@@ -7,10 +7,10 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es2015",
+    "target": "es2017",
     "sourceMap": true,
     "newLine": "LF",
-    "module": "es6",
+    "module": "es2015",
     "declaration": true,
     "outDir": "../../build/lib/microtome",
     "types": [

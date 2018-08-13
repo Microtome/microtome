@@ -3,6 +3,6 @@
  * rollup can process them.
  */
 declare module '*.glsl' {
-    const _: string;
-    export default _;
+    const value: string;
+    export default value;
 }
