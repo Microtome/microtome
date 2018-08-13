@@ -95,7 +95,7 @@ export class HeadlessToZipSlicerJob {
     // TODO Error accumulation
     this.z = this.zStepMM * this.sliceNum;
     if (this.sliceNum % 10 === 1) {
-      console.info(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
+      console.debug(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
     }
     // const blob = await this.slicer.sliceAtToBlob(this.z);
     const dataURL = this.slicer.sliceAtToImageBase64(this.z);
@@ -127,13 +127,13 @@ export class HeadlessToZipSlicerJob {
           const totalTime = sliceTime + zipFinishedTime;
           const sliceTimeLayer = (sliceTime * 1000 / (this.sliceNum + 1)).toFixed(2);
           const amortizedTimeLayer = (totalTime * 1000 / (this.sliceNum + 1)).toFixed(2);
-          const consoleGroupName = "Slice Timing";
-          console.group(consoleGroupName);
-          console.info(`Slicing Job Complete!`);
-          console.info(`  Sliced ${this.sliceNum + 1} layers`);
-          console.info(`  Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
-          console.info(`  Zip generation took ${zipFinishedTime.toFixed(2)}s`);
-          console.info(`  Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
+
+          console.group("Slice Timing");
+          console.debug(`Slicing Job Complete!`);
+          console.debug(`Sliced ${this.sliceNum + 1} layers`);
+          console.debug(`Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
+          console.debug(`Zip generation took ${zipFinishedTime.toFixed(2)}s`);
+          console.debug(`Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
           console.groupEnd();
           this.resolve(blob);
         });
