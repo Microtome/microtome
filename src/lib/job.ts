@@ -101,7 +101,6 @@ class HeadlessToZipSlicerJob {
     const dataURL = this.slicer.sliceAtToImageBase64(this.z);
     const imgData = dataURL.substr(dataURL.indexOf(",") + 1);
     const sname = this.sliceNum.toString().padStart(8, "0");
-    console.log(`Slice num ${this.sliceNum}`);
     this.zip.file(`${sname}.png`, imgData, { compression: "store", base64: true });
     this.sliceNum++;
     this.scheduleNextSlice();
@@ -109,6 +108,8 @@ class HeadlessToZipSlicerJob {
 
   private scheduleNextSlice() {
     if (this.z <= this.maxSliceHeight && !this.cancelled) {
+      // We need this slight timeout so the main UI doesn't starve when doing the slicing
+      // TODO: When offScreenCanvas lands, we can move this to webworkers.
       window.setTimeout(() => this.doSlice(), 1);
     } else {
       if (this.cancelled) {
@@ -127,13 +128,13 @@ class HeadlessToZipSlicerJob {
           const totalTime = sliceTime + zipFinishedTime;
           const sliceTimeLayer = (sliceTime * 1000 / (this.sliceNum + 1)).toFixed(2);
           const amortizedTimeLayer = (totalTime * 1000 / (this.sliceNum + 1)).toFixed(2);
-          const consoleGroupName = "Slice Timing";
-          console.group(consoleGroupName);
+
+          console.group("Slice Timing");
           console.info(`Slicing Job Complete!`);
-          console.info(`  Sliced ${this.sliceNum + 1} layers`);
-          console.info(`  Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
-          console.info(`  Zip generation took ${zipFinishedTime.toFixed(2)}s`);
-          console.info(`  Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
+          console.info(`Sliced ${this.sliceNum + 1} layers`);
+          console.info(`Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
+          console.info(`Zip generation took ${zipFinishedTime.toFixed(2)}s`);
+          console.info(`Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
           console.groupEnd();
           this.resolve(blob);
         });
