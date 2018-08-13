@@ -11,7 +11,7 @@ import "jszip";
 /**
  * Class that actually handles the slicing job. Not reusable
  */
-export class HeadlessToZipSlicerJob {
+class HeadlessToZipSlicerJob {
 
   private readonly slicer: slicer.AdvancedSlicer;
   private raftThicknessMM: number = 0;
@@ -68,6 +68,10 @@ export class HeadlessToZipSlicerJob {
       }, 0) + this.zStepMM;
   }
 
+  public get progress(): number {
+    return this.z / this.maxSliceHeight;
+  }
+
   /**
    * Cancel the slicing job. Will cause the promise returned by
    * execute to fail
@@ -94,13 +98,8 @@ export class HeadlessToZipSlicerJob {
   private doSlice() {
     // TODO Error accumulation
     this.z = this.zStepMM * this.sliceNum;
-    if (this.sliceNum % 10 === 1) {
-      console.debug(`Slicing ${this.sliceNum} at ${this.z}mm, ${performance.now()}`);
-    }
-    // const blob = await this.slicer.sliceAtToBlob(this.z);
     const dataURL = this.slicer.sliceAtToImageBase64(this.z);
     const imgData = dataURL.substr(dataURL.indexOf(",") + 1);
-    // zipFolder.file(fileName, imgData, { base64: true });
     const sname = this.sliceNum.toString().padStart(8, "0");
     this.zip.file(`${sname}.png`, imgData, { compression: "store", base64: true });
     this.sliceNum++;
@@ -114,7 +113,7 @@ export class HeadlessToZipSlicerJob {
       window.setTimeout(() => this.doSlice(), 1);
     } else {
       if (this.cancelled) {
-        this.reject();
+        this.reject(new Error("Slicing job was cancelled!"));
       } else {
         const cfgObj = JSON.stringify({
           job: this.jobCfg,
@@ -131,11 +130,11 @@ export class HeadlessToZipSlicerJob {
           const amortizedTimeLayer = (totalTime * 1000 / (this.sliceNum + 1)).toFixed(2);
 
           console.group("Slice Timing");
-          console.debug(`Slicing Job Complete!`);
-          console.debug(`Sliced ${this.sliceNum + 1} layers`);
-          console.debug(`Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
-          console.debug(`Zip generation took ${zipFinishedTime.toFixed(2)}s`);
-          console.debug(`Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
+          console.info(`Slicing Job Complete!`);
+          console.info(`Sliced ${this.sliceNum + 1} layers`);
+          console.info(`Slicing took ${sliceTime.toFixed(2)}s, ${sliceTimeLayer}ms / layer`);
+          console.info(`Zip generation took ${zipFinishedTime.toFixed(2)}s`);
+          console.info(`Total time took ${totalTime.toFixed(2)}s, amortized ${amortizedTimeLayer}ms / layer`);
           console.groupEnd();
           this.resolve(blob);
         });
@@ -143,4 +142,31 @@ export class HeadlessToZipSlicerJob {
       }
     }
   }
+}
+
+export function* executeSlicingJob(scene: printer.PrinterScene,
+                                   printerCfg: config.PrinterConfig,
+                                   jobCfg: config.PrintJobConfig) {
+
+  const job = new HeadlessToZipSlicerJob(scene, printerCfg, jobCfg);
+  const jobPromise = job.execute();
+  let jobResult: Blob = null;
+  let jobError: Error = null;
+
+  jobPromise
+    .then((zipBlob) => jobResult = zipBlob)
+    .catch((error) => jobError = error);
+
+  while (!jobResult && !jobError) {
+    const cancel: boolean = yield job.progress;
+    if (cancel) {
+      job.cancel();
+    }
+  }
+
+  if (jobError) {
+    throw jobError;
+  }
+
+  return jobResult;
 }
