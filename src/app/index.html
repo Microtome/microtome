@@ -4,91 +4,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
+    <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script> -->
+    <!--Import Google Icon Font-->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Compiled and minified CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-rc.2/css/materialize.min.css">
+    <!-- Compiled and minified JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-rc.2/js/materialize.min.js"></script>
     <title>Slicer Test App</title>
     <script src="/lib/jszip.js" defer></script>
-    <script src="/lib/file-saver.js" defer></script>   
+    <script src="/lib/file-saver.js" defer></script>
     <script type="module" src="/app/main.js"></script>
     <style>
-        html {
-            font-family: sans-serif;
-        }
-
         div.render-target {
-            /* float: left; */
             height: 480px;
             width: 640px;
             border: none;
             padding: none;
-            margin: none;
             background-color: red;
+            margin: auto;
         }
 
         #pvview-div canvas,
         #spreview-div canvas {
-            background-color: #000
+            background-color: #000;
         }
 
-        .flex-h {
-            display: flex;
-            flex-direction: row;
-        }
-
-        .flex-v {
-            display: flex;
-            flex-direction: column;
-        }
-
-        label,
-        div.ctrl-row {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            /* padding-top: 5px; */
-            vertical-align: middle;
-        }
-
-        label>span,
-        div.ctrl-row>span {
-            width: 100px;
-            text-align: right;
-            vertical-align: middle;
-
-        }
-
-        div.ctrl-row>label>span {
-            width: 20px;
-
-        }
-
-        label>span:first-of-type::after {
-            content: ": "
-        }
-
-        label>input {
-            flex-grow: 1;
+        ::-webkit-file-upload-button {
+            -webkit-appearance: button;
+            font: inherit;
+            background: none;
+            border: none;
         }
     </style>
 </head>
 
 <body>
-    <div class="flex-h" style="justify-content: space-around">
-        <div class="flex-v">
-            <div id="pvview-div" class="render-target"></div>
-            <label>
-                <input id="file-chooser" type="file" title="Choose File" placeholder="Choose File">
-            </label>
-        </div>
-        <div class="flex-v">
-            <div id="spreview-div" class="render-target"></div>
-            <label>
-                <span>Slice At</span>
-                <input id="slice-at" type="range">
-                <span style="width: 100px; float:right"><span id="display-mm">0.00</span>mm</span>
-            </label>
-            <button id="slice-to-file-btn" style="width:100px">
-                Slice To File
-            </button>
-        </div>
+    <div>
+        <header class="row">
+            <div class="col s12 row">
+                <span class="">Microtome GPU Slicer</span>
+            </div>
+        </header>
+        <main class="row">
+            <div class="col s12 row">
+                <div class="col s6">
+                    <div id="pvview-div" class="render-target container"></div>
+                </div>
+                <div class="col s6">
+                    <div id="spreview-div" class="render-target container"></div>
+                </div>
+            </div>
+            <div class="col s12 row">
+                <div class="col s6">
+                    <label>
+                        <input class="waves-effect waves-light btn" id="file-chooser" type="file" title="Choose File"
+                            placeholder="Choose File">
+                    </label>
+                </div>
+                <div class="col s4">
+                    <label for="slice-at" class="">
+                        <span>Slice At</span>
+                    </label>
+                    <input id="slice-at" type="range">
+                    <span><span id="display-mm ">0.00</span>mm</span>
+                </div>
+                <div class="col s2">
+                    <button class="waves-effect waves-light btn" id="slice-to-file-btn">
+                        Slice To File
+                    </button>
+                </div>
+            </div>
+        </main>
     </div>
 
 </body>

@@ -75,11 +75,11 @@ sliceAtSlider.max = `${PRINTER_VOLUME_HEIGHT}`;
 sliceAtSlider.step = "0.1";
 slicePreview.sliceAt = Math.floor(PRINTER_VOLUME_HEIGHT / 4);
 sliceAtSlider.value = `${slicePreview.sliceAt}`;
-document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
+// document.getElementById("display-mm").innerHTML = parseInt(sliceAtSlider.value, 10).toFixed(2);
 sliceAtSlider.oninput = (e: Event) => {
   const sliceAt = parseFloat((e.target as HTMLInputElement).value);
   slicePreview.sliceAt = sliceAt;
-  document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
+  // document.getElementById("display-mm").innerHTML = sliceAt.toFixed(2);
 };
 
 // Slice to file button
