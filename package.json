@@ -9,9 +9,13 @@
     "browser-sync": "^2.7.7",
     "concurrently": "3.1.0",
     "connect-history-api-fallback": "^1.1.0",
+    "glslify-bundle": "^5.1.1",
+    "glslify-deps": "^1.3.1",
+    "http-server": "^0.11.1",
     "jshint-stylish": "^2.0.0",
     "lite-server": "2.2.2",
     "nodemon": "^1.12.4",
+    "parcel-bundler": "^1.12.3",
     "recursive-copy": "^2.0.7",
     "rollup": "^0.54.0",
     "rollup-plugin-sourcemaps": "^0.4.2",
@@ -21,20 +25,19 @@
     "typescript": "^2.6.1",
     "watch": "^1.0.1"
   },
+  "alias": {
+    "microtome": "./src/lib/index.ts",
+    "three": "three-full"
+  },
   "scripts": {
     "copy:definitions": "node ./scripts/copy_definitions.js",
     "copy:resources": "node ./scripts/copy_shaders.js",
     "assemble": "node ./scripts/assemble_resources.js",
     "clean": "rm -rf ./dist && rm -rf ./build && rm -rf ./public",
-    "build:lib": "tsc -p src/lib && yarn run copy:resources",
-    "build:app": "tsc -p src/app",
-    "dist:lib": "rollup -c rollup-config-lib.js && yarn run copy:definitions",
-    "dist:app": "rollup -c rollup-config-app.js",
-    "dist:all:watch": "nodemon --exec 'yarn run build:lib && yarn run dist:lib && yarn run build:app && yarn run dist:app && touch src/app/index.html' --watch src --ext css,html,ts,glsl",
-    "all": "yarn run clean && yarn run build:lib && yarn run build:app && yarn run dist:lib && yarn run dist:app && yarn run assemble",
-    "full": "yarn run clean && yarn run all",
-    "serve:dev": "lite-server -c server-config-dev.json",
-    "serve:hot": "concurrently 'yarn run serve:dev' 'yarn run dist:all:watch'"
+    "build:lib": "tsc -p src/lib && yarn run copy:resources && rollup -c rollup-config-lib.js && yarn run copy:definitions",
+    "build:app": "parcel build -d dist/app --no-minify --experimental-scope-hoisting src/app/index.html",
+    "serve:hot": "parcel serve -d dist/app src/app/index.html'",
+    "serve": "yarn run build:app && http-server ./dist/app"
   },
   "engines": {
     "node": ">=8.0.0"
@@ -42,6 +45,10 @@
   "dependencies": {
     "file-saver": "^1.3.3",
     "jszip": "^3.1.3",
-    "three-full": "^8.0.0"
-  }
+    "three-full": "17.1.0"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions"
+  ]
 }

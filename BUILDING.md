@@ -15,6 +15,6 @@
 see package.json for commands
 
 * `yarn run clean` to remove build/ and dist/
-* `yarn run build:lib` to build app and lib and copy to /build/lib/microtome
-* `yarn run dist:lib` to bundle lib with shaders as es6 module under dist/lib/microtome.js
-* `npm serve:hot` which will build the library, and sample app, and server on localhost:8080 with hot reloading of all ts, html, and css edits
+* `yarn run build:lib` to build library and copy to dist/lib
+* `yarn run build:app` to build a bundled app including all assets under dist:app
+* `npm serve:hot` run parcel js in hot reload mode.

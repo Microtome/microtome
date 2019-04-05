@@ -8,4 +8,5 @@ typings
 *.js
 *.js.map
 public
+.cache
 

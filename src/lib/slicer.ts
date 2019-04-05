@@ -214,7 +214,8 @@ export class AdvancedSlicer {
   private renderRaftSlice() {
     // Set model color to white,
     this.scene.overrideMaterial = mats.flatWhiteMaterial;
-    this.renderer.render(this.scene, this.sliceCamera, this.targets.temp1, true);
+    this.renderer.setRenderTarget(this.targets.temp1);
+    this.renderer.render(this.scene, this.sliceCamera);
     // Apply dilate filter to texture
     if (this.raftDilatePixels > 0) {
       this.shaderScene.overrideMaterial = this.erodeDialateMaterial;
@@ -243,12 +244,14 @@ export class AdvancedSlicer {
     // Intersection test material to temp2
     this.scene.overrideMaterial = this.intersectionTestMaterial;
     this.intersectionMaterialUniforms.cutoff.value = sliceZ;
-    this.renderer.render(this.scene, this.sliceCamera, this.targets.temp2, true);
+    this.renderer.setRenderTarget(this.targets.temp2);
+    this.renderer.render(this.scene, this.sliceCamera);
     // Render slice to targets.mask
     this.scene.overrideMaterial = this.sliceMaterial;
     this.sliceMaterialUniforms.iTex = new mats.TextureUniform(this.targets.temp2.texture);
     this.sliceMaterialUniforms.cutoff.value = sliceZ;
-    this.renderer.render(this.scene, this.sliceCamera, this.targets.mask, true);
+    this.renderer.setRenderTarget(this.targets.mask);
+    this.renderer.render(this.scene, this.sliceCamera);
   }
 
   /**
@@ -272,7 +275,8 @@ export class AdvancedSlicer {
         dilatePixels = dilatePixels - pixels;
         this.erodeDialateMaterialUniforms.src = new mats.TextureUniform(this.targets[target].texture);
         this.erodeDialateMaterialUniforms.pixels.value = pixels;
-        this.renderer.render(this.shaderScene, this.sliceCamera, this.targets.scratch, true);
+        this.renderer.setRenderTarget(this.targets.scratch);
+        this.renderer.render(this.shaderScene, this.sliceCamera);
         this.swapTargets(target, "scratch");
       }
     }
@@ -285,6 +289,7 @@ export class AdvancedSlicer {
     // Render final image
     this.shaderScene.overrideMaterial = this.copyMaterial;
     this.copyMaterialUniforms.src = new mats.TextureUniform(this.targets[srcTarget].texture);
+    this.renderer.setRenderTarget(null);
     this.renderer.render(this.shaderScene, this.sliceCamera);
   }
 

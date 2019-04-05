@@ -7,7 +7,7 @@
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    "target": "es2017",
+    "target": "es2015",
     "sourceMap": true,
     "newLine": "LF",
     "module": "es2015",
