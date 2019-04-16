@@ -15,7 +15,7 @@
     "outDir": "../../build/app",
     "paths": {
       "microtome": [
-        "../../build/lib/microtome/index.d.ts"
+        "../lib/index.ts"
       ]
     },
   },
