@@ -36,7 +36,7 @@
     "clean": "rm -rf ./dist && rm -rf ./build && rm -rf ./public",
     "build:lib": "tsc -p src/lib && yarn run copy:resources && rollup -c rollup-config-lib.js && yarn run copy:definitions",
     "build:app": "parcel build -d dist/app --no-minify --experimental-scope-hoisting src/app/index.html",
-    "serve:hot": "parcel serve -d dist/app src/app/index.html'",
+    "serve:hot": "parcel serve -d dist/app src/app/index.html",
     "serve": "yarn run build:app && http-server ./dist/app"
   },
   "engines": {
