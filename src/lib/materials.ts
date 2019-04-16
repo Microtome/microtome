@@ -12,6 +12,8 @@ import * as intersectionShaderFrag from "./shaders/intersection_shader_frag.glsl
 import * as orShaderFrag from "./shaders/or_shader_frag.glsl";
 import * as sliceShaderFrag from "./shaders/slice_shader_frag.glsl";
 import * as xorShaderFrag from "./shaders/xor_shader_frag.glsl";
+import * as undercutShaderFrag from "./shaders/undercut_shader_frag.glsl";
+import * as basicVertex from "./shaders/basic_vertex.glsl";
 
 export interface UniformValue<T> extends THREE.IUniform {
   type: string;
@@ -63,33 +65,31 @@ export class IntersectionShaderUniforms extends BaseUniforms {
 
 export class CopyShaderUniforms extends BaseUniforms {
   constructor(public src: TextureUniform,
-              public viewWidth: IntegerUniform,
-              public viewHeight: IntegerUniform,
+    public viewWidth: IntegerUniform,
+    public viewHeight: IntegerUniform,
   ) { super(); }
 }
 
 export class BoolOpShaderUniforms extends BaseUniforms {
   constructor(public src1: TextureUniform,
-              public src2: TextureUniform,
-              public viewWidth: IntegerUniform,
-              public viewHeight: IntegerUniform,
+    public src2: TextureUniform,
+    public viewWidth: IntegerUniform,
+    public viewHeight: IntegerUniform,
   ) { super(); }
 }
 
 export class ErodeDialateShaderUniforms extends BaseUniforms {
   constructor(public dilate: IntegerUniform,
-              public pixels: IntegerUniform,
-              public src: TextureUniform,
-              public viewWidth: IntegerUniform,
-              public viewHeight: IntegerUniform,
+    public pixels: IntegerUniform,
+    public src: TextureUniform,
+    public viewWidth: IntegerUniform,
+    public viewHeight: IntegerUniform,
   ) { super(); }
 }
 
-const basicVertex = `
-void main(void) {
-   // compute position
-   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
+export class UndercutShaderUniforms extends BaseUniforms {
+  constructor(public angle: FloatUniform) { super(); }
+}
 
 export const xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
 export const yLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0x00c853, linewidth: 2 });
@@ -101,8 +101,18 @@ export const flatWhiteMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMat
   { color: 0xffffff, side: THREE.DoubleSide });
 export const objectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial(
   { color: 0xcfcfcf, side: THREE.DoubleSide }); // , ambient:0xcfcfcf});
+
 export const selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial(
   { color: 0x00cfcf, side: THREE.DoubleSide }); // , ambient:0x00cfcf});
+
+export const undercutMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  fragmentShader: undercutShaderFrag.default,
+  vertexShader: basicVertex.default,
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.MinEquation,
+  blendSrc: THREE.ZeroFactor,
+  blendDst: THREE.ZeroFactor
+});
 
 /**
  * Material for encoding z depth in image rgba
@@ -110,7 +120,7 @@ export const selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMateri
 export const depthMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   blending: THREE.NoBlending,
   fragmentShader: depthShaderFrag.default,
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });
 
 /**
@@ -123,7 +133,7 @@ export const intersectionMaterial: THREE.ShaderMaterial = new THREE.ShaderMateri
   fragmentShader: intersectionShaderFrag.default,
   side: THREE.DoubleSide,
   transparent: true,
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
   // opacity: 0.1
 });
 
@@ -134,7 +144,7 @@ export const sliceMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   blending: THREE.NoBlending,
   fragmentShader: sliceShaderFrag.default,
   side: THREE.DoubleSide,
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });
 
 /**
@@ -145,7 +155,7 @@ export const erodeOrDialateMaterial: THREE.ShaderMaterial = new THREE.ShaderMate
   fragmentShader: erodeDilateShaderFrag.default,
   side: THREE.DoubleSide,
   uniforms: {},
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });
 
 /**
@@ -156,7 +166,7 @@ export const copyMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   fragmentShader: copyShaderFrag.default,
   side: THREE.FrontSide,
   uniforms: {},
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });
 
 /**
@@ -167,7 +177,7 @@ export const xorMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   fragmentShader: xorShaderFrag.default,
   side: THREE.FrontSide,
   uniforms: {},
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });
 
 /**
@@ -178,5 +188,5 @@ export const orMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   fragmentShader: orShaderFrag.default,
   side: THREE.FrontSide,
   uniforms: {},
-  vertexShader: basicVertex,
+  vertexShader: basicVertex.default
 });

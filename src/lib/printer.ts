@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import * as printer from "./config";
 import * as mats from "./materials";
+import { materials } from ".";
 
 /**
  * Utility class for displaying print volume
@@ -21,7 +22,8 @@ export class PrintVolumeView extends THREE.Group {
     // this.add(this._pvGroup);
     const planeGeom: THREE.PlaneGeometry = new THREE.PlaneGeometry(1.0, 1.0);
     const planeMaterial = mats.whiteMaterial.clone();
-    planeMaterial.side = THREE.DoubleSide;
+    planeMaterial.side = null;
+    // planeMaterial.side = THREE.DoubleSide;
     const bed = new THREE.Mesh(planeGeom, planeMaterial);
     this.add(bed);
 
@@ -154,21 +156,29 @@ export class PrinterScene extends THREE.Scene {
 // TODO Turn into extension method
 export class PrintMesh extends THREE.Mesh {
 
-  public static fromGeometry(geom: THREE.Geometry) {
-    if (geom instanceof THREE.BufferGeometry) {
-      geom = new THREE.Geometry().fromBufferGeometry(geom as THREE.BufferGeometry);
-    } else {
-      geom = geom as THREE.Geometry;
-    }
-    return new PrintMesh(geom, mats.objectMaterial);
-  }
-
   private _geometryVolume: number = null;
 
-  private constructor(geometry?: THREE.Geometry, material?: THREE.Material | THREE.Material[]) {
-    super(geometry, material);
+  public static fromGeometry(geometry: THREE.Geometry | THREE.BufferGeometry) {
+    var volumeGeometry;
+    var bufferGeometry;
+    if (geometry instanceof THREE.BufferGeometry) {
+      volumeGeometry = new THREE.Geometry().fromBufferGeometry(geometry);
+      bufferGeometry = geometry;
+    } else {
+      volumeGeometry = geometry;
+      bufferGeometry = new THREE.BufferGeometry().fromGeometry(geometry);
+    }
+    bufferGeometry.clearGroups();
+    bufferGeometry.addGroup(0, Infinity, 0);
+    bufferGeometry.addGroup(0, Infinity, 1);
+    const printMesh = new PrintMesh(bufferGeometry);
+    printMesh._calculateVolume(volumeGeometry);
+    return printMesh;
+  }
+
+  private constructor(geometry: THREE.BufferGeometry) {
+    super(geometry, [materials.whiteMaterial, materials.undercutMaterial]);
     geometry.computeBoundingBox();
-    this._calculateVolume();
   }
 
   /**
@@ -179,10 +189,9 @@ export class PrintMesh extends THREE.Mesh {
     return this._geometryVolume * (this.scale.x * this.scale.y * this.scale.z);
   }
 
-  private _calculateVolume() {
-    const geom: THREE.Geometry = this.geometry as THREE.Geometry;
-    const faces = geom.faces;
-    const vertices = geom.vertices;
+  private _calculateVolume(geometry: THREE.Geometry) {
+    const faces = geometry.faces;
+    const vertices = geometry.vertices;
     for (const face of faces) {
       const v1 = vertices[face.a];
       const v2 = vertices[face.b];

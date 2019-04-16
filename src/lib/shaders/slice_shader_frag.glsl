@@ -6,7 +6,6 @@ uniform float cutoff;
 uniform sampler2D iTex;
 uniform int viewWidth;
 uniform int viewHeight;
-
 const float STEPS = 256.0;
 
 void main(void) {
