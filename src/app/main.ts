@@ -17,6 +17,7 @@ const printVolViewDiv = document.getElementById("pvview-div") as HTMLDivElement;
 const slicePreviewDiv = document.getElementById("spreview-div") as HTMLDivElement;
 
 const printerScene = new PrinterScene();
+printerScene.undercutAngleDegrees = 45;
 printerScene.printVolume.resize(128, 96, 96);
 const sphere1 = microtome.printer.PrintMesh.fromGeometry(new THREE.SphereGeometry(10, 16, 16));
 sphere1.position.set(15, 15, 15);
@@ -126,7 +127,6 @@ fileChooserInput.onchange = () => {
           .fromBufferGeometry(stlLoader.parse(arrayBuffer));
         const mesh = microtome.printer.PrintMesh.fromGeometry(geom);
         printerScene.printObjects.push(mesh);
-
       } else {
         alert(`File '${file.name}' is unsupported.`);
       }

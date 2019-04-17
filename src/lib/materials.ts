@@ -88,7 +88,7 @@ export class ErodeDialateShaderUniforms extends BaseUniforms {
 }
 
 export class UndercutShaderUniforms extends BaseUniforms {
-  constructor(public angle: FloatUniform) { super(); }
+  constructor(public cosAngleRad: FloatUniform) { super(); }
 }
 
 export const xLineMaterial: THREE.LineBasicMaterial = new THREE.LineBasicMaterial({ color: 0xd50000, linewidth: 2 });
@@ -111,7 +111,8 @@ export const undercutMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
   blending: THREE.CustomBlending,
   blendEquation: THREE.MinEquation,
   blendSrc: THREE.ZeroFactor,
-  blendDst: THREE.ZeroFactor
+  blendDst: THREE.ZeroFactor,
+  uniforms: UndercutShaderUniforms,
 });
 
 /**

@@ -5,7 +5,6 @@
 import * as THREE from "three";
 import * as printer from "./config";
 import * as mats from "./materials";
-import { materials } from ".";
 
 /**
  * Utility class for displaying print volume
@@ -111,7 +110,6 @@ export class PrintVolumeView extends THREE.Group {
   get height(): number {
     return this.scale.z;
   }
-
 }
 
 /**
@@ -122,6 +120,7 @@ export class PrinterScene extends THREE.Scene {
   private _printVolume: PrintVolumeView;
   private _printObjectsHolder: THREE.Group;
   private _printObjects: PrintMesh[];
+  private _undercutAngle: number = 0;
 
   constructor() {
     super();
@@ -151,6 +150,28 @@ export class PrinterScene extends THREE.Scene {
   public showPrintObjects() {
     this._printObjectsHolder.visible = true;
   }
+
+
+  get undercutAngle(): number {
+    return this._undercutAngle;
+  }
+
+  set undercutAngle(angleInRadians: number) {
+    this._undercutAngle = angleInRadians % (2 * Math.PI);
+    this.printObjects.forEach(printObject => {
+      let undercutMaterial = (printObject.material as THREE.ShaderMaterial[])[1];
+      (undercutMaterial.uniforms as mats.UndercutShaderUniforms).cosAngleRad = new mats.FloatUniform(Math.cos(angleInRadians));
+    })
+  }
+
+  get undercutAngleDegrees(): number {
+    return this._undercutAngle * 360 / (2 * Math.PI);
+  }
+
+  set undercutAngleDegrees(angleInDegrees: number) {
+    this.undercutAngle = ((angleInDegrees % 360) / 360) * Math.PI
+  }
+
 }
 
 // TODO Turn into extension method
@@ -177,7 +198,7 @@ export class PrintMesh extends THREE.Mesh {
   }
 
   private constructor(geometry: THREE.BufferGeometry) {
-    super(geometry, [materials.whiteMaterial, materials.undercutMaterial]);
+    super(geometry, [mats.whiteMaterial, mats.undercutMaterial]);
     geometry.computeBoundingBox();
   }
 
