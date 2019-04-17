@@ -120,7 +120,7 @@ export class PrinterScene extends THREE.Scene {
   private _printVolume: PrintVolumeView;
   private _printObjectsHolder: THREE.Group;
   private _printObjects: PrintMesh[];
-  private _undercutAngle: number = 0;
+  private _overhangAngle: number = 0;
 
   constructor() {
     super();
@@ -152,24 +152,24 @@ export class PrinterScene extends THREE.Scene {
   }
 
 
-  get undercutAngle(): number {
-    return this._undercutAngle;
+  get overhangAngle(): number {
+    return this._overhangAngle;
   }
 
-  set undercutAngle(angleInRadians: number) {
-    this._undercutAngle = angleInRadians % (2 * Math.PI);
+  set overhangAngle(angleInRadians: number) {
+    this._overhangAngle = angleInRadians % (2 * Math.PI);
     this.printObjects.forEach(printObject => {
-      let undercutMaterial = (printObject.material as THREE.ShaderMaterial[])[1];
-      (undercutMaterial.uniforms as mats.UndercutShaderUniforms).cosAngleRad = new mats.FloatUniform(Math.cos(angleInRadians));
+      let overhangMaterial = (printObject.material as THREE.ShaderMaterial[])[1];
+      (overhangMaterial.uniforms as mats.overhangShaderUniforms).cosAngleRad = new mats.FloatUniform(Math.cos(angleInRadians));
     })
   }
 
-  get undercutAngleDegrees(): number {
-    return this._undercutAngle * 360 / (2 * Math.PI);
+  get overhangAngleDegrees(): number {
+    return this._overhangAngle * 360 / (2 * Math.PI);
   }
 
-  set undercutAngleDegrees(angleInDegrees: number) {
-    this.undercutAngle = ((angleInDegrees % 360) / 360) * Math.PI
+  set overhangAngleDegrees(angleInDegrees: number) {
+    this.overhangAngle = ((angleInDegrees % 360) / 360) * Math.PI
   }
 
 }
@@ -198,7 +198,7 @@ export class PrintMesh extends THREE.Mesh {
   }
 
   private constructor(geometry: THREE.BufferGeometry) {
-    super(geometry, [mats.whiteMaterial, mats.undercutMaterial]);
+    super(geometry, [mats.whiteMaterial, mats.overhangMaterial]);
     geometry.computeBoundingBox();
   }
 

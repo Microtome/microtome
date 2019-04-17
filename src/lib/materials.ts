@@ -12,7 +12,7 @@ import * as intersectionShaderFrag from "./shaders/intersection_shader_frag.glsl
 import * as orShaderFrag from "./shaders/or_shader_frag.glsl";
 import * as sliceShaderFrag from "./shaders/slice_shader_frag.glsl";
 import * as xorShaderFrag from "./shaders/xor_shader_frag.glsl";
-import * as undercutShaderFrag from "./shaders/undercut_shader_frag.glsl";
+import * as overhangShaderFrag from "./shaders/overhang_shader_frag.glsl";
 import * as basicVertex from "./shaders/basic_vertex.glsl";
 
 export interface UniformValue<T> extends THREE.IUniform {
@@ -87,7 +87,7 @@ export class ErodeDialateShaderUniforms extends BaseUniforms {
   ) { super(); }
 }
 
-export class UndercutShaderUniforms extends BaseUniforms {
+export class overhangShaderUniforms extends BaseUniforms {
   constructor(public cosAngleRad: FloatUniform) { super(); }
 }
 
@@ -105,14 +105,14 @@ export const objectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMateri
 export const selectMaterial: THREE.MeshPhongMaterial = new THREE.MeshPhongMaterial(
   { color: 0x00cfcf, side: THREE.DoubleSide }); // , ambient:0x00cfcf});
 
-export const undercutMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
-  fragmentShader: undercutShaderFrag.default,
+export const overhangMaterial: THREE.ShaderMaterial = new THREE.ShaderMaterial({
+  fragmentShader: overhangShaderFrag.default,
   vertexShader: basicVertex.default,
   blending: THREE.CustomBlending,
   blendEquation: THREE.MinEquation,
   blendSrc: THREE.ZeroFactor,
   blendDst: THREE.ZeroFactor,
-  uniforms: UndercutShaderUniforms,
+  uniforms: overhangShaderUniforms,
 });
 
 /**
