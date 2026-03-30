@@ -325,10 +325,33 @@ impl eframe::App for MicrotomeApp {
                 self.slice_preview.show(ui);
             });
 
+        // Handle keyboard shortcuts: Delete/Backspace removes selected mesh
+        let delete_pressed = ui
+            .ctx()
+            .input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace));
+        if let Some(idx) = self.selected_mesh
+            && delete_pressed
+            && idx < self.scene.meshes.len()
+        {
+            self.scene.remove_mesh(idx);
+            self.gpu_meshes.remove(idx);
+            self.selected_mesh = None;
+            self.slice_preview.mark_buffers_dirty();
+        }
+
         egui::CentralPanel::default().show_inside(ui, |ui| {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
             self.camera.handle_input(&response);
+
+            // Click to select/deselect mesh (cycle through meshes on click)
+            if response.clicked() && !self.scene.meshes.is_empty() {
+                self.selected_mesh = match self.selected_mesh {
+                    Some(idx) if idx + 1 < self.scene.meshes.len() => Some(idx + 1),
+                    Some(_) => None,
+                    None => Some(0),
+                };
+            }
 
             if self.has_render_state {
                 let rect = response.rect;
