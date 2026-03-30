@@ -2,6 +2,8 @@
 
 mod app;
 mod camera;
+mod viewport;
+mod viewport_renderer;
 
 use app::MicrotomeApp;
 
