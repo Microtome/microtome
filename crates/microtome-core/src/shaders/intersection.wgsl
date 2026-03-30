@@ -21,19 +21,11 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @builtin(front_facing) @interpolate(flat) _dummy: f32,
-}
-
-// We can't use front_facing in the vertex shader output,
-// so we just output clip_position and use front_facing as a builtin in the fragment shader.
-
-struct VsOut {
-    @builtin(position) clip_position: vec4<f32>,
 }
 
 @vertex
-fn vs_main(in: VertexInput) -> VsOut {
-    var out: VsOut;
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
     out.clip_position = uniforms.view_proj * vec4<f32>(in.position, 1.0);
     return out;
 }
