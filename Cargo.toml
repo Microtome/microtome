@@ -1,13 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/microtome-core"]
-# microtome-app excluded until eframe/winit compatibility with Rust 1.94 is resolved
-exclude = ["crates/microtome-app"]
+members = ["crates/microtome-core", "crates/microtome-app"]
 
 [workspace.dependencies]
 wgpu = "29"
 egui = "0.34"
-eframe = { version = "0.34", default-features = false, features = ["wgpu"] }
+eframe = { version = "0.34", default-features = false, features = ["wgpu", "wayland", "x11"] }
 egui-wgpu = "0.34"
 glam = { version = "0.29", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }

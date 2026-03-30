@@ -1,4 +1,4 @@
-/// Microtome desktop application entry point.
+//! Microtome desktop application entry point.
 
 fn main() {
     env_logger::init();
