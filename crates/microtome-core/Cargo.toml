@@ -15,3 +15,6 @@ thiserror.workspace = true
 zip = { version = "2", default-features = false, features = ["deflate"] }
 stl_io = "0.8"
 pollster = "0.4"
+
+[dev-dependencies]
+naga = { version = "29", features = ["wgsl-in"] }
