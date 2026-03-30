@@ -3,6 +3,11 @@ name = "microtome-app"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["wayland", "x11"]
+wayland = ["eframe/wayland"]
+x11 = ["eframe/x11"]
+
 [dependencies]
 microtome-core = { path = "../microtome-core" }
 eframe.workspace = true

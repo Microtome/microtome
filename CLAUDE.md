@@ -59,11 +59,11 @@ cargo fmt --check && cargo clippy -- -D warnings -D clippy::unwrap_used -D clipp
 
 ## Development Workflow
 
-1. Write code
+1. Write code for a single feature or logical change
 2. `cargo fmt` — format
 3. `cargo clippy -- -D warnings -D clippy::unwrap_used -D clippy::expect_used` — fix all warnings
 4. `cargo nextest run` — ensure all tests pass
-5. Commit only when all three pass clean
+5. Commit immediately once all three pass clean — one commit per feature
 
 ## Complex Tasks
 
