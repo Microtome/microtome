@@ -54,7 +54,7 @@ impl PrintVolumeBox {
 }
 
 /// The complete print scene containing the volume and all meshes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrinterScene {
     /// The print volume box.
     pub volume: PrintVolumeBox,

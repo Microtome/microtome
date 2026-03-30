@@ -1,9 +1,9 @@
 //! Main application state and UI layout for Microtome.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc;
 
 use glam::{Mat4, Quat};
 use microtome_core::{
@@ -203,11 +203,20 @@ impl MicrotomeApp {
     }
 
     /// Starts a slicing job on a background thread.
+    ///
+    /// Constructs a fresh [`PrinterScene`] from the current config and meshes,
+    /// then spawns the job in a background thread.
     fn start_slicing_job(&mut self) {
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
 
-        let scene = self.scene.clone();
+        // Build a fresh scene for the background thread (PrinterScene is not Clone)
+        let mut scene = PrinterScene::from_config(&self.printer_config);
+        for mesh in &self.scene.meshes {
+            scene.add_mesh(mesh.clone());
+        }
+        scene.set_overhang_angle_degrees(self.overhang_angle_degrees as f64);
+
         let printer_config = self.printer_config.clone();
         let job_config = self.job_config.clone();
         let cancel_clone = Arc::clone(&cancel);
