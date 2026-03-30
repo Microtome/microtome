@@ -2,6 +2,8 @@
 
 mod app;
 mod camera;
+mod slice_preview;
+mod ui;
 mod viewport;
 mod viewport_renderer;
 

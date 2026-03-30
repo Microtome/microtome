@@ -1,15 +1,20 @@
 //! Main application state and UI layout for Microtome.
 
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Arc;
 
 use glam::{Mat4, Quat};
 use microtome_core::{
-    MeshData, PrintJobConfig, PrintMesh, PrintVolume, PrinterConfig, PrinterScene, Projector,
-    ZStage,
+    GpuContext, MeshData, PrintJobConfig, PrintMesh, PrintVolume, PrinterConfig, PrinterScene,
+    Projector, SliceProgress, ZStage, run_slicing_job,
 };
 use wgpu::util::DeviceExt;
 
 use crate::camera::OrbitCamera;
+use crate::slice_preview::SlicePreview;
+use crate::ui::panels::{self, AppState};
 use crate::viewport::ViewportPaintCallback;
 use crate::viewport_renderer::{MeshBuffers, ViewportRenderer};
 
@@ -41,6 +46,18 @@ pub struct MicrotomeApp {
     gpu_meshes: Vec<GpuMesh>,
     /// Whether the render state was successfully initialized.
     has_render_state: bool,
+    /// 2D slice preview panel.
+    slice_preview: SlicePreview,
+    /// Overhang angle in degrees for visualization.
+    overhang_angle_degrees: f32,
+    /// Active slicing job progress (0.0 to 1.0).
+    slicing_progress: Option<f32>,
+    /// Receiver for slicing progress updates from the background job.
+    progress_rx: Option<mpsc::Receiver<SliceProgress>>,
+    /// Path to save the ZIP output when slicing completes.
+    export_path: Option<PathBuf>,
+    /// Cancellation flag for active slicing job.
+    cancel_flag: Option<Arc<AtomicBool>>,
 }
 
 impl MicrotomeApp {
@@ -65,6 +82,10 @@ impl MicrotomeApp {
             has_render_state = true;
         }
 
+        // Use half the projector resolution for responsive preview
+        let preview_width = printer_config.projector.x_res_px / 2;
+        let preview_height = printer_config.projector.y_res_px / 2;
+
         Self {
             scene,
             printer_config,
@@ -74,6 +95,12 @@ impl MicrotomeApp {
             selected_mesh: None,
             gpu_meshes: Vec::new(),
             has_render_state,
+            slice_preview: SlicePreview::new(preview_width, preview_height),
+            overhang_angle_degrees: 0.0,
+            slicing_progress: None,
+            progress_rx: None,
+            export_path: None,
+            cancel_flag: None,
         }
     }
 
@@ -130,77 +157,163 @@ impl MicrotomeApp {
             })
             .collect()
     }
+
+    /// Polls the progress receiver for slicing job updates.
+    ///
+    /// Handles progress fraction updates, job completion (writing ZIP to disk),
+    /// and job failure/cancellation.
+    fn poll_slicing_progress(&mut self) {
+        let should_clear = if let Some(rx) = &self.progress_rx {
+            let mut should_clear = false;
+            // Drain all available messages
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    SliceProgress::Progress(p) => {
+                        self.slicing_progress = Some(p);
+                    }
+                    SliceProgress::Complete(zip_bytes) => {
+                        if let Some(path) = &self.export_path {
+                            if let Err(e) = std::fs::write(path, &zip_bytes) {
+                                log::error!("Failed to write ZIP: {e}");
+                            } else {
+                                log::info!("Exported ZIP to: {}", path.display());
+                            }
+                        }
+                        should_clear = true;
+                        break;
+                    }
+                    SliceProgress::Failed(msg) => {
+                        log::error!("Slicing job failed: {msg}");
+                        should_clear = true;
+                        break;
+                    }
+                }
+            }
+            should_clear
+        } else {
+            false
+        };
+
+        if should_clear {
+            self.slicing_progress = None;
+            self.progress_rx = None;
+            self.export_path = None;
+            self.cancel_flag = None;
+        }
+    }
+
+    /// Starts a slicing job on a background thread.
+    fn start_slicing_job(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+
+        let scene = self.scene.clone();
+        let printer_config = self.printer_config.clone();
+        let job_config = self.job_config.clone();
+        let cancel_clone = Arc::clone(&cancel);
+        let tx_clone = tx.clone();
+
+        std::thread::spawn(move || {
+            if let Err(e) =
+                run_slicing_job(&scene, &printer_config, &job_config, tx_clone, cancel_clone)
+            {
+                let _ = tx.send(SliceProgress::Failed(e.to_string()));
+            }
+        });
+
+        self.slicing_progress = Some(0.0);
+        self.progress_rx = Some(rx);
+        self.cancel_flag = Some(cancel);
+    }
 }
 
 impl eframe::App for MicrotomeApp {
     /// Main UI rendering called each frame.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Poll for slicing job progress
+        self.poll_slicing_progress();
+
+        // Track whether the panel requests an export start
+        let mut stl_loaded: Option<MeshData> = None;
+
         egui::Panel::left("controls_panel")
             .default_size(260.0)
             .show_inside(ui, |ui| {
-                ui.heading("Microtome");
-                ui.separator();
-
-                if ui.button("Load STL...").clicked()
-                    && let Some(path) = rfd::FileDialog::new()
-                        .add_filter("STL files", &["stl", "STL"])
-                        .pick_file()
-                {
-                    match std::fs::read(&path) {
-                        Ok(data) => match MeshData::from_stl_bytes(&data) {
-                            Ok(mesh_data) => {
-                                if let Some(render_state) = _frame.wgpu_render_state() {
-                                    self.upload_mesh(render_state, &mesh_data);
-                                }
-                                self.scene.add_mesh(PrintMesh::new(mesh_data));
-                                log::info!("Loaded STL: {}", path.display());
-                            }
-                            Err(e) => log::error!("Failed to parse STL: {e}"),
-                        },
-                        Err(e) => log::error!("Failed to read file: {e}"),
-                    }
-                }
-
-                ui.separator();
-                ui.label("Printer Configuration");
-                ui.label(format!("  Name: {}", self.printer_config.name));
-                ui.label(format!(
-                    "  Volume: {:.0} x {:.0} x {:.0} mm",
-                    self.printer_config.volume.width_mm,
-                    self.printer_config.volume.depth_mm,
-                    self.printer_config.volume.height_mm,
-                ));
-                ui.label(format!(
-                    "  Projector: {}x{}",
-                    self.printer_config.projector.x_res_px, self.printer_config.projector.y_res_px,
-                ));
-
-                ui.separator();
-                ui.label("Print Job");
-                ui.label(format!(
-                    "  Layer height: {:.3} mm",
-                    self.job_config.layer_height_mm(),
-                ));
-                ui.label(format!(
-                    "  Exposure: {} ms",
-                    self.job_config.layer_exposure_time_ms,
-                ));
-
-                ui.separator();
-                ui.label(format!("  Meshes: {}", self.scene.meshes.len()));
-                if let Some(idx) = self.selected_mesh {
-                    ui.label(format!("  Selected: mesh {idx}"));
-                }
+                let mut state = AppState {
+                    scene: &mut self.scene,
+                    printer_config: &mut self.printer_config,
+                    job_config: &mut self.job_config,
+                    slice_z: &mut self.slice_z,
+                    selected_mesh: &mut self.selected_mesh,
+                    overhang_angle_degrees: &mut self.overhang_angle_degrees,
+                    slicing_progress: &mut self.slicing_progress,
+                    progress_rx: &mut self.progress_rx,
+                    export_path: &mut self.export_path,
+                    cancel_flag: &mut self.cancel_flag,
+                    stl_loaded: &mut stl_loaded,
+                };
+                panels::controls_panel(ui, &mut state);
             });
+
+        // Handle deferred STL loading (needs render_state which is not available inside panel)
+        if let Some(mesh_data) = stl_loaded {
+            if let Some(render_state) = _frame.wgpu_render_state() {
+                self.upload_mesh(render_state, &mesh_data);
+            }
+            self.scene.add_mesh(PrintMesh::new(mesh_data));
+            self.slice_preview.mark_buffers_dirty();
+        }
+
+        // Start slicing job if an export path was just set and no job is running
+        if self.export_path.is_some() && self.progress_rx.is_none() {
+            self.start_slicing_job();
+        }
 
         egui::Panel::bottom("slice_panel")
             .min_size(40.0)
             .show_inside(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Slice Z:");
-                    let max_z = self.printer_config.volume.height_mm as f32;
-                    ui.add(egui::Slider::new(&mut self.slice_z, 0.0..=max_z).suffix(" mm"));
-                });
+                let mut state = AppState {
+                    scene: &mut self.scene,
+                    printer_config: &mut self.printer_config,
+                    job_config: &mut self.job_config,
+                    slice_z: &mut self.slice_z,
+                    selected_mesh: &mut self.selected_mesh,
+                    overhang_angle_degrees: &mut self.overhang_angle_degrees,
+                    slicing_progress: &mut self.slicing_progress,
+                    progress_rx: &mut self.progress_rx,
+                    export_path: &mut self.export_path,
+                    cancel_flag: &mut self.cancel_flag,
+                    stl_loaded: &mut None,
+                };
+                panels::bottom_bar(ui, &mut state);
+            });
+
+        // Update slice preview if we have a render state
+        if let Some(render_state) = _frame.wgpu_render_state() {
+            let gpu = GpuContext::from_existing(
+                Arc::new(render_state.device.clone()),
+                Arc::new(render_state.queue.clone()),
+            );
+            if self.slice_preview.buffers_dirty() {
+                self.slice_preview
+                    .update_mesh_buffers(&gpu, &self.scene.meshes);
+            }
+            if let Err(e) = self.slice_preview.update_slice(
+                ui.ctx(),
+                &gpu,
+                self.slice_z,
+                self.printer_config.volume.height_mm as f32,
+            ) {
+                log::error!("Slice preview error: {e}");
+            }
+        }
+
+        egui::Panel::right("slice_preview_panel")
+            .default_size(300.0)
+            .show_inside(ui, |ui| {
+                ui.heading("Slice Preview");
+                ui.separator();
+                self.slice_preview.show(ui);
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
