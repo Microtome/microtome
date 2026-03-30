@@ -21,3 +21,4 @@ env_logger = "0.11"
 anyhow.workspace = true
 rfd = "0.15"
 pollster = "0.4"
+image.workspace = true
