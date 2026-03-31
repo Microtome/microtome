@@ -77,6 +77,8 @@ pub struct AdvancedSlicer {
     temp2_view: wgpu::TextureView,
     // Sampler for the slice pass
     nearest_sampler: wgpu::Sampler,
+    // Depth buffer for the slice extraction pass
+    slice_depth_view: wgpu::TextureView,
     // Staging buffer for CPU readback
     staging_buffer: wgpu::Buffer,
     // Resolution
@@ -267,7 +269,13 @@ impl AdvancedSlicer {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
             cache: None,
@@ -365,6 +373,24 @@ impl AdvancedSlicer {
         let temp1_view = temp1_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let temp2_view = temp2_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+        // Depth buffer for the slice extraction pass (intersection pass has no depth)
+        let slice_depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("slice-depth-texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let slice_depth_view =
+            slice_depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("nearest-sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -403,6 +429,7 @@ impl AdvancedSlicer {
             temp1_view,
             temp2_view,
             nearest_sampler,
+            slice_depth_view,
             staging_buffer,
             width,
             height,
@@ -562,7 +589,14 @@ impl AdvancedSlicer {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.slice_depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 ..Default::default()
             });
             rpass.set_pipeline(&self.slice_pipeline);
