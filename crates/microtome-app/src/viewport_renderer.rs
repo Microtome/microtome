@@ -136,10 +136,7 @@ impl ViewportRenderer {
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                // In a right-handed view (look_at_rh + perspective_rh), the view
-                // transform mirrors Z, which reverses screen-space winding.
-                // CCW world-space triangles appear CW on screen.
-                front_face: wgpu::FrontFace::Cw,
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
