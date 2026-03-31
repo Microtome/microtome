@@ -66,24 +66,41 @@ impl MeshData {
 
         for (face_idx, face) in stl.faces.iter().enumerate() {
             let sv1 = stl.vertices[face.vertices[0]];
-            let sv2 = stl.vertices[face.vertices[1]];
-            let sv3 = stl.vertices[face.vertices[2]];
+            let mut sv2 = stl.vertices[face.vertices[1]];
+            let mut sv3 = stl.vertices[face.vertices[2]];
 
             let v1 = Vec3::from(<[f32; 3]>::from(sv1));
-            let v2 = Vec3::from(<[f32; 3]>::from(sv2));
-            let v3 = Vec3::from(<[f32; 3]>::from(sv3));
+            let mut v2 = Vec3::from(<[f32; 3]>::from(sv2));
+            let mut v3 = Vec3::from(<[f32; 3]>::from(sv3));
 
-            // Compute normal from vertex winding (cross product of edges).
-            // This ensures the normal matches the actual triangle orientation,
-            // even if stl_io's reindexing changed the vertex order.
+            // The STL file's stored normal is the authoritative outward direction.
+            // stl_io's IndexedMesh reindexing can reverse vertex order within faces,
+            // flipping the winding. Check if the geometric normal (from cross product)
+            // agrees with the stored normal; if not, swap two vertices to fix winding.
+            let stl_normal = Vec3::from(<[f32; 3]>::from(face.normal));
             let edge1 = v2 - v1;
             let edge2 = v3 - v1;
-            let computed_normal = edge1.cross(edge2);
-            let normal: [f32; 3] = if computed_normal.length_squared() > 0.0 {
-                computed_normal.normalize().into()
+            let geometric_normal = edge1.cross(edge2);
+
+            if geometric_normal.dot(stl_normal) < 0.0 {
+                // Winding disagrees with stored normal — swap v2 and v3
+                std::mem::swap(&mut sv2, &mut sv3);
+                std::mem::swap(&mut v2, &mut v3);
+            }
+
+            // Use the STL file's normal for lighting (it's the correct outward direction)
+            let normal: [f32; 3] = if stl_normal.length_squared() > 0.0 {
+                stl_normal.normalize().into()
             } else {
-                // Degenerate triangle — fall back to the STL file's normal
-                face.normal.into()
+                // Zero normal in file — compute from winding (now corrected)
+                let e1 = v2 - v1;
+                let e2 = v3 - v1;
+                let cn = e1.cross(e2);
+                if cn.length_squared() > 0.0 {
+                    cn.normalize().into()
+                } else {
+                    [0.0, 0.0, 1.0]
+                }
             };
 
             // Update bounding box
