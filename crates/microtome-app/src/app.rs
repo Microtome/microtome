@@ -400,9 +400,17 @@ impl eframe::App for MicrotomeApp {
                     let mesh = &self.scene.meshes[idx];
 
                     // Gizmo should be centered on the mesh's world-space bbox center.
-                    // The mesh's world center = position + bbox_center * scale.
+                    // Model matrix = translation * rotation * scale, so:
+                    // world_center = position + rotation * (bbox_center * scale)
                     let bbox_center = mesh.mesh_data.bbox.center();
-                    let world_center = mesh.position + bbox_center * mesh.scale;
+                    let rot_quat_for_center = Quat::from_euler(
+                        glam::EulerRot::XYZ,
+                        mesh.rotation.x,
+                        mesh.rotation.y,
+                        mesh.rotation.z,
+                    );
+                    let world_center =
+                        mesh.position + rot_quat_for_center * (bbox_center * mesh.scale);
 
                     let rot_quat = Quat::from_euler(
                         glam::EulerRot::XYZ,
@@ -449,23 +457,26 @@ impl eframe::App for MicrotomeApp {
                         let t = &new_transforms[0];
                         let mesh = &mut self.scene.meshes[idx];
 
-                        // Convert gizmo world center back to mesh position offset
-                        let new_world_center = Vec3::new(
-                            t.translation.x as f32,
-                            t.translation.y as f32,
-                            t.translation.z as f32,
-                        );
-                        let new_scale =
-                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
-                        mesh.position = new_world_center - bbox_center * new_scale;
-
-                        let q = Quat::from_xyzw(
+                        let new_rot = Quat::from_xyzw(
                             t.rotation.v.x as f32,
                             t.rotation.v.y as f32,
                             t.rotation.v.z as f32,
                             t.rotation.s as f32,
                         );
-                        let (rx, ry, rz) = q.to_euler(glam::EulerRot::XYZ);
+                        let new_scale =
+                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                        let new_world_center = Vec3::new(
+                            t.translation.x as f32,
+                            t.translation.y as f32,
+                            t.translation.z as f32,
+                        );
+
+                        // The model matrix applies: translation * rotation * scale * vertex.
+                        // The gizmo's world center = position + rotation * (bbox_center * scale).
+                        // Solve for position:
+                        mesh.position = new_world_center - new_rot * (bbox_center * new_scale);
+
+                        let (rx, ry, rz) = new_rot.to_euler(glam::EulerRot::XYZ);
                         mesh.rotation = Vec3::new(rx, ry, rz);
                         mesh.scale = new_scale;
                         self.slice_preview.mark_buffers_dirty();
