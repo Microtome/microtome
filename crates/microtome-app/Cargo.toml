@@ -22,6 +22,7 @@ anyhow.workspace = true
 rfd = "0.15"
 pollster = "0.4"
 image.workspace = true
+transform-gizmo-egui = "0.9"
 
 [dev-dependencies]
 naga = { version = "29", features = ["wgsl-in"] }

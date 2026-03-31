@@ -10,6 +10,8 @@ use microtome_core::{
     GpuContext, MeshData, PrintJobConfig, PrintMesh, PrintVolume, PrinterConfig, PrinterScene,
     Projector, SliceProgress, ZStage, run_slicing_job,
 };
+use transform_gizmo_egui::math::Transform;
+use transform_gizmo_egui::prelude::*;
 use wgpu::util::DeviceExt;
 
 use crate::camera::OrbitCamera;
@@ -58,6 +60,10 @@ pub struct MicrotomeApp {
     export_path: Option<PathBuf>,
     /// Cancellation flag for active slicing job.
     cancel_flag: Option<Arc<AtomicBool>>,
+    /// 3D transform gizmo for interactive manipulation.
+    gizmo: Gizmo,
+    /// Current gizmo modes (translate, rotate, or scale group).
+    gizmo_modes: EnumSet<GizmoMode>,
 }
 
 impl MicrotomeApp {
@@ -101,6 +107,8 @@ impl MicrotomeApp {
             progress_rx: None,
             export_path: None,
             cancel_flag: None,
+            gizmo: Gizmo::default(),
+            gizmo_modes: GizmoMode::all_translate(),
         }
     }
 
@@ -349,6 +357,17 @@ impl eframe::App for MicrotomeApp {
             self.slice_preview.mark_buffers_dirty();
         }
 
+        // Gizmo mode switching: G=translate, R=rotate, S=scale
+        ui.ctx().input(|i| {
+            if i.key_pressed(egui::Key::G) {
+                self.gizmo_modes = GizmoMode::all_translate();
+            } else if i.key_pressed(egui::Key::R) {
+                self.gizmo_modes = GizmoMode::all_rotate();
+            } else if i.key_pressed(egui::Key::S) {
+                self.gizmo_modes = GizmoMode::all_scale();
+            }
+        });
+
         egui::CentralPanel::default().show_inside(ui, |ui| {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
@@ -384,6 +403,80 @@ impl eframe::App for MicrotomeApp {
                     },
                 );
                 painter.add(callback);
+
+                // 3D transform gizmo for the selected mesh
+                if let Some(idx) = self.selected_mesh
+                    && idx < self.scene.meshes.len()
+                {
+                    let mesh = &self.scene.meshes[idx];
+
+                    // Convert mesh state to mint types for gizmo (avoids
+                    // glam version mismatch between our glam and gizmo's glam)
+                    let rot_quat = Quat::from_euler(
+                        glam::EulerRot::XYZ,
+                        mesh.rotation.x,
+                        mesh.rotation.y,
+                        mesh.rotation.z,
+                    );
+                    let mint_rot: mint::Quaternion<f64> = mint::Quaternion {
+                        v: mint::Vector3 {
+                            x: f64::from(rot_quat.x),
+                            y: f64::from(rot_quat.y),
+                            z: f64::from(rot_quat.z),
+                        },
+                        s: f64::from(rot_quat.w),
+                    };
+                    let gizmo_transform = Transform::from_scale_rotation_translation(
+                        mint::Vector3 {
+                            x: f64::from(mesh.scale.x),
+                            y: f64::from(mesh.scale.y),
+                            z: f64::from(mesh.scale.z),
+                        },
+                        mint_rot,
+                        mint::Vector3 {
+                            x: f64::from(mesh.position.x),
+                            y: f64::from(mesh.position.y),
+                            z: f64::from(mesh.position.z),
+                        },
+                    );
+
+                    // Configure the gizmo with camera matrices (via mint)
+                    let view_mint: mint::RowMatrix4<f64> = view.as_dmat4().into();
+                    let proj_mint: mint::RowMatrix4<f64> = proj.as_dmat4().into();
+                    self.gizmo.update_config(GizmoConfig {
+                        view_matrix: view_mint,
+                        projection_matrix: proj_mint,
+                        viewport: rect,
+                        modes: self.gizmo_modes,
+                        orientation: GizmoOrientation::Global,
+                        ..Default::default()
+                    });
+
+                    // Interact and apply transform changes
+                    if let Some((_result, new_transforms)) =
+                        self.gizmo.interact(ui, &[gizmo_transform])
+                    {
+                        let t = &new_transforms[0];
+                        let mesh = &mut self.scene.meshes[idx];
+                        mesh.position = Vec3::new(
+                            t.translation.x as f32,
+                            t.translation.y as f32,
+                            t.translation.z as f32,
+                        );
+                        // Convert mint quaternion back to Euler angles
+                        let q = Quat::from_xyzw(
+                            t.rotation.v.x as f32,
+                            t.rotation.v.y as f32,
+                            t.rotation.v.z as f32,
+                            t.rotation.s as f32,
+                        );
+                        let (rx, ry, rz) = q.to_euler(glam::EulerRot::XYZ);
+                        mesh.rotation = Vec3::new(rx, ry, rz);
+                        mesh.scale =
+                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                        self.slice_preview.mark_buffers_dirty();
+                    }
+                }
             } else {
                 let center = response.rect.center();
                 painter.text(

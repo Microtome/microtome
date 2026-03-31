@@ -148,7 +148,7 @@ pub fn bottom_bar(ui: &mut egui::Ui, state: &mut AppState<'_>) {
     });
 }
 
-/// Renders position and scale controls for a single mesh.
+/// Renders position, rotation, and scale controls for a single mesh.
 fn mesh_transform_editor(ui: &mut egui::Ui, mesh: &mut PrintMesh) {
     ui.label("Transform");
     egui::Grid::new("mesh_transform_grid")
@@ -177,6 +177,38 @@ fn mesh_transform_editor(ui: &mut egui::Ui, mesh: &mut PrintMesh) {
                     .speed(0.5)
                     .suffix(" mm"),
             );
+            ui.end_row();
+
+            // Rotation controls (display in degrees, store in radians)
+            let mut rot_x_deg = mesh.rotation.x.to_degrees();
+            let mut rot_y_deg = mesh.rotation.y.to_degrees();
+            let mut rot_z_deg = mesh.rotation.z.to_degrees();
+
+            ui.label("Rot X:");
+            if ui
+                .add(egui::DragValue::new(&mut rot_x_deg).speed(1.0).suffix("°"))
+                .changed()
+            {
+                mesh.rotation.x = rot_x_deg.to_radians();
+            }
+            ui.end_row();
+
+            ui.label("Rot Y:");
+            if ui
+                .add(egui::DragValue::new(&mut rot_y_deg).speed(1.0).suffix("°"))
+                .changed()
+            {
+                mesh.rotation.y = rot_y_deg.to_radians();
+            }
+            ui.end_row();
+
+            ui.label("Rot Z:");
+            if ui
+                .add(egui::DragValue::new(&mut rot_z_deg).speed(1.0).suffix("°"))
+                .changed()
+            {
+                mesh.rotation.z = rot_z_deg.to_radians();
+            }
             ui.end_row();
 
             ui.label("Scale:");
