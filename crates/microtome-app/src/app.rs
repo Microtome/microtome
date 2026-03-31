@@ -108,7 +108,7 @@ impl MicrotomeApp {
             export_path: None,
             cancel_flag: None,
             gizmo: Gizmo::default(),
-            gizmo_modes: GizmoMode::all_translate(),
+            gizmo_modes: GizmoMode::all(),
         }
     }
 
@@ -357,17 +357,6 @@ impl eframe::App for MicrotomeApp {
             self.slice_preview.mark_buffers_dirty();
         }
 
-        // Gizmo mode switching: G=translate, R=rotate, S=scale
-        ui.ctx().input(|i| {
-            if i.key_pressed(egui::Key::G) {
-                self.gizmo_modes = GizmoMode::all_translate();
-            } else if i.key_pressed(egui::Key::R) {
-                self.gizmo_modes = GizmoMode::all_rotate();
-            } else if i.key_pressed(egui::Key::S) {
-                self.gizmo_modes = GizmoMode::all_scale();
-            }
-        });
-
         egui::CentralPanel::default().show_inside(ui, |ui| {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
@@ -410,8 +399,11 @@ impl eframe::App for MicrotomeApp {
                 {
                     let mesh = &self.scene.meshes[idx];
 
-                    // Convert mesh state to mint types for gizmo (avoids
-                    // glam version mismatch between our glam and gizmo's glam)
+                    // Gizmo should be centered on the mesh's world-space bbox center.
+                    // The mesh's world center = position + bbox_center * scale.
+                    let bbox_center = mesh.mesh_data.bbox.center();
+                    let world_center = mesh.position + bbox_center * mesh.scale;
+
                     let rot_quat = Quat::from_euler(
                         glam::EulerRot::XYZ,
                         mesh.rotation.x,
@@ -434,13 +426,12 @@ impl eframe::App for MicrotomeApp {
                         },
                         mint_rot,
                         mint::Vector3 {
-                            x: f64::from(mesh.position.x),
-                            y: f64::from(mesh.position.y),
-                            z: f64::from(mesh.position.z),
+                            x: f64::from(world_center.x),
+                            y: f64::from(world_center.y),
+                            z: f64::from(world_center.z),
                         },
                     );
 
-                    // Configure the gizmo with camera matrices (via mint)
                     let view_mint: mint::RowMatrix4<f64> = view.as_dmat4().into();
                     let proj_mint: mint::RowMatrix4<f64> = proj.as_dmat4().into();
                     self.gizmo.update_config(GizmoConfig {
@@ -452,18 +443,22 @@ impl eframe::App for MicrotomeApp {
                         ..Default::default()
                     });
 
-                    // Interact and apply transform changes
                     if let Some((_result, new_transforms)) =
                         self.gizmo.interact(ui, &[gizmo_transform])
                     {
                         let t = &new_transforms[0];
                         let mesh = &mut self.scene.meshes[idx];
-                        mesh.position = Vec3::new(
+
+                        // Convert gizmo world center back to mesh position offset
+                        let new_world_center = Vec3::new(
                             t.translation.x as f32,
                             t.translation.y as f32,
                             t.translation.z as f32,
                         );
-                        // Convert mint quaternion back to Euler angles
+                        let new_scale =
+                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                        mesh.position = new_world_center - bbox_center * new_scale;
+
                         let q = Quat::from_xyzw(
                             t.rotation.v.x as f32,
                             t.rotation.v.y as f32,
@@ -472,8 +467,7 @@ impl eframe::App for MicrotomeApp {
                         );
                         let (rx, ry, rz) = q.to_euler(glam::EulerRot::XYZ);
                         mesh.rotation = Vec3::new(rx, ry, rz);
-                        mesh.scale =
-                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                        mesh.scale = new_scale;
                         self.slice_preview.mark_buffers_dirty();
                     }
                 }
