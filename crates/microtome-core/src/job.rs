@@ -143,7 +143,13 @@ pub fn run_slicing_job(
         }
 
         // Slice at this z height
-        slicer.slice_at(z as f32, volume_height as f32, &mesh_buffers)?;
+        slicer.slice_at(
+            z as f32,
+            printer_config.volume.width_mm as f32,
+            printer_config.volume.depth_mm as f32,
+            volume_height as f32,
+            &mesh_buffers,
+        )?;
 
         // Read the slice to PNG
         let mut png_data: Vec<u8> = Vec::new();

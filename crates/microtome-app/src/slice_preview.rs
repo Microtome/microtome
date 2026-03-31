@@ -85,11 +85,16 @@ impl SlicePreview {
     }
 
     /// Runs the slicer if the Z height changed and uploads the result as an egui texture.
+    ///
+    /// The build volume dimensions (`volume_width`, `volume_depth`, `volume_height`)
+    /// are forwarded to the slicer for correct orthographic projection.
     pub fn update_slice(
         &mut self,
         ctx: &egui::Context,
         gpu: &GpuContext,
         z: f32,
+        volume_width: f32,
+        volume_depth: f32,
         volume_height: f32,
     ) -> Result<()> {
         // Only re-slice when z actually changed
@@ -114,7 +119,13 @@ impl SlicePreview {
             return Ok(());
         }
 
-        slicer.slice_at(z, volume_height, &self.mesh_buffers)?;
+        slicer.slice_at(
+            z,
+            volume_width,
+            volume_depth,
+            volume_height,
+            &self.mesh_buffers,
+        )?;
 
         let mut png_bytes = Vec::new();
         slicer.read_slice_to_png(&mut png_bytes)?;
