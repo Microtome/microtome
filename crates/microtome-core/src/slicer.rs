@@ -185,6 +185,10 @@ impl AdvancedSlicer {
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
+                    // look_at_rh + orthographic_rh negates Z, reversing screen
+                    // winding. Cw matches outward-facing triangles so front_facing
+                    // is correct in the fragment shader.
+                    front_face: wgpu::FrontFace::Cw,
                     cull_mode: None,
                     ..Default::default()
                 },
@@ -259,6 +263,7 @@ impl AdvancedSlicer {
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Cw,
                 cull_mode: None,
                 ..Default::default()
             },
