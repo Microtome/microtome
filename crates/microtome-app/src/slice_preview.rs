@@ -56,14 +56,45 @@ impl SlicePreview {
     }
 
     /// Uploads mesh geometry to GPU buffers for the slicer.
+    ///
+    /// The mesh's position, rotation, and scale transforms are baked into the
+    /// vertex data since the slicer shaders don't use a model matrix.
     pub fn update_mesh_buffers(&mut self, gpu: &GpuContext, meshes: &[PrintMesh]) {
         self.mesh_buffers.clear();
         for mesh in meshes {
+            // Bake the mesh transform into vertices for the slicer
+            let model = glam::Mat4::from_scale_rotation_translation(
+                mesh.scale,
+                glam::Quat::from_euler(
+                    glam::EulerRot::XYZ,
+                    mesh.rotation.x,
+                    mesh.rotation.y,
+                    mesh.rotation.z,
+                ),
+                mesh.position,
+            );
+
+            let transformed_vertices: Vec<microtome_core::MeshVertex> = mesh
+                .mesh_data
+                .vertices
+                .iter()
+                .map(|v| {
+                    let pos = glam::Vec3::from(v.position);
+                    let norm = glam::Vec3::from(v.normal);
+                    let new_pos = model.transform_point3(pos);
+                    let new_norm = model.transform_vector3(norm).normalize_or_zero();
+                    microtome_core::MeshVertex {
+                        position: new_pos.into(),
+                        normal: new_norm.into(),
+                    }
+                })
+                .collect();
+
             let vertex_buffer = gpu
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("slice-preview-vertices"),
-                    contents: bytemuck::cast_slice(&mesh.mesh_data.vertices),
+                    contents: bytemuck::cast_slice(&transformed_vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 

@@ -65,8 +65,6 @@ impl MeshData {
         let mut volume = 0.0_f64;
 
         for (face_idx, face) in stl.faces.iter().enumerate() {
-            let normal: [f32; 3] = face.normal.into();
-
             let sv1 = stl.vertices[face.vertices[0]];
             let sv2 = stl.vertices[face.vertices[1]];
             let sv3 = stl.vertices[face.vertices[2]];
@@ -74,6 +72,19 @@ impl MeshData {
             let v1 = Vec3::from(<[f32; 3]>::from(sv1));
             let v2 = Vec3::from(<[f32; 3]>::from(sv2));
             let v3 = Vec3::from(<[f32; 3]>::from(sv3));
+
+            // Compute normal from vertex winding (cross product of edges).
+            // This ensures the normal matches the actual triangle orientation,
+            // even if stl_io's reindexing changed the vertex order.
+            let edge1 = v2 - v1;
+            let edge2 = v3 - v1;
+            let computed_normal = edge1.cross(edge2);
+            let normal: [f32; 3] = if computed_normal.length_squared() > 0.0 {
+                computed_normal.normalize().into()
+            } else {
+                // Degenerate triangle — fall back to the STL file's normal
+                face.normal.into()
+            };
 
             // Update bounding box
             min = min.min(v1).min(v2).min(v3);

@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 
+use glam;
 use serde::Serialize;
 use wgpu::util::DeviceExt;
 
@@ -98,11 +99,40 @@ pub fn run_slicing_job(
         .meshes
         .iter()
         .map(|print_mesh| {
+            // Bake the mesh transform into vertices since the slicer
+            // shaders don't use a model matrix.
+            let model = glam::Mat4::from_scale_rotation_translation(
+                print_mesh.scale,
+                glam::Quat::from_euler(
+                    glam::EulerRot::XYZ,
+                    print_mesh.rotation.x,
+                    print_mesh.rotation.y,
+                    print_mesh.rotation.z,
+                ),
+                print_mesh.position,
+            );
+
+            let transformed_vertices: Vec<crate::mesh::MeshVertex> = print_mesh
+                .mesh_data
+                .vertices
+                .iter()
+                .map(|v| {
+                    let pos = glam::Vec3::from(v.position);
+                    let norm = glam::Vec3::from(v.normal);
+                    let new_pos = model.transform_point3(pos);
+                    let new_norm = model.transform_vector3(norm).normalize_or_zero();
+                    crate::mesh::MeshVertex {
+                        position: new_pos.into(),
+                        normal: new_norm.into(),
+                    }
+                })
+                .collect();
+
             let vertex_buffer = gpu
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("mesh-vertex-buffer"),
-                    contents: bytemuck::cast_slice(&print_mesh.mesh_data.vertices),
+                    contents: bytemuck::cast_slice(&transformed_vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
