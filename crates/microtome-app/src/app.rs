@@ -366,13 +366,18 @@ impl eframe::App for MicrotomeApp {
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
             self.camera.handle_input(&response);
 
-            // Click to select/deselect mesh (cycle through meshes on click)
-            if response.clicked() && !self.scene.meshes.is_empty() {
-                self.selected_mesh = match self.selected_mesh {
-                    Some(idx) if idx + 1 < self.scene.meshes.len() => Some(idx + 1),
-                    Some(_) => None,
-                    None => Some(0),
-                };
+            // Click to select/deselect mesh
+            if response.clicked() {
+                if self.scene.meshes.is_empty() {
+                    self.selected_mesh = None;
+                } else {
+                    self.selected_mesh = match self.selected_mesh {
+                        // Cycle through meshes, then deselect
+                        Some(idx) if idx + 1 < self.scene.meshes.len() => Some(idx + 1),
+                        Some(_) => None,
+                        None => Some(0),
+                    };
+                }
             }
 
             if self.has_render_state {

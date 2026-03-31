@@ -221,7 +221,19 @@ fn mesh_transform_editor(ui: &mut egui::Ui, mesh: &mut PrintMesh) {
                 )
                 .changed()
             {
-                mesh.scale = Vec3::splat(uniform_scale);
+                // Keep the bbox center stationary when scaling.
+                // world_center = position + rotation * (bbox_center * scale)
+                let bbox_center = mesh.mesh_data.bbox.center();
+                let rot = glam::Quat::from_euler(
+                    glam::EulerRot::XYZ,
+                    mesh.rotation.x,
+                    mesh.rotation.y,
+                    mesh.rotation.z,
+                );
+                let old_center = mesh.position + rot * (bbox_center * mesh.scale);
+                let new_scale = Vec3::splat(uniform_scale);
+                mesh.position = old_center - rot * (bbox_center * new_scale);
+                mesh.scale = new_scale;
             }
             ui.end_row();
         });
