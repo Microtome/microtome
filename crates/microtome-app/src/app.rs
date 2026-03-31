@@ -372,12 +372,15 @@ impl eframe::App for MicrotomeApp {
 
                 let mesh_buffers = Arc::new(self.collect_mesh_buffers());
 
+                let ppp = ui.ctx().pixels_per_point();
                 let callback = egui_wgpu::Callback::new_paint_callback(
                     rect,
                     ViewportPaintCallback {
                         view_proj,
                         meshes: mesh_buffers,
                         selected_index: self.selected_mesh,
+                        width: (rect.width() * ppp) as u32,
+                        height: (rect.height() * ppp) as u32,
                     },
                 );
                 painter.add(callback);

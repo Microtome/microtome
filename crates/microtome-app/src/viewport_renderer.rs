@@ -1,8 +1,8 @@
 //! GPU viewport renderer for 3D mesh and wireframe rendering.
 //!
-//! Provides Phong-lit mesh rendering and colored wireframe lines for the
-//! print volume box. Designed to be stored in egui-wgpu's `CallbackResources`
-//! and driven by [`ViewportPaintCallback`](super::viewport::ViewportPaintCallback).
+//! Renders to an offscreen color+depth target during `prepare`, then blits
+//! the result onto egui's render pass during `paint`. This allows proper
+//! depth testing for solid mesh rendering.
 
 use glam::Mat4;
 use microtome_core::PrintVolumeBox;
@@ -14,6 +14,12 @@ const DEFAULT_COLOR: [f32; 4] = [0.812, 0.812, 0.812, 1.0];
 /// Selected object color: cyan #00cfcf.
 const SELECTED_COLOR: [f32; 4] = [0.0, 0.812, 0.812, 1.0];
 
+/// Offscreen render target format.
+const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+/// Depth buffer format.
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
 /// A single vertex for line rendering (position + color).
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -24,7 +30,6 @@ struct LineVertex {
 
 /// Uniform data for a single draw call.
 ///
-/// The line pipeline only reads `view_proj`; the Phong pipeline uses all fields.
 /// Padded to 256-byte alignment for dynamic uniform buffer offsets.
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -32,7 +37,6 @@ struct ViewportUniforms {
     view_proj: [[f32; 4]; 4],
     model: [[f32; 4]; 4],
     object_color: [f32; 4],
-    /// Padding to reach 256-byte alignment (required by wgpu for dynamic offsets).
     _padding: [f32; 12],
 }
 
@@ -41,26 +45,39 @@ const UNIFORM_ALIGN: u64 = 256;
 
 /// GPU renderer for the 3D viewport.
 ///
-/// Holds wgpu pipelines, uniform buffers, and the print-volume wireframe
-/// geometry. Created once and stored in egui-wgpu `CallbackResources`.
+/// Renders meshes and wireframe to an offscreen target with depth testing,
+/// then blits the result to egui's render pass.
 pub struct ViewportRenderer {
+    // --- Scene rendering pipelines (target offscreen) ---
     phong_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-    /// Maximum number of draw calls the uniform buffer can hold.
     max_draw_calls: u32,
     line_vertex_buffer: wgpu::Buffer,
     line_vertex_count: u32,
+
+    // --- Offscreen render targets ---
+    color_texture: wgpu::Texture,
+    color_view: wgpu::TextureView,
+    depth_texture: wgpu::Texture,
+    depth_view: wgpu::TextureView,
+    offscreen_width: u32,
+    offscreen_height: u32,
+
+    // --- Blit pipeline (draws offscreen texture to egui's pass) ---
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_bind_group: wgpu::BindGroup,
+    blit_bind_group_layout: wgpu::BindGroupLayout,
+    blit_sampler: wgpu::Sampler,
 }
 
 impl ViewportRenderer {
-    /// Creates a new viewport renderer with the given target surface format.
+    /// Creates a new viewport renderer.
     ///
-    /// Pipelines render without depth testing since they draw into egui's
-    /// render pass which does not include a depth attachment.
+    /// `target_format` is egui's surface format (for the blit pipeline).
+    /// Scene pipelines target `OFFSCREEN_FORMAT` with depth testing.
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
-        // Start with space for 16 draw calls (1 lines + 15 meshes).
         let max_draw_calls: u32 = 16;
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("viewport_uniforms"),
@@ -104,7 +121,15 @@ impl ViewportRenderer {
             immediate_size: 0,
         });
 
-        // --- Phong pipeline (no depth stencil — renders into egui's pass) ---
+        let depth_stencil = Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        });
+
+        // --- Phong pipeline (offscreen with depth) ---
         let phong_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("phong_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/phong.wgsl").into()),
@@ -140,14 +165,14 @@ impl ViewportRenderer {
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: depth_stencil.clone(),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &phong_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    format: OFFSCREEN_FORMAT,
+                    blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -156,7 +181,7 @@ impl ViewportRenderer {
             cache: None,
         });
 
-        // --- Line pipeline (no depth stencil) ---
+        // --- Line pipeline (offscreen with depth) ---
         let line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("line_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/line.wgsl").into()),
@@ -190,13 +215,13 @@ impl ViewportRenderer {
                 topology: wgpu::PrimitiveTopology::LineList,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil,
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &line_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
+                    format: OFFSCREEN_FORMAT,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -206,7 +231,84 @@ impl ViewportRenderer {
             cache: None,
         });
 
-        // Empty line vertex buffer placeholder.
+        // --- Blit pipeline (draws offscreen texture to egui's pass) ---
+        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("blit_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/blit.wgsl").into()),
+        });
+
+        let blit_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("blit_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let blit_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("blit_pipeline_layout"),
+            bind_group_layouts: &[Some(&blit_bind_group_layout)],
+            immediate_size: 0,
+        });
+
+        let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("blit_pipeline"),
+            layout: Some(&blit_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &blit_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &blit_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let blit_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("blit_sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        // Initial 1x1 offscreen textures (resized on first frame).
+        let (color_texture, color_view, depth_texture, depth_view) =
+            create_offscreen_targets(device, 1, 1);
+
+        let blit_bind_group =
+            create_blit_bind_group(device, &blit_bind_group_layout, &color_view, &blit_sampler);
+
         let line_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("line_vertices"),
             size: 4,
@@ -222,19 +324,27 @@ impl ViewportRenderer {
             max_draw_calls,
             line_vertex_buffer,
             line_vertex_count: 0,
+            color_texture,
+            color_view,
+            depth_texture,
+            depth_view,
+            offscreen_width: 1,
+            offscreen_height: 1,
+            blit_pipeline,
+            blit_bind_group,
+            blit_bind_group_layout,
+            blit_sampler,
         }
     }
 
     /// Rebuilds the wireframe vertex buffer for the print volume box.
     ///
     /// Axis-aligned edges are colored by axis: X=red, Y=green, Z=blue.
-    /// The box is centered on XY at the origin, Z goes from 0 to height.
     pub fn update_volume_lines(&mut self, device: &wgpu::Device, volume: &PrintVolumeBox) {
         let hw = volume.width as f32 / 2.0;
         let hd = volume.depth as f32 / 2.0;
         let h = volume.height as f32;
 
-        // 8 corners: bottom (z=0) and top (z=h)
         let c = [
             [-hw, -hd, 0.0],
             [hw, -hd, 0.0],
@@ -250,7 +360,6 @@ impl ViewportRenderer {
         let green: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         let blue: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
-        // 12 edges grouped by axis direction
         let edges: [(usize, usize, [f32; 4]); 12] = [
             (0, 1, red),
             (3, 2, red),
@@ -286,24 +395,48 @@ impl ViewportRenderer {
         });
     }
 
-    /// Writes all uniform data for the current frame into the uniform buffer.
+    /// Renders the scene to the offscreen target with depth testing.
     ///
-    /// Slot 0 is used for line rendering, slots 1..N+1 for meshes.
-    /// If the buffer is too small, it is reallocated.
-    pub fn prepare_uniforms(
+    /// Call this from the paint callback's `prepare` method. Resizes the
+    /// offscreen targets if the viewport dimensions changed.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_offscreen(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        width: u32,
+        height: u32,
         view_proj: Mat4,
         meshes: &[MeshBuffers],
         selected_index: Option<usize>,
     ) {
-        let needed = 1 + meshes.len() as u32; // 1 for lines + N meshes
+        let w = width.max(1);
+        let h = height.max(1);
+
+        // Resize offscreen targets if needed.
+        if w != self.offscreen_width || h != self.offscreen_height {
+            let (ct, cv, dt, dv) = create_offscreen_targets(device, w, h);
+            self.color_texture = ct;
+            self.color_view = cv;
+            self.depth_texture = dt;
+            self.depth_view = dv;
+            self.offscreen_width = w;
+            self.offscreen_height = h;
+            self.blit_bind_group = create_blit_bind_group(
+                device,
+                &self.blit_bind_group_layout,
+                &self.color_view,
+                &self.blit_sampler,
+            );
+        }
+
+        // Write uniforms.
+        let needed = 1 + meshes.len() as u32;
         if needed > self.max_draw_calls {
             self.grow_uniform_buffer(device, needed);
         }
 
-        // Slot 0: line uniforms
         let line_uniforms = ViewportUniforms {
             view_proj: view_proj.to_cols_array_2d(),
             model: Mat4::IDENTITY.to_cols_array_2d(),
@@ -312,7 +445,6 @@ impl ViewportRenderer {
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&line_uniforms));
 
-        // Slots 1..N+1: mesh uniforms
         for (i, mesh_buf) in meshes.iter().enumerate() {
             let color = if selected_index == Some(i) {
                 SELECTED_COLOR
@@ -328,36 +460,67 @@ impl ViewportRenderer {
             let offset = UNIFORM_ALIGN * (i as u64 + 1);
             queue.write_buffer(&self.uniform_buffer, offset, bytemuck::bytes_of(&uniforms));
         }
+
+        // Run the offscreen render pass.
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewport_offscreen_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.15,
+                            g: 0.15,
+                            b: 0.15,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+
+            // Draw wireframe lines.
+            if self.line_vertex_count > 0 {
+                pass.set_pipeline(&self.line_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[0]);
+                pass.set_vertex_buffer(0, self.line_vertex_buffer.slice(..));
+                pass.draw(0..self.line_vertex_count, 0..1);
+            }
+
+            // Draw meshes.
+            for (i, mesh_buf) in meshes.iter().enumerate() {
+                let offset = (UNIFORM_ALIGN * (i as u64 + 1)) as u32;
+                pass.set_pipeline(&self.phong_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
+                pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
+                pass.set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+            }
+        }
     }
 
-    /// Issues draw calls for the wireframe and all meshes.
+    /// Blits the offscreen color texture onto egui's render pass.
     ///
-    /// Must be called after [`prepare_uniforms`](Self::prepare_uniforms) has
-    /// written uniform data for the current frame.
-    pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'static>, meshes: &[MeshBuffers]) {
-        // Draw wireframe lines (uniform slot 0)
-        if self.line_vertex_count > 0 {
-            render_pass.set_pipeline(&self.line_pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[0]);
-            render_pass.set_vertex_buffer(0, self.line_vertex_buffer.slice(..));
-            render_pass.draw(0..self.line_vertex_count, 0..1);
-        }
-
-        // Draw meshes (uniform slots 1..N+1)
-        for (i, mesh_buf) in meshes.iter().enumerate() {
-            let offset = (UNIFORM_ALIGN * (i as u64 + 1)) as u32;
-            render_pass.set_pipeline(&self.phong_pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
-            render_pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
-            render_pass
-                .set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
-        }
+    /// Call this from the paint callback's `paint` method.
+    pub fn blit(&self, render_pass: &mut wgpu::RenderPass<'static>) {
+        render_pass.set_pipeline(&self.blit_pipeline);
+        render_pass.set_bind_group(0, &self.blit_bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
     }
 
     /// Grows the uniform buffer to hold at least `needed` entries.
     fn grow_uniform_buffer(&mut self, device: &wgpu::Device, needed: u32) {
-        // Round up to next power of two for growth.
         let new_max = needed.next_power_of_two();
         self.uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("viewport_uniforms"),
@@ -384,6 +547,75 @@ impl ViewportRenderer {
     }
 }
 
+/// Creates offscreen color and depth textures of the given size.
+fn create_offscreen_targets(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+) -> (
+    wgpu::Texture,
+    wgpu::TextureView,
+    wgpu::Texture,
+    wgpu::TextureView,
+) {
+    let color_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("viewport_color"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: OFFSCREEN_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let color_view = color_texture.create_view(&Default::default());
+
+    let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("viewport_depth"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: DEPTH_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let depth_view = depth_texture.create_view(&Default::default());
+
+    (color_texture, color_view, depth_texture, depth_view)
+}
+
+/// Creates the bind group for the blit pass.
+fn create_blit_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    color_view: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("blit_bind_group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(color_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
 /// GPU buffers for a single mesh, ready for rendering.
 pub struct MeshBuffers {
     /// Vertex buffer containing [`MeshVertex`](microtome_core::MeshVertex) data.
@@ -398,7 +630,6 @@ pub struct MeshBuffers {
 
 #[cfg(test)]
 mod tests {
-    /// Parses a WGSL shader and validates it using naga, returning any error.
     fn validate_wgsl(source: &str, label: &str) {
         let module = naga::front::wgsl::parse_str(source)
             .unwrap_or_else(|e| panic!("{label}: WGSL parse error: {e}"));
@@ -420,5 +651,10 @@ mod tests {
     #[test]
     fn line_shader_is_valid_wgsl() {
         validate_wgsl(include_str!("shaders/line.wgsl"), "line.wgsl");
+    }
+
+    #[test]
+    fn blit_shader_is_valid_wgsl() {
+        validate_wgsl(include_str!("shaders/blit.wgsl"), "blit.wgsl");
     }
 }

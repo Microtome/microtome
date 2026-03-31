@@ -1,7 +1,7 @@
 //! Egui paint callback integration for the 3D viewport.
 //!
-//! Implements [`egui_wgpu::CallbackTrait`] to bridge egui's rendering
-//! pipeline with the custom [`ViewportRenderer`](super::viewport_renderer::ViewportRenderer).
+//! Renders the scene to an offscreen target with depth testing in `prepare`,
+//! then blits the result to egui's render pass in `paint`.
 
 use std::sync::Arc;
 
@@ -10,9 +10,6 @@ use glam::Mat4;
 use crate::viewport_renderer::{MeshBuffers, ViewportRenderer};
 
 /// Paint callback submitted to egui for custom 3D viewport rendering.
-///
-/// Carries all per-frame data needed to render the scene: camera matrices,
-/// mesh GPU buffers, and selection state.
 pub struct ViewportPaintCallback {
     /// Combined view-projection matrix from the orbit camera.
     pub view_proj: Mat4,
@@ -20,6 +17,10 @@ pub struct ViewportPaintCallback {
     pub meshes: Arc<Vec<MeshBuffers>>,
     /// Index of the currently selected mesh, if any.
     pub selected_index: Option<usize>,
+    /// Viewport width in physical pixels.
+    pub width: u32,
+    /// Viewport height in physical pixels.
+    pub height: u32,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -28,13 +29,16 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         _screen_descriptor: &egui_wgpu::ScreenDescriptor,
-        _egui_encoder: &mut wgpu::CommandEncoder,
+        egui_encoder: &mut wgpu::CommandEncoder,
         callback_resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(renderer) = callback_resources.get_mut::<ViewportRenderer>() {
-            renderer.prepare_uniforms(
+            renderer.render_offscreen(
                 device,
                 queue,
+                egui_encoder,
+                self.width,
+                self.height,
                 self.view_proj,
                 &self.meshes,
                 self.selected_index,
@@ -50,7 +54,7 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
         callback_resources: &egui_wgpu::CallbackResources,
     ) {
         if let Some(renderer) = callback_resources.get::<ViewportRenderer>() {
-            renderer.paint(render_pass, &self.meshes);
+            renderer.blit(render_pass);
         }
     }
 }
