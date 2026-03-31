@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 
-use glam::{Mat4, Quat};
+use glam::{Mat4, Quat, Vec3};
 use microtome_core::{
     GpuContext, MeshData, PrintJobConfig, PrintMesh, PrintVolume, PrinterConfig, PrinterScene,
     Projector, SliceProgress, ZStage, run_slicing_job,
@@ -269,7 +269,15 @@ impl eframe::App for MicrotomeApp {
             if let Some(render_state) = _frame.wgpu_render_state() {
                 self.upload_mesh(render_state, &mesh_data);
             }
-            self.scene.add_mesh(PrintMesh::new(mesh_data));
+            let mut print_mesh = PrintMesh::new(mesh_data);
+            let bbox = &print_mesh.mesh_data.bbox;
+            let center = bbox.center();
+            print_mesh.position = Vec3::new(
+                -center.x,
+                -center.y,
+                -bbox.min.z + self.job_config.z_offset_mm as f32,
+            );
+            self.scene.add_mesh(print_mesh);
             self.slice_preview.mark_buffers_dirty();
         }
 
@@ -311,6 +319,8 @@ impl eframe::App for MicrotomeApp {
                 ui.ctx(),
                 &gpu,
                 self.slice_z,
+                self.printer_config.volume.width_mm as f32,
+                self.printer_config.volume.depth_mm as f32,
                 self.printer_config.volume.height_mm as f32,
             ) {
                 log::error!("Slice preview error: {e}");
