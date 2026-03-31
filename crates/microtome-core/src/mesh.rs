@@ -336,4 +336,80 @@ mod tests {
         assert!((bbox.max.y - 22.0).abs() < eps);
         assert!((bbox.max.z - 32.0).abs() < eps);
     }
+
+    #[test]
+    fn stl_io_preserves_winding_and_normals() {
+        // Single triangle: normal +Z, vertices CCW from +Z
+        let triangles: Vec<([f32; 3], [[f32; 3]; 3])> = vec![(
+            [0.0, 0.0, 1.0],
+            [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
+        )];
+
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&[0u8; 80]);
+        buf.extend_from_slice(&(triangles.len() as u32).to_le_bytes());
+        for (normal, verts) in &triangles {
+            for c in normal {
+                buf.extend_from_slice(&c.to_le_bytes());
+            }
+            for v in verts {
+                for c in v {
+                    buf.extend_from_slice(&c.to_le_bytes());
+                }
+            }
+            buf.extend_from_slice(&0u16.to_le_bytes());
+        }
+
+        let mesh = MeshData::from_stl_bytes(&buf).unwrap();
+
+        // Check the loaded normal for the first vertex
+        let n = Vec3::from(mesh.vertices[0].normal);
+        eprintln!("Loaded normal: {n:?}");
+
+        // Normal should point +Z (outward)
+        assert!(n.z > 0.9, "Normal should point +Z, got {n:?}");
+
+        // Check winding: cross product of first triangle edges should agree with normal
+        let p0 = Vec3::from(mesh.vertices[0].position);
+        let p1 = Vec3::from(mesh.vertices[1].position);
+        let p2 = Vec3::from(mesh.vertices[2].position);
+        eprintln!("Positions: p0={p0:?}, p1={p1:?}, p2={p2:?}");
+
+        let geo_normal = (p1 - p0).cross(p2 - p0);
+        eprintln!("Geometric normal from winding: {geo_normal:?}");
+        eprintln!("Dot with stored normal: {}", geo_normal.dot(n));
+
+        assert!(
+            geo_normal.dot(n) > 0.0,
+            "Winding-derived normal should agree with stored normal. \
+             Geometric={geo_normal:?}, Stored={n:?}"
+        );
+    }
+
+    #[test]
+    fn all_cube_faces_have_correct_winding() {
+        let stl_data = unit_cube_stl();
+        let mesh = MeshData::from_stl_bytes(&stl_data).unwrap();
+
+        let face_count = mesh.indices.len() / 3;
+        for face in 0..face_count {
+            let i0 = mesh.indices[face * 3] as usize;
+            let i1 = mesh.indices[face * 3 + 1] as usize;
+            let i2 = mesh.indices[face * 3 + 2] as usize;
+
+            let p0 = Vec3::from(mesh.vertices[i0].position);
+            let p1 = Vec3::from(mesh.vertices[i1].position);
+            let p2 = Vec3::from(mesh.vertices[i2].position);
+            let n = Vec3::from(mesh.vertices[i0].normal);
+
+            let geo = (p1 - p0).cross(p2 - p0);
+            let dot = geo.dot(n);
+
+            eprintln!("Face {face}: n={n:?}, geo={geo:?}, dot={dot:.4}");
+            assert!(
+                dot > 0.0,
+                "Face {face} winding disagrees with normal: geo={geo:?}, normal={n:?}"
+            );
+        }
+    }
 }
