@@ -60,6 +60,9 @@ pub struct ViewportRenderer {
     max_draw_calls: u32,
     line_vertex_buffer: wgpu::Buffer,
     line_vertex_count: u32,
+    slice_plane_pipeline: wgpu::RenderPipeline,
+    slice_plane_buffer: wgpu::Buffer,
+    slice_plane_count: u32,
 
     // --- Offscreen render targets ---
     color_texture: wgpu::Texture,
@@ -219,7 +222,52 @@ impl ViewportRenderer {
                 topology: wgpu::PrimitiveTopology::LineList,
                 ..Default::default()
             },
-            depth_stencil,
+            depth_stencil: depth_stencil.clone(),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &line_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: OFFSCREEN_FORMAT,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        // --- Slice plane pipeline (translucent filled quad, same shader as lines) ---
+        let slice_plane_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("slice_plane_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &line_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<LineVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x4,
+                            offset: 12,
+                            shader_location: 1,
+                        },
+                    ],
+                }],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: depth_stencil.clone(),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &line_shader,
@@ -320,6 +368,13 @@ impl ViewportRenderer {
             mapped_at_creation: false,
         });
 
+        let slice_plane_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("slice_plane_vertices"),
+            size: 4,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+
         Self {
             phong_pipeline,
             line_pipeline,
@@ -328,6 +383,9 @@ impl ViewportRenderer {
             max_draw_calls,
             line_vertex_buffer,
             line_vertex_count: 0,
+            slice_plane_pipeline,
+            slice_plane_buffer,
+            slice_plane_count: 0,
             color_texture,
             color_view,
             depth_texture,
@@ -394,6 +452,56 @@ impl ViewportRenderer {
         self.line_vertex_count = vertices.len() as u32;
         self.line_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("line_vertices"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+    }
+
+    /// Rebuilds the slice plane quad at the given Z height.
+    pub fn update_slice_plane(
+        &mut self,
+        device: &wgpu::Device,
+        volume: &PrintVolumeBox,
+        slice_z: f32,
+    ) {
+        let hw = volume.width as f32 / 2.0;
+        let hd = volume.depth as f32 / 2.0;
+        let z = slice_z;
+
+        // Translucent blue-ish color
+        let color: [f32; 4] = [0.2, 0.5, 1.0, 0.25];
+
+        // Two triangles forming a quad at z height
+        let vertices = vec![
+            LineVertex {
+                position: [-hw, -hd, z],
+                color,
+            },
+            LineVertex {
+                position: [hw, -hd, z],
+                color,
+            },
+            LineVertex {
+                position: [hw, hd, z],
+                color,
+            },
+            LineVertex {
+                position: [-hw, -hd, z],
+                color,
+            },
+            LineVertex {
+                position: [hw, hd, z],
+                color,
+            },
+            LineVertex {
+                position: [-hw, hd, z],
+                color,
+            },
+        ];
+
+        self.slice_plane_count = vertices.len() as u32;
+        self.slice_plane_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("slice_plane_vertices"),
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
@@ -520,6 +628,14 @@ impl ViewportRenderer {
                 pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
                 pass.set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+            }
+
+            // Draw translucent slice plane (after meshes so it blends on top).
+            if self.slice_plane_count > 0 {
+                pass.set_pipeline(&self.slice_plane_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[0]);
+                pass.set_vertex_buffer(0, self.slice_plane_buffer.slice(..));
+                pass.draw(0..self.slice_plane_count, 0..1);
             }
         }
     }

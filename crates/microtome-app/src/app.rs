@@ -454,6 +454,9 @@ impl eframe::App for MicrotomeApp {
                         height: (rect.height() * ppp) as u32,
                         volume_min: vol_bbox.min.into(),
                         volume_max: vol_bbox.max.into(),
+                        slice_z: self.slice_z,
+                        volume_width: self.printer_config.volume.width_mm as f32,
+                        volume_depth: self.printer_config.volume.depth_mm as f32,
                     },
                 );
                 painter.add(callback);

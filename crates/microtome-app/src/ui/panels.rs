@@ -131,22 +131,40 @@ pub fn controls_panel(ui: &mut egui::Ui, state: &mut AppState<'_>) {
     }
 }
 
-/// Renders the bottom status/slice bar with Z slider and layer info.
+/// Renders the bottom status/slice bar with Z and layer sliders.
 pub fn bottom_bar(ui: &mut egui::Ui, state: &mut AppState<'_>) {
-    ui.horizontal(|ui| {
-        ui.label("Slice Z:");
-        let max_z = state.printer_config.volume.height_mm as f32;
-        ui.add(egui::Slider::new(state.slice_z, 0.0..=max_z).suffix(" mm"));
+    let max_z = state.printer_config.volume.height_mm as f32;
+    let layer_height = state.job_config.layer_height_mm();
+    let total_layers = if layer_height > 0.0 {
+        (max_z as f64 / layer_height).ceil() as u32
+    } else {
+        0
+    };
 
-        let layer_height = state.job_config.layer_height_mm();
+    ui.horizontal(|ui| {
+        ui.label("Z:");
+        let z_changed = ui
+            .add(
+                egui::Slider::new(state.slice_z, 0.0..=max_z)
+                    .step_by(0.1_f64)
+                    .suffix(" mm"),
+            )
+            .changed();
+
         if layer_height > 0.0 {
-            let layer_num = (*state.slice_z as f64 / layer_height).floor() as u32;
-            let total_layers = (max_z as f64 / layer_height).ceil() as u32;
             ui.separator();
-            ui.label(format!(
-                "Layer {layer_num} / {total_layers}  |  Z = {:.3} mm",
-                *state.slice_z
-            ));
+            let mut layer_num = (*state.slice_z as f64 / layer_height).round() as u32;
+            ui.label("Layer:");
+            if ui
+                .add(egui::Slider::new(&mut layer_num, 0..=total_layers))
+                .changed()
+            {
+                *state.slice_z = (layer_num as f64 * layer_height) as f32;
+            } else if z_changed {
+                // Z slider moved — layer slider follows automatically via the
+                // layer_num computation above on next frame.
+            }
+            ui.label(format!("/ {total_layers}"));
         }
 
         if let Some(progress) = *state.slicing_progress {

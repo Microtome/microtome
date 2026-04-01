@@ -25,6 +25,11 @@ pub struct ViewportPaintCallback {
     pub volume_min: [f32; 3],
     /// Print volume maximum bounds (world space).
     pub volume_max: [f32; 3],
+    /// Current slice Z height for the slice plane indicator.
+    pub slice_z: f32,
+    /// Print volume dimensions for the slice plane quad.
+    pub volume_width: f32,
+    pub volume_depth: f32,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -37,6 +42,12 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
         callback_resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(renderer) = callback_resources.get_mut::<ViewportRenderer>() {
+            let volume = microtome_core::PrintVolumeBox::new(
+                f64::from(self.volume_width),
+                f64::from(self.volume_depth),
+                f64::from(self.volume_max[2]),
+            );
+            renderer.update_slice_plane(device, &volume, self.slice_z);
             renderer.render_offscreen(
                 device,
                 queue,
