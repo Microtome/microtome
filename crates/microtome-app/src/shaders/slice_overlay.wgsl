@@ -39,10 +39,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Compute brightness from the texture sample
     let brightness = dot(tex_color.rgb, vec3<f32>(0.299, 0.587, 0.114));
     if brightness > 0.5 {
-        // Yellow with some transparency
+        // Yellow where the slice is solid
         return vec4<f32>(1.0, 0.9, 0.0, 0.7);
     } else {
-        // Fully transparent
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        // Translucent light blue background (matches slice indicator)
+        return vec4<f32>(0.2, 0.5, 1.0, 0.25);
     }
 }
