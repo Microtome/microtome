@@ -47,6 +47,8 @@ pub struct OrbitCamera {
     drag_start_theta: f32,
     /// Phi at the start of the current drag.
     drag_start_phi: f32,
+    /// Whether to use perspective (true) or orthographic (false) projection.
+    pub use_perspective: bool,
 }
 
 #[allow(dead_code)]
@@ -63,6 +65,7 @@ impl OrbitCamera {
             dragging: false,
             drag_start_theta: 0.0,
             drag_start_phi: 0.0,
+            use_perspective: true,
         }
     }
 
@@ -83,11 +86,40 @@ impl OrbitCamera {
         Mat4::look_at_rh(self.eye_position(), self.target, Vec3::Z)
     }
 
-    /// Computes the perspective projection matrix.
-    ///
-    /// Uses a 37-degree vertical FOV matching the original TypeScript implementation.
+    /// Computes the projection matrix (perspective or orthographic).
     pub fn projection_matrix(&self, aspect: f32) -> Mat4 {
-        Mat4::perspective_rh(FOV_DEGREES.to_radians(), aspect, 0.1, 2000.0)
+        if self.use_perspective {
+            Mat4::perspective_rh(FOV_DEGREES.to_radians(), aspect, 0.1, 2000.0)
+        } else {
+            // Orthographic: size based on radius so zoom still works
+            let half_h = self.radius * (FOV_DEGREES.to_radians() / 2.0).tan();
+            let half_w = half_h * aspect;
+            Mat4::orthographic_rh(-half_w, half_w, -half_h, half_h, 0.1, 2000.0)
+        }
+    }
+
+    /// Sets the camera to a front view (looking along -Y).
+    pub fn set_view_front(&mut self) {
+        self.theta = std::f32::consts::FRAC_PI_2;
+        self.phi = std::f32::consts::FRAC_PI_2;
+    }
+
+    /// Sets the camera to a right view (looking along -X).
+    pub fn set_view_right(&mut self) {
+        self.theta = 0.0;
+        self.phi = std::f32::consts::FRAC_PI_2;
+    }
+
+    /// Sets the camera to a top view (looking down -Z).
+    pub fn set_view_top(&mut self) {
+        self.theta = 0.0;
+        self.phi = PHI_MIN;
+    }
+
+    /// Sets the camera to the default isometric view.
+    pub fn set_view_isometric(&mut self) {
+        self.theta = std::f32::consts::FRAC_PI_4;
+        self.phi = std::f32::consts::FRAC_PI_3;
     }
 
     /// Handles mouse/scroll input from an egui response.

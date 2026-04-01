@@ -362,6 +362,35 @@ impl eframe::App for MicrotomeApp {
         });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
+            // View toolbar
+            ui.horizontal(|ui| {
+                if ui
+                    .selectable_label(self.camera.use_perspective, "Perspective")
+                    .clicked()
+                {
+                    self.camera.use_perspective = true;
+                }
+                if ui
+                    .selectable_label(!self.camera.use_perspective, "Orthographic")
+                    .clicked()
+                {
+                    self.camera.use_perspective = false;
+                }
+                ui.separator();
+                if ui.button("Front").clicked() {
+                    self.camera.set_view_front();
+                }
+                if ui.button("Right").clicked() {
+                    self.camera.set_view_right();
+                }
+                if ui.button("Top").clicked() {
+                    self.camera.set_view_top();
+                }
+                if ui.button("Iso").clicked() {
+                    self.camera.set_view_isometric();
+                }
+            });
+
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
             self.camera.handle_input(&response);
