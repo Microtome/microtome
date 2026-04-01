@@ -354,8 +354,12 @@ impl eframe::App for MicrotomeApp {
                     0
                 };
 
-                // Expand slider rail to fill the panel width
-                ui.spacing_mut().slider_width = ui.available_width() - 60.0;
+                // Expand slider rail to fill the panel width.
+                // Use max_rect (the panel's allocated region) not available_width
+                // (which grows with content, causing a feedback loop).
+                let panel_width = ui.max_rect().width();
+                ui.spacing_mut().slider_width =
+                    (panel_width - 60.0 - ui.spacing().item_spacing.x * 2.0).max(50.0);
 
                 ui.label("Slice Z (mm):");
                 let z_changed = ui
