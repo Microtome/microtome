@@ -51,11 +51,11 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>, @builtin(front_facing) fron
 
     if front_facing {
         if should_be_white > 0.0 {
-            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-        } else {
             return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+        } else {
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         }
     } else {
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0);
     }
 }
