@@ -64,6 +64,8 @@ pub struct MicrotomeApp {
     gizmo: Gizmo,
     /// Current gizmo modes (translate, rotate, or scale group).
     gizmo_modes: EnumSet<GizmoMode>,
+    /// Whether to show the slice overlay in the 3D viewport.
+    show_slice_overlay: bool,
 }
 
 impl MicrotomeApp {
@@ -109,6 +111,7 @@ impl MicrotomeApp {
             cancel_flag: None,
             gizmo: Gizmo::default(),
             gizmo_modes: GizmoMode::all(),
+            show_slice_overlay: true,
         }
     }
 
@@ -260,11 +263,9 @@ impl eframe::App for MicrotomeApp {
                     scene: &mut self.scene,
                     printer_config: &mut self.printer_config,
                     job_config: &mut self.job_config,
-                    slice_z: &mut self.slice_z,
                     selected_mesh: &mut self.selected_mesh,
                     overhang_angle_degrees: &mut self.overhang_angle_degrees,
                     slicing_progress: &mut self.slicing_progress,
-                    progress_rx: &mut self.progress_rx,
                     export_path: &mut self.export_path,
                     cancel_flag: &mut self.cancel_flag,
                     stl_loaded: &mut stl_loaded,
@@ -294,24 +295,23 @@ impl eframe::App for MicrotomeApp {
             self.start_slicing_job();
         }
 
-        egui::Panel::bottom("slice_panel")
-            .min_size(40.0)
-            .show_inside(ui, |ui| {
-                let mut state = AppState {
-                    scene: &mut self.scene,
-                    printer_config: &mut self.printer_config,
-                    job_config: &mut self.job_config,
-                    slice_z: &mut self.slice_z,
-                    selected_mesh: &mut self.selected_mesh,
-                    overhang_angle_degrees: &mut self.overhang_angle_degrees,
-                    slicing_progress: &mut self.slicing_progress,
-                    progress_rx: &mut self.progress_rx,
-                    export_path: &mut self.export_path,
-                    cancel_flag: &mut self.cancel_flag,
-                    stl_loaded: &mut None::<(String, MeshData)>,
-                };
-                panels::bottom_bar(ui, &mut state);
-            });
+        // Show bottom panel only when an export is active (progress bar).
+        if self.slicing_progress.is_some() {
+            egui::Panel::bottom("slice_panel")
+                .min_size(40.0)
+                .show_inside(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if let Some(progress) = self.slicing_progress {
+                            ui.label("Exporting...");
+                            ui.add(
+                                egui::ProgressBar::new(progress)
+                                    .desired_width(200.0)
+                                    .show_percentage(),
+                            );
+                        }
+                    });
+                });
+        }
 
         // Update slice preview if we have a render state
         if let Some(render_state) = _frame.wgpu_render_state() {
@@ -341,6 +341,42 @@ impl eframe::App for MicrotomeApp {
                 ui.heading("Slice Preview");
                 ui.separator();
                 self.slice_preview.show(ui);
+                ui.separator();
+                ui.checkbox(&mut self.show_slice_overlay, "Show Slice Overlay");
+                ui.separator();
+
+                // Z slider and layer slider (moved from bottom bar)
+                let max_z = self.printer_config.volume.height_mm as f32;
+                let layer_height = self.job_config.layer_height_mm();
+                let total_layers = if layer_height > 0.0 {
+                    (max_z as f64 / layer_height).ceil() as u32
+                } else {
+                    0
+                };
+
+                ui.label("Z:");
+                let z_changed = ui
+                    .add(
+                        egui::Slider::new(&mut self.slice_z, 0.0..=max_z)
+                            .step_by(0.1_f64)
+                            .suffix(" mm"),
+                    )
+                    .changed();
+
+                if layer_height > 0.0 {
+                    ui.add_space(4.0);
+                    let mut layer_num = (self.slice_z as f64 / layer_height).round() as u32;
+                    ui.label("Layer:");
+                    if ui
+                        .add(egui::Slider::new(&mut layer_num, 0..=total_layers))
+                        .changed()
+                    {
+                        self.slice_z = (layer_num as f64 * layer_height) as f32;
+                    } else if z_changed {
+                        // Z slider moved -- layer slider follows automatically
+                    }
+                    ui.label(format!("/ {total_layers}"));
+                }
             });
 
         // Handle keyboard shortcuts
@@ -444,6 +480,14 @@ impl eframe::App for MicrotomeApp {
 
                 let ppp = ui.ctx().pixels_per_point();
                 let vol_bbox = self.scene.volume.bounding_box();
+                let slice_texture_view = if self.show_slice_overlay {
+                    self.slice_preview
+                        .wgpu_texture_view()
+                        .map(|v| Arc::new(v.clone()))
+                } else {
+                    None
+                };
+
                 let callback = egui_wgpu::Callback::new_paint_callback(
                     rect,
                     ViewportPaintCallback {
@@ -457,6 +501,7 @@ impl eframe::App for MicrotomeApp {
                         slice_z: self.slice_z,
                         volume_width: self.printer_config.volume.width_mm as f32,
                         volume_depth: self.printer_config.volume.depth_mm as f32,
+                        slice_texture_view,
                     },
                 );
                 painter.add(callback);

@@ -28,6 +28,21 @@ struct LineVertex {
     color: [f32; 4],
 }
 
+/// A vertex for the slice overlay quad (position + UV).
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct OverlayVertex {
+    position: [f32; 3],
+    uv: [f32; 2],
+}
+
+/// Uniforms for the slice overlay (just the view-projection matrix).
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct OverlayUniforms {
+    view_proj: [[f32; 4]; 4],
+}
+
 /// Uniform data for a single draw call.
 ///
 /// Padded to 256-byte alignment for dynamic uniform buffer offsets.
@@ -63,6 +78,16 @@ pub struct ViewportRenderer {
     slice_plane_pipeline: wgpu::RenderPipeline,
     slice_plane_buffer: wgpu::Buffer,
     slice_plane_count: u32,
+
+    // --- Slice overlay pipeline (textured quad, no depth test) ---
+    overlay_pipeline: wgpu::RenderPipeline,
+    overlay_uniform_buffer: wgpu::Buffer,
+    overlay_uniform_bind_group: wgpu::BindGroup,
+    overlay_texture_bind_group_layout: wgpu::BindGroupLayout,
+    overlay_texture_bind_group: Option<wgpu::BindGroup>,
+    overlay_sampler: wgpu::Sampler,
+    overlay_vertex_buffer: wgpu::Buffer,
+    overlay_vertex_count: u32,
 
     // --- Offscreen render targets ---
     color_texture: wgpu::Texture,
@@ -283,6 +308,136 @@ impl ViewportRenderer {
             cache: None,
         });
 
+        // --- Slice overlay pipeline (textured quad, no depth test) ---
+        let overlay_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("slice_overlay_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/slice_overlay.wgsl").into()),
+        });
+
+        let overlay_uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("overlay_uniform_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<OverlayUniforms>() as u64,
+                        ),
+                    },
+                    count: None,
+                }],
+            });
+
+        let overlay_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("overlay_uniforms"),
+            size: std::mem::size_of::<OverlayUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let overlay_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("overlay_uniform_bind_group"),
+            layout: &overlay_uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: overlay_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let overlay_texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("overlay_texture_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let overlay_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("overlay_pipeline_layout"),
+                bind_group_layouts: &[
+                    Some(&overlay_uniform_bind_group_layout),
+                    Some(&overlay_texture_bind_group_layout),
+                ],
+                immediate_size: 0,
+            });
+
+        let overlay_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("overlay_pipeline"),
+            layout: Some(&overlay_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &overlay_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<OverlayVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 12,
+                            shader_location: 1,
+                        },
+                    ],
+                }],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None, // No depth test — drawn on top of everything
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &overlay_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: OFFSCREEN_FORMAT,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let overlay_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("overlay_sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let overlay_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("overlay_vertices"),
+            size: 4,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+
         // --- Blit pipeline (draws offscreen texture to egui's pass) ---
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("blit_shader"),
@@ -386,6 +541,14 @@ impl ViewportRenderer {
             slice_plane_pipeline,
             slice_plane_buffer,
             slice_plane_count: 0,
+            overlay_pipeline,
+            overlay_uniform_buffer,
+            overlay_uniform_bind_group,
+            overlay_texture_bind_group_layout,
+            overlay_texture_bind_group: None,
+            overlay_sampler,
+            overlay_vertex_buffer,
+            overlay_vertex_count: 0,
             color_texture,
             color_view,
             depth_texture,
@@ -468,7 +631,7 @@ impl ViewportRenderer {
         let hd = volume.depth as f32 / 2.0;
         let z = slice_z;
 
-        // Translucent blue-ish color
+        // Translucent blue-ish color (used as fallback when no overlay texture)
         let color: [f32; 4] = [0.2, 0.5, 1.0, 0.25];
 
         // Two triangles forming a quad at z height
@@ -505,6 +668,64 @@ impl ViewportRenderer {
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
+
+        // Also build overlay quad with UVs mapped [0,1]x[0,1] to build volume XY
+        let overlay_vertices = vec![
+            OverlayVertex {
+                position: [-hw, -hd, z],
+                uv: [0.0, 1.0],
+            },
+            OverlayVertex {
+                position: [hw, -hd, z],
+                uv: [1.0, 1.0],
+            },
+            OverlayVertex {
+                position: [hw, hd, z],
+                uv: [1.0, 0.0],
+            },
+            OverlayVertex {
+                position: [-hw, -hd, z],
+                uv: [0.0, 1.0],
+            },
+            OverlayVertex {
+                position: [hw, hd, z],
+                uv: [1.0, 0.0],
+            },
+            OverlayVertex {
+                position: [-hw, hd, z],
+                uv: [0.0, 0.0],
+            },
+        ];
+
+        self.overlay_vertex_count = overlay_vertices.len() as u32;
+        self.overlay_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay_vertices"),
+            contents: bytemuck::cast_slice(&overlay_vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+    }
+
+    /// Updates the overlay bind group with a new slice texture view.
+    pub fn update_overlay_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+    ) {
+        self.overlay_texture_bind_group =
+            Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("overlay_texture_bind_group"),
+                layout: &self.overlay_texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.overlay_sampler),
+                    },
+                ],
+            }));
     }
 
     /// Renders the scene to the offscreen target with depth testing.
@@ -524,6 +745,7 @@ impl ViewportRenderer {
         selected_index: Option<usize>,
         volume_min: [f32; 3],
         volume_max: [f32; 3],
+        show_overlay: bool,
     ) {
         let w = width.max(1);
         let h = height.max(1);
@@ -631,12 +853,50 @@ impl ViewportRenderer {
             }
 
             // Draw translucent slice plane (after meshes so it blends on top).
-            if self.slice_plane_count > 0 {
+            // Only draw when we don't have the textured overlay active.
+            if self.slice_plane_count > 0 && !show_overlay {
                 pass.set_pipeline(&self.slice_plane_pipeline);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[0]);
                 pass.set_vertex_buffer(0, self.slice_plane_buffer.slice(..));
                 pass.draw(0..self.slice_plane_count, 0..1);
             }
+        }
+
+        // Draw the textured slice overlay in a separate pass without depth testing.
+        if show_overlay
+            && self.overlay_vertex_count > 0
+            && let Some(ref tex_bg) = self.overlay_texture_bind_group
+        {
+            // Write overlay uniforms
+            let overlay_uniforms = OverlayUniforms {
+                view_proj: view_proj.to_cols_array_2d(),
+            };
+            queue.write_buffer(
+                &self.overlay_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&overlay_uniforms),
+            );
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewport_overlay_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // preserve the scene
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None, // no depth test
+                ..Default::default()
+            });
+
+            pass.set_pipeline(&self.overlay_pipeline);
+            pass.set_bind_group(0, &self.overlay_uniform_bind_group, &[]);
+            pass.set_bind_group(1, tex_bg, &[]);
+            pass.set_vertex_buffer(0, self.overlay_vertex_buffer.slice(..));
+            pass.draw(0..self.overlay_vertex_count, 0..1);
         }
     }
 
@@ -786,5 +1046,13 @@ mod tests {
     #[test]
     fn blit_shader_is_valid_wgsl() {
         validate_wgsl(include_str!("shaders/blit.wgsl"), "blit.wgsl");
+    }
+
+    #[test]
+    fn slice_overlay_shader_is_valid_wgsl() {
+        validate_wgsl(
+            include_str!("shaders/slice_overlay.wgsl"),
+            "slice_overlay.wgsl",
+        );
     }
 }

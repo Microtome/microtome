@@ -20,6 +20,10 @@ pub struct SlicePreview {
     preview_width: u32,
     /// Preview height in pixels.
     preview_height: u32,
+    /// Raw wgpu texture for the viewport overlay (updated alongside the egui texture).
+    wgpu_texture: Option<wgpu::Texture>,
+    /// Texture view for the viewport overlay.
+    wgpu_texture_view: Option<wgpu::TextureView>,
 }
 
 impl SlicePreview {
@@ -33,6 +37,8 @@ impl SlicePreview {
             buffers_dirty: false,
             preview_width,
             preview_height,
+            wgpu_texture: None,
+            wgpu_texture_view: None,
         }
     }
 
@@ -163,11 +169,64 @@ impl SlicePreview {
 
         let color_image = decode_png_to_color_image(&png_bytes)?;
 
+        // Create wgpu texture for viewport overlay from the same RGBA data
+        let rgba_data = color_image
+            .pixels
+            .iter()
+            .flat_map(|c| [c.r(), c.g(), c.b(), c.a()])
+            .collect::<Vec<u8>>();
+        let tex_width = color_image.size[0] as u32;
+        let tex_height = color_image.size[1] as u32;
+
+        let wgpu_tex = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("slice_overlay_texture"),
+            size: wgpu::Extent3d {
+                width: tex_width,
+                height: tex_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &wgpu_tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &rgba_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * tex_width),
+                rows_per_image: Some(tex_height),
+            },
+            wgpu::Extent3d {
+                width: tex_width,
+                height: tex_height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let wgpu_view = wgpu_tex.create_view(&Default::default());
+        self.wgpu_texture = Some(wgpu_tex);
+        self.wgpu_texture_view = Some(wgpu_view);
+
         self.texture =
             Some(ctx.load_texture("slice_preview", color_image, egui::TextureOptions::NEAREST));
         self.current_z = z;
 
         Ok(())
+    }
+
+    /// Returns the raw wgpu texture view of the latest slice (for viewport overlay).
+    pub fn wgpu_texture_view(&self) -> Option<&wgpu::TextureView> {
+        self.wgpu_texture_view.as_ref()
     }
 
     /// Displays the preview texture in the UI, scaled to fit the available space.

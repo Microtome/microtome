@@ -29,7 +29,10 @@ pub struct ViewportPaintCallback {
     pub slice_z: f32,
     /// Print volume dimensions for the slice plane quad.
     pub volume_width: f32,
+    /// Print volume depth for the slice plane quad.
     pub volume_depth: f32,
+    /// Slice preview texture view for the overlay (if available and enabled).
+    pub slice_texture_view: Option<Arc<wgpu::TextureView>>,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -48,6 +51,9 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
                 f64::from(self.volume_max[2]),
             );
             renderer.update_slice_plane(device, &volume, self.slice_z);
+            if let Some(ref tex_view) = self.slice_texture_view {
+                renderer.update_overlay_bind_group(device, tex_view);
+            }
             renderer.render_offscreen(
                 device,
                 queue,
@@ -59,6 +65,7 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
                 self.selected_index,
                 self.volume_min,
                 self.volume_max,
+                self.slice_texture_view.is_some(),
             );
         }
         Vec::new()

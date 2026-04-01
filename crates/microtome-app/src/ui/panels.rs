@@ -3,10 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc;
 
 use glam::Vec3;
-use microtome_core::{PrintJobConfig, PrintMesh, PrinterConfig, PrinterScene, SliceProgress};
+use microtome_core::{PrintJobConfig, PrintMesh, PrinterConfig, PrinterScene};
 
 use super::config_editor;
 use super::file_dialogs;
@@ -21,16 +20,12 @@ pub struct AppState<'a> {
     pub printer_config: &'a mut PrinterConfig,
     /// Print job settings.
     pub job_config: &'a mut PrintJobConfig,
-    /// Current slice Z height in mm.
-    pub slice_z: &'a mut f32,
     /// Currently selected mesh index.
     pub selected_mesh: &'a mut Option<usize>,
     /// Overhang angle in degrees.
     pub overhang_angle_degrees: &'a mut f32,
     /// Current slicing progress (0.0 to 1.0), if a job is running.
     pub slicing_progress: &'a mut Option<f32>,
-    /// Receiver for slicing progress updates.
-    pub progress_rx: &'a mut Option<mpsc::Receiver<SliceProgress>>,
     /// Path to save ZIP output when the slicing job completes.
     pub export_path: &'a mut Option<PathBuf>,
     /// Cancellation flag for active slicing job.
@@ -129,53 +124,6 @@ pub fn controls_panel(ui: &mut egui::Ui, state: &mut AppState<'_>) {
     {
         *state.export_path = Some(path);
     }
-}
-
-/// Renders the bottom status/slice bar with Z and layer sliders.
-pub fn bottom_bar(ui: &mut egui::Ui, state: &mut AppState<'_>) {
-    let max_z = state.printer_config.volume.height_mm as f32;
-    let layer_height = state.job_config.layer_height_mm();
-    let total_layers = if layer_height > 0.0 {
-        (max_z as f64 / layer_height).ceil() as u32
-    } else {
-        0
-    };
-
-    ui.horizontal(|ui| {
-        ui.label("Z:");
-        let z_changed = ui
-            .add(
-                egui::Slider::new(state.slice_z, 0.0..=max_z)
-                    .step_by(0.1_f64)
-                    .suffix(" mm"),
-            )
-            .changed();
-
-        if layer_height > 0.0 {
-            ui.separator();
-            let mut layer_num = (*state.slice_z as f64 / layer_height).round() as u32;
-            ui.label("Layer:");
-            if ui
-                .add(egui::Slider::new(&mut layer_num, 0..=total_layers))
-                .changed()
-            {
-                *state.slice_z = (layer_num as f64 * layer_height) as f32;
-            } else if z_changed {
-                // Z slider moved — layer slider follows automatically via the
-                // layer_num computation above on next frame.
-            }
-            ui.label(format!("/ {total_layers}"));
-        }
-
-        if let Some(progress) = *state.slicing_progress {
-            ui.separator();
-            ui.add(
-                egui::ProgressBar::new(progress)
-                    .desired_width(120.0)
-                    .show_percentage(),
-            );
-        }
-    });
 }
 
 /// Renders position, rotation, and scale controls for a single mesh.
