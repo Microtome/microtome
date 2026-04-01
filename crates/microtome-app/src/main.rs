@@ -2,6 +2,7 @@
 
 mod app;
 mod camera;
+mod picking;
 mod slice_preview;
 mod ui;
 mod viewport;

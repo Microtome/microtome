@@ -395,25 +395,33 @@ impl eframe::App for MicrotomeApp {
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
             self.camera.handle_input(&response);
 
-            // Click to select/deselect mesh
-            if response.clicked() {
-                if self.scene.meshes.is_empty() {
-                    self.selected_mesh = None;
-                } else {
-                    self.selected_mesh = match self.selected_mesh {
-                        // Cycle through meshes, then deselect
-                        Some(idx) if idx + 1 < self.scene.meshes.len() => Some(idx + 1),
-                        Some(_) => None,
-                        None => Some(0),
-                    };
-                }
-            }
-
             if self.has_render_state {
                 let rect = response.rect;
                 let aspect = rect.width() / rect.height().max(1.0);
                 let view = self.camera.view_matrix();
                 let proj = self.camera.projection_matrix(aspect);
+
+                // Ray-pick on click to select/deselect mesh
+                if response.clicked() {
+                    self.selected_mesh = if let Some(pos) = response.interact_pointer_pos() {
+                        let model_matrices: Vec<Mat4> =
+                            self.scene.meshes.iter().map(Self::model_matrix).collect();
+                        let screen = glam::Vec2::new(pos.x, pos.y);
+                        let rect_min = glam::Vec2::new(rect.min.x, rect.min.y);
+                        let rect_size = glam::Vec2::new(rect.width(), rect.height());
+                        crate::picking::pick_mesh(
+                            screen,
+                            rect_min,
+                            rect_size,
+                            view,
+                            proj,
+                            &self.scene.meshes,
+                            &model_matrices,
+                        )
+                    } else {
+                        None
+                    };
+                }
                 let view_proj = proj * view;
 
                 let mesh_buffers = Arc::new(self.collect_mesh_buffers());
