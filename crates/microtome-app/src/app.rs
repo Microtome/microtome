@@ -401,26 +401,38 @@ impl eframe::App for MicrotomeApp {
                 let view = self.camera.view_matrix();
                 let proj = self.camera.projection_matrix(aspect);
 
-                // Ray-pick on click to select/deselect mesh
-                if response.clicked() {
-                    self.selected_mesh = if let Some(pos) = response.interact_pointer_pos() {
-                        let model_matrices: Vec<Mat4> =
-                            self.scene.meshes.iter().map(Self::model_matrix).collect();
-                        let screen = glam::Vec2::new(pos.x, pos.y);
-                        let rect_min = glam::Vec2::new(rect.min.x, rect.min.y);
-                        let rect_size = glam::Vec2::new(rect.width(), rect.height());
-                        crate::picking::pick_mesh(
-                            screen,
-                            rect_min,
-                            rect_size,
-                            view,
-                            proj,
-                            &self.scene.meshes,
-                            &model_matrices,
-                        )
-                    } else {
-                        None
-                    };
+                // Ray-pick on click to select/deselect mesh.
+                // Use raw input instead of response.clicked() because the
+                // gizmo's interact() can consume the click on the same frame.
+                let clicked = ui.ctx().input(|i| {
+                    i.pointer.button_released(egui::PointerButton::Primary)
+                        && !i.pointer.is_decidedly_dragging()
+                });
+                if clicked {
+                    self.selected_mesh =
+                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                            // Only pick if the click is inside the viewport rect
+                            if rect.contains(egui::pos2(pos.x, pos.y)) {
+                                let model_matrices: Vec<Mat4> =
+                                    self.scene.meshes.iter().map(Self::model_matrix).collect();
+                                let screen = glam::Vec2::new(pos.x, pos.y);
+                                let rect_min = glam::Vec2::new(rect.min.x, rect.min.y);
+                                let rect_size = glam::Vec2::new(rect.width(), rect.height());
+                                crate::picking::pick_mesh(
+                                    screen,
+                                    rect_min,
+                                    rect_size,
+                                    view,
+                                    proj,
+                                    &self.scene.meshes,
+                                    &model_matrices,
+                                )
+                            } else {
+                                self.selected_mesh
+                            }
+                        } else {
+                            None
+                        };
                 }
                 let view_proj = proj * view;
 
