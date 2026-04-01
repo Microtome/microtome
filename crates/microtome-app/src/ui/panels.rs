@@ -35,8 +35,8 @@ pub struct AppState<'a> {
     pub export_path: &'a mut Option<PathBuf>,
     /// Cancellation flag for active slicing job.
     pub cancel_flag: &'a mut Option<Arc<AtomicBool>>,
-    /// Callback to load STL mesh data onto the GPU.
-    pub stl_loaded: &'a mut Option<microtome_core::MeshData>,
+    /// Loaded STL: (filename, mesh data) to be processed by the app.
+    pub stl_loaded: &'a mut Option<(String, microtome_core::MeshData)>,
 }
 
 /// Renders the left control panel with file, config, and mesh controls.
@@ -50,9 +50,14 @@ pub fn controls_panel(ui: &mut egui::Ui, state: &mut AppState<'_>) {
     if ui
         .add_enabled(!job_active, egui::Button::new("Load STL..."))
         .clicked()
-        && let Some((_path, mesh_data)) = file_dialogs::open_stl_dialog()
+        && let Some((path, mesh_data)) = file_dialogs::open_stl_dialog()
     {
-        *state.stl_loaded = Some(mesh_data);
+        // Extract just the filename from the full path
+        let filename = std::path::Path::new(&path)
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or(path);
+        *state.stl_loaded = Some((filename, mesh_data));
     }
 
     ui.separator();
@@ -93,8 +98,8 @@ pub fn controls_panel(ui: &mut egui::Ui, state: &mut AppState<'_>) {
 
     for i in 0..state.scene.meshes.len() {
         let is_selected = *state.selected_mesh == Some(i);
-        let label = format!("Mesh {i}");
-        if ui.selectable_label(is_selected, &label).clicked() {
+        let label = &state.scene.meshes[i].name;
+        if ui.selectable_label(is_selected, label).clicked() {
             *state.selected_mesh = if is_selected { None } else { Some(i) };
         }
     }

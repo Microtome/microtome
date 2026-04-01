@@ -199,8 +199,8 @@ mod tests {
             },
             volume: 1.0,
         };
-        scene.add_mesh(crate::mesh::PrintMesh::new(mesh_data.clone()));
-        scene.add_mesh(crate::mesh::PrintMesh::new(mesh_data));
+        scene.add_mesh(crate::mesh::PrintMesh::new("test1", mesh_data.clone()));
+        scene.add_mesh(crate::mesh::PrintMesh::new("test2", mesh_data));
         assert_eq!(scene.meshes.len(), 2);
 
         scene.remove_mesh(0);

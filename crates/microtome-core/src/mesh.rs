@@ -143,6 +143,8 @@ impl MeshData {
 /// Wraps [`MeshData`] with transform properties (position, rotation, scale).
 #[derive(Debug, Clone)]
 pub struct PrintMesh {
+    /// Display name (typically the source filename).
+    pub name: String,
     /// The underlying mesh geometry.
     pub mesh_data: MeshData,
     /// Position offset in world space (mm).
@@ -155,8 +157,9 @@ pub struct PrintMesh {
 
 impl PrintMesh {
     /// Creates a new `PrintMesh` from loaded mesh data at the origin.
-    pub fn new(mesh_data: MeshData) -> Self {
+    pub fn new(name: impl Into<String>, mesh_data: MeshData) -> Self {
         Self {
+            name: name.into(),
             mesh_data,
             position: Vec3::ZERO,
             rotation: Vec3::ZERO,
@@ -313,7 +316,7 @@ mod tests {
     fn print_mesh_scaled_volume() {
         let stl_data = unit_cube_stl();
         let mesh_data = MeshData::from_stl_bytes(&stl_data).unwrap();
-        let mut print_mesh = PrintMesh::new(mesh_data);
+        let mut print_mesh = PrintMesh::new("test", mesh_data);
         print_mesh.scale = Vec3::new(2.0, 3.0, 4.0);
         // Volume should be 1.0 * 2 * 3 * 4 = 24.0
         assert!((print_mesh.volume() - 24.0).abs() < 1e-3);
@@ -323,7 +326,7 @@ mod tests {
     fn print_mesh_world_bbox() {
         let stl_data = unit_cube_stl();
         let mesh_data = MeshData::from_stl_bytes(&stl_data).unwrap();
-        let mut print_mesh = PrintMesh::new(mesh_data);
+        let mut print_mesh = PrintMesh::new("test", mesh_data);
         print_mesh.position = Vec3::new(10.0, 20.0, 30.0);
         print_mesh.scale = Vec3::new(2.0, 2.0, 2.0);
 

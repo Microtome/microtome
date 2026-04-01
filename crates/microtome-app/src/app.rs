@@ -250,8 +250,8 @@ impl eframe::App for MicrotomeApp {
         // Poll for slicing job progress
         self.poll_slicing_progress();
 
-        // Track whether the panel requests an export start
-        let mut stl_loaded: Option<MeshData> = None;
+        // Track whether the panel requests an STL load
+        let mut stl_loaded: Option<(String, MeshData)> = None;
 
         egui::Panel::left("controls_panel")
             .default_size(260.0)
@@ -273,11 +273,11 @@ impl eframe::App for MicrotomeApp {
             });
 
         // Handle deferred STL loading (needs render_state which is not available inside panel)
-        if let Some(mesh_data) = stl_loaded {
+        if let Some((filename, mesh_data)) = stl_loaded {
             if let Some(render_state) = _frame.wgpu_render_state() {
                 self.upload_mesh(render_state, &mesh_data);
             }
-            let mut print_mesh = PrintMesh::new(mesh_data);
+            let mut print_mesh = PrintMesh::new(filename, mesh_data);
             let bbox = &print_mesh.mesh_data.bbox;
             let center = bbox.center();
             print_mesh.position = Vec3::new(
@@ -308,7 +308,7 @@ impl eframe::App for MicrotomeApp {
                     progress_rx: &mut self.progress_rx,
                     export_path: &mut self.export_path,
                     cancel_flag: &mut self.cancel_flag,
-                    stl_loaded: &mut None,
+                    stl_loaded: &mut None::<(String, MeshData)>,
                 };
                 panels::bottom_bar(ui, &mut state);
             });
