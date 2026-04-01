@@ -168,7 +168,7 @@ impl AdvancedSlicer {
                     module: &intersection_shader,
                     entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        format: wgpu::TextureFormat::Rgba16Float,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent {
                                 src_factor: wgpu::BlendFactor::One,
@@ -366,7 +366,23 @@ impl AdvancedSlicer {
         let mask_texture = create_texture("mask-texture", tex_usage);
         let scratch_texture = create_texture("scratch-texture", storage_tex_usage);
         let temp1_texture = create_texture("temp1-texture", storage_tex_usage);
-        let temp2_texture = create_texture("temp2-texture", tex_usage);
+
+        // The intersection texture uses Rgba16Float for precise additive
+        // accumulation of face crossing counts (no 8-bit quantization).
+        let temp2_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("temp2-texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: tex_usage,
+            view_formats: &[],
+        });
 
         let mask_view = mask_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let scratch_view = scratch_texture.create_view(&wgpu::TextureViewDescriptor::default());

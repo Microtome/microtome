@@ -1,7 +1,11 @@
 // Slice extraction shader.
 //
-// Samples the intersection texture to determine inside/outside,
+// Samples the intersection texture (Rgba16Float) to determine inside/outside,
 // then outputs white for solid regions and black for empty regions.
+//
+// The intersection texture has exact integer counts:
+//   R = number of front faces, G = number of back faces.
+// Inside a volume: G > R (more exits than entries above the slice).
 
 struct Uniforms {
     cutoff: f32,
@@ -36,13 +40,15 @@ fn vs_main(in: VertexInput) -> VsOut {
     return out;
 }
 
-const STEPS: f32 = 256.0;
-
 @fragment
 fn fs_main(@builtin(position) frag_coord: vec4<f32>, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
     let lookup = frag_coord.xy / vec2<f32>(uniforms.view_width, uniforms.view_height);
     let color = textureSample(i_tex, i_sampler, lookup);
-    let should_be_white = (color.g - color.r) * (STEPS - 1.0);
+
+    // Direct comparison — no scaling needed with float texture.
+    // G > R means more back faces (exits) than front faces (entries),
+    // which indicates we're inside an odd number of volumes.
+    let should_be_white = color.g - color.r;
 
     let z_cutoff = 1.0 - uniforms.cutoff;
     if frag_coord.z < z_cutoff {
@@ -50,7 +56,7 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>, @builtin(front_facing) fron
     }
 
     if front_facing {
-        if should_be_white > 0.0 {
+        if should_be_white > 0.5 {
             return vec4<f32>(1.0, 1.0, 1.0, 1.0);
         } else {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);

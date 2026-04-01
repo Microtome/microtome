@@ -1,7 +1,8 @@
 // Intersection test shader.
 //
-// Renders front faces as red and back faces as green with 1/256 alpha,
+// Renders front faces as red and back faces as green,
 // using additive blending to accumulate intersection counts.
+// Uses Rgba16Float render target for precise accumulation.
 
 struct Uniforms {
     cutoff: f32,
@@ -30,8 +31,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-const STEPS: f32 = 256.0;
-
 @fragment
 fn fs_main(@builtin(position) frag_coord: vec4<f32>, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
     let z_cutoff = 1.0 - uniforms.cutoff;
@@ -40,9 +39,11 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>, @builtin(front_facing) fron
         discard;
     }
 
+    // Each face contributes 1.0 to its channel.
+    // With Rgba16Float and additive blending, this accumulates exactly.
     if front_facing {
-        return vec4<f32>(1.0, 0.0, 0.0, 1.0 / STEPS);
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
     } else {
-        return vec4<f32>(0.0, 1.0, 0.0, 1.0 / STEPS);
+        return vec4<f32>(0.0, 1.0, 0.0, 1.0);
     }
 }
