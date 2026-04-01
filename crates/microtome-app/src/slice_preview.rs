@@ -151,11 +151,8 @@ impl SlicePreview {
             None => return Ok(()),
         };
 
-        if self.mesh_buffers.is_empty() {
-            self.current_z = z;
-            return Ok(());
-        }
-
+        // Run the slicer even with no meshes — produces an all-black image
+        // from the clear color, ensuring the preview texture always exists.
         slicer.slice_at(
             z,
             volume_width,
