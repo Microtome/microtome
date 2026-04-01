@@ -150,6 +150,20 @@ impl OrbitCamera {
             self.phi = (self.phi + delta_phi).clamp(PHI_MIN, PHI_MAX);
         }
 
+        // Handle middle-mouse drag to pan
+        if response.dragged_by(egui::PointerButton::Middle) {
+            let delta = response.drag_delta();
+            // Compute camera right and up vectors in world space
+            let eye = self.eye_position();
+            let forward = (self.target - eye).normalize();
+            let right = forward.cross(Vec3::Z).normalize();
+            let up = right.cross(forward).normalize();
+
+            // Scale pan speed by distance so it feels consistent
+            let pan_speed = self.radius * 0.002;
+            self.target += (-right * delta.x + up * delta.y) * pan_speed;
+        }
+
         // Handle scroll to zoom
         let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
         if scroll_delta.abs() > 0.0 {
@@ -160,6 +174,11 @@ impl OrbitCamera {
             };
             self.radius = (self.radius - zoom).clamp(RADIUS_MIN, RADIUS_MAX);
         }
+    }
+
+    /// Resets the orbit target to the origin.
+    pub fn reset_target(&mut self) {
+        self.target = Vec3::ZERO;
     }
 }
 

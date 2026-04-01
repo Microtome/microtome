@@ -389,6 +389,10 @@ impl eframe::App for MicrotomeApp {
                 if ui.button("Iso").clicked() {
                     self.camera.set_view_isometric();
                 }
+                ui.separator();
+                if ui.button("Recenter").clicked() {
+                    self.camera.reset_target();
+                }
             });
 
             let (response, painter) =
