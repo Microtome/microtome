@@ -37,7 +37,11 @@ struct ViewportUniforms {
     view_proj: [[f32; 4]; 4],
     model: [[f32; 4]; 4],
     object_color: [f32; 4],
-    _padding: [f32; 12],
+    volume_min: [f32; 3],
+    _pad0: f32,
+    volume_max: [f32; 3],
+    _pad1: f32,
+    _padding: [f32; 4],
 }
 
 /// Size of one uniform entry, guaranteed to be 256 bytes.
@@ -410,6 +414,8 @@ impl ViewportRenderer {
         view_proj: Mat4,
         meshes: &[MeshBuffers],
         selected_index: Option<usize>,
+        volume_min: [f32; 3],
+        volume_max: [f32; 3],
     ) {
         let w = width.max(1);
         let h = height.max(1);
@@ -441,7 +447,11 @@ impl ViewportRenderer {
             view_proj: view_proj.to_cols_array_2d(),
             model: Mat4::IDENTITY.to_cols_array_2d(),
             object_color: [1.0, 1.0, 1.0, 1.0],
-            _padding: [0.0; 12],
+            volume_min,
+            _pad0: 0.0,
+            volume_max,
+            _pad1: 0.0,
+            _padding: [0.0; 4],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&line_uniforms));
 
@@ -455,7 +465,11 @@ impl ViewportRenderer {
                 view_proj: view_proj.to_cols_array_2d(),
                 model: mesh_buf.model_matrix.to_cols_array_2d(),
                 object_color: color,
-                _padding: [0.0; 12],
+                volume_min,
+                _pad0: 0.0,
+                volume_max,
+                _pad1: 0.0,
+                _padding: [0.0; 4],
             };
             let offset = UNIFORM_ALIGN * (i as u64 + 1);
             queue.write_buffer(&self.uniform_buffer, offset, bytemuck::bytes_of(&uniforms));

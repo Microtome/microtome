@@ -21,6 +21,10 @@ pub struct ViewportPaintCallback {
     pub width: u32,
     /// Viewport height in physical pixels.
     pub height: u32,
+    /// Print volume minimum bounds (world space).
+    pub volume_min: [f32; 3],
+    /// Print volume maximum bounds (world space).
+    pub volume_max: [f32; 3],
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -42,6 +46,8 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
                 self.view_proj,
                 &self.meshes,
                 self.selected_index,
+                self.volume_min,
+                self.volume_max,
             );
         }
         Vec::new()

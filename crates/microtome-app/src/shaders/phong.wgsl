@@ -1,10 +1,16 @@
 // Phong lighting shader for mesh rendering.
 // Ambient + two directional lights (sky from above, ground from below).
+// Fragments outside the print volume are tinted red.
 
 struct Uniforms {
     view_proj: mat4x4<f32>,
     model: mat4x4<f32>,
     object_color: vec4<f32>,
+    // Print volume bounds (world space)
+    volume_min: vec3<f32>,
+    _pad0: f32,
+    volume_max: vec3<f32>,
+    _pad1: f32,
 };
 
 @group(0) @binding(0)
@@ -18,6 +24,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_normal: vec3<f32>,
+    @location(1) world_pos: vec3<f32>,
 };
 
 @vertex
@@ -25,9 +32,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     let world_pos = uniforms.model * vec4<f32>(in.position, 1.0);
     out.clip_position = uniforms.view_proj * world_pos;
-    // Transform normal by the upper-left 3x3 of the model matrix.
-    // For uniform scale this is sufficient; for non-uniform scale a proper
-    // inverse-transpose would be needed, but we keep it simple here.
+    out.world_pos = world_pos.xyz;
     let normal_mat = mat3x3<f32>(
         uniforms.model[0].xyz,
         uniforms.model[1].xyz,
@@ -41,7 +46,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let n = normalize(in.world_normal);
 
-    // Ambient: #777777 -> rgb(0.467, 0.467, 0.467)
+    // Ambient: #777777
     let ambient_color = vec3<f32>(0.467, 0.467, 0.467);
 
     // Sky directional light: #AACCFF, intensity 0.65, direction +Z
@@ -60,6 +65,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         + sky_color * sky_intensity * sky_diffuse
         + ground_color * ground_intensity * ground_diffuse;
 
-    let color = uniforms.object_color.rgb * lighting;
+    var base_color = uniforms.object_color.rgb;
+
+    // Tint red if outside the print volume
+    let outside = any(in.world_pos < uniforms.volume_min) ||
+                  any(in.world_pos > uniforms.volume_max);
+    if outside {
+        base_color = vec3<f32>(0.9, 0.15, 0.15);
+    }
+
+    let color = base_color * lighting;
     return vec4<f32>(color, uniforms.object_color.a);
 }
