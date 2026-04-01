@@ -88,13 +88,20 @@ pub fn controls_panel(ui: &mut egui::Ui, state: &mut AppState<'_>) {
 
     ui.separator();
 
-    // --- Object transform controls ---
-    ui.label(format!("Meshes: {}", state.scene.meshes.len()));
+    // --- Object list ---
+    ui.label(format!("Objects ({})", state.scene.meshes.len()));
+
+    for i in 0..state.scene.meshes.len() {
+        let is_selected = *state.selected_mesh == Some(i);
+        let label = format!("Mesh {i}");
+        if ui.selectable_label(is_selected, &label).clicked() {
+            *state.selected_mesh = if is_selected { None } else { Some(i) };
+        }
+    }
 
     if let Some(idx) = *state.selected_mesh
         && idx < state.scene.meshes.len()
     {
-        ui.label(format!("Selected: mesh {idx}"));
         ui.separator();
         mesh_transform_editor(ui, &mut state.scene.meshes[idx]);
     }
