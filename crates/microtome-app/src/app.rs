@@ -354,11 +354,18 @@ impl eframe::App for MicrotomeApp {
                     0
                 };
 
-                ui.label("Z:");
+                let step = if layer_height > 0.0 {
+                    layer_height
+                } else {
+                    0.01
+                };
+
+                ui.label("Slice Z (mm):");
                 let z_changed = ui
-                    .add(
+                    .add_sized(
+                        [ui.available_width(), 18.0],
                         egui::Slider::new(&mut self.slice_z, 0.0..=max_z)
-                            .step_by(0.1_f64)
+                            .step_by(step)
                             .suffix(" mm"),
                     )
                     .changed();
@@ -366,16 +373,18 @@ impl eframe::App for MicrotomeApp {
                 if layer_height > 0.0 {
                     ui.add_space(4.0);
                     let mut layer_num = (self.slice_z as f64 / layer_height).round() as u32;
-                    ui.label("Layer:");
+                    ui.label(format!("Layer (of {total_layers}):"));
                     if ui
-                        .add(egui::Slider::new(&mut layer_num, 0..=total_layers))
+                        .add_sized(
+                            [ui.available_width(), 18.0],
+                            egui::Slider::new(&mut layer_num, 0..=total_layers),
+                        )
                         .changed()
                     {
                         self.slice_z = (layer_num as f64 * layer_height) as f32;
                     } else if z_changed {
                         // Z slider moved -- layer slider follows automatically
                     }
-                    ui.label(format!("/ {total_layers}"));
                 }
             });
 
