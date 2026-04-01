@@ -354,10 +354,12 @@ impl eframe::App for MicrotomeApp {
                     0
                 };
 
+                // Expand slider rail to fill the panel width
+                ui.spacing_mut().slider_width = ui.available_width() - 60.0;
+
                 ui.label("Slice Z (mm):");
                 let z_changed = ui
-                    .add_sized(
-                        [ui.available_width(), 18.0],
+                    .add(
                         egui::Slider::new(&mut self.slice_z, 0.0..=max_z)
                             .step_by(0.1_f64)
                             .smart_aim(false)
@@ -370,8 +372,7 @@ impl eframe::App for MicrotomeApp {
                     let mut layer_num = (self.slice_z as f64 / layer_height).round() as u32;
                     ui.label(format!("Layer (of {total_layers}):"));
                     if ui
-                        .add_sized(
-                            [ui.available_width(), 18.0],
+                        .add(
                             egui::Slider::new(&mut layer_num, 0..=total_layers)
                                 .step_by(1.0_f64)
                                 .smart_aim(false),
