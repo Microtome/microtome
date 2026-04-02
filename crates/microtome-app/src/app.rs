@@ -66,6 +66,10 @@ pub struct MicrotomeApp {
     gizmo_modes: EnumSet<GizmoMode>,
     /// Whether to show the slice overlay in the 3D viewport.
     show_slice_overlay: bool,
+    /// Snapshot of the volume config from last frame (for change detection).
+    prev_volume: PrintVolume,
+    /// Snapshot of the projector config from last frame (for change detection).
+    prev_projector: Projector,
 }
 
 impl MicrotomeApp {
@@ -94,6 +98,9 @@ impl MicrotomeApp {
         let preview_width = printer_config.projector.x_res_px / 2;
         let preview_height = printer_config.projector.y_res_px / 2;
 
+        let prev_volume = printer_config.volume.clone();
+        let prev_projector = printer_config.projector.clone();
+
         Self {
             scene,
             printer_config,
@@ -112,6 +119,8 @@ impl MicrotomeApp {
             gizmo: Gizmo::default(),
             gizmo_modes: GizmoMode::all(),
             show_slice_overlay: true,
+            prev_volume,
+            prev_projector,
         }
     }
 
@@ -288,6 +297,29 @@ impl eframe::App for MicrotomeApp {
             );
             self.scene.add_mesh(print_mesh);
             self.slice_preview.mark_buffers_dirty();
+        }
+
+        // Detect printer config changes and propagate to dependent views
+        if self.printer_config.volume != self.prev_volume {
+            self.scene.volume.resize(&self.printer_config.volume);
+            if let Some(render_state) = _frame.wgpu_render_state() {
+                let mut renderer_lock = render_state.renderer.write();
+                if let Some(renderer) = renderer_lock
+                    .callback_resources
+                    .get_mut::<ViewportRenderer>()
+                {
+                    renderer.update_volume_lines(&render_state.device, &self.scene.volume);
+                }
+            }
+            self.slice_preview.mark_buffers_dirty();
+            self.prev_volume = self.printer_config.volume.clone();
+        }
+        if self.printer_config.projector != self.prev_projector {
+            let preview_width = self.printer_config.projector.x_res_px / 2;
+            let preview_height = self.printer_config.projector.y_res_px / 2;
+            self.slice_preview = SlicePreview::new(preview_width, preview_height);
+            self.slice_preview.mark_buffers_dirty();
+            self.prev_projector = self.printer_config.projector.clone();
         }
 
         // Start slicing job if an export path was just set and no job is running

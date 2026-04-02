@@ -28,7 +28,7 @@ impl ZStage {
 /// Projector (DLP/LCD) resolution configuration.
 ///
 /// Currently assumes square pixels.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Projector {
     /// Horizontal resolution in pixels.
     pub x_res_px: u32,
@@ -52,7 +52,7 @@ pub struct Resin {
 }
 
 /// Physical dimensions of the print volume.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrintVolume {
     /// Width of the print volume (mm).
     pub width_mm: f64,
