@@ -311,7 +311,7 @@ impl eframe::App for MicrotomeApp {
                     renderer.update_volume_lines(&render_state.device, &self.scene.volume);
                 }
             }
-            self.slice_preview.mark_buffers_dirty();
+            self.slice_preview.mark_slice_dirty();
             self.prev_volume = self.printer_config.volume.clone();
         }
         if self.printer_config.projector != self.prev_projector {

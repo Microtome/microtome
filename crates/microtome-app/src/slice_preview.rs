@@ -16,6 +16,8 @@ pub struct SlicePreview {
     current_z: f32,
     /// Whether the mesh buffers need to be rebuilt.
     buffers_dirty: bool,
+    /// Whether the slice must be re-rendered (e.g., volume config changed).
+    slice_dirty: bool,
     /// Preview width in pixels.
     preview_width: u32,
     /// Preview height in pixels.
@@ -35,6 +37,7 @@ impl SlicePreview {
             texture: None,
             current_z: -1.0, // sentinel so first update always runs
             buffers_dirty: false,
+            slice_dirty: false,
             preview_width,
             preview_height,
             wgpu_texture: None,
@@ -45,6 +48,12 @@ impl SlicePreview {
     /// Marks the mesh buffers as needing to be rebuilt (e.g., when meshes are loaded or removed).
     pub fn mark_buffers_dirty(&mut self) {
         self.buffers_dirty = true;
+        self.slice_dirty = true;
+    }
+
+    /// Marks the slice as needing re-render (e.g., volume dimensions changed).
+    pub fn mark_slice_dirty(&mut self) {
+        self.slice_dirty = true;
     }
 
     /// Returns whether the mesh buffers need to be rebuilt.
@@ -134,17 +143,13 @@ impl SlicePreview {
         volume_depth: f32,
         volume_height: f32,
     ) -> Result<()> {
-        // Only re-slice when z actually changed
-        if (self.current_z - z).abs() < f32::EPSILON && !self.buffers_dirty {
+        // Only re-slice when z actually changed or a re-render was requested
+        if (self.current_z - z).abs() < f32::EPSILON && !self.slice_dirty {
             return Ok(());
         }
 
         self.ensure_slicer(gpu)?;
-
-        if self.buffers_dirty {
-            // Buffers were already updated externally; just clear the flag
-            self.buffers_dirty = false;
-        }
+        self.slice_dirty = false;
 
         let slicer = match &self.slicer {
             Some(s) => s,
