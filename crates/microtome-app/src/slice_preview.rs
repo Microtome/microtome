@@ -144,11 +144,15 @@ impl SlicePreview {
         volume_height: f32,
     ) -> Result<()> {
         // Only re-slice when z actually changed or a re-render was requested
-        if (self.current_z - z).abs() < f32::EPSILON && !self.slice_dirty {
+        if (self.current_z - z).abs() < f32::EPSILON && !self.buffers_dirty && !self.slice_dirty {
             return Ok(());
         }
 
         self.ensure_slicer(gpu)?;
+
+        if self.buffers_dirty {
+            self.buffers_dirty = false;
+        }
         self.slice_dirty = false;
 
         let slicer = match &self.slicer {
