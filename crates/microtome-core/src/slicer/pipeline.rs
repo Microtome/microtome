@@ -411,8 +411,8 @@ impl AdvancedSlicer {
 
     /// Runs the GPU slicing pipeline for one layer at the given z height.
     ///
-    /// The orthographic projection is computed to fit the build volume
-    /// (`volume_width` x `volume_depth`) proportionally into the render target.
+    /// The orthographic projection maps the build volume
+    /// (`volume_width` x `volume_depth`) to the full render target.
     /// The result is stored in the mask texture and can be read back with
     /// [`read_slice_to_png`](Self::read_slice_to_png).
     pub fn slice_at(
@@ -429,13 +429,11 @@ impl AdvancedSlicer {
         let slice_z = (FAR_Z_PADDING + z) / (FAR_Z_PADDING + volume_height);
 
         // Build orthographic projection looking down the Z axis.
-        // Scale the build volume to fit proportionally into the render target,
-        // matching the TypeScript original's aspect-correct frustum calculation.
-        let width_ratio = volume_width / self.width as f32;
-        let height_ratio = volume_depth / self.height as f32;
-        let scale = width_ratio.max(height_ratio);
-        let half_w = (scale * self.width as f32) / 2.0;
-        let half_h = (scale * self.height as f32) / 2.0;
+        // Map the full build volume to the full render target so every
+        // projector pixel covers (volume_w/tex_w, volume_d/tex_h) mm —
+        // the correct 1:1 pixel-to-area mapping for DLP projection.
+        let half_w = volume_width / 2.0;
+        let half_h = volume_depth / 2.0;
         let camera_near = 1.0_f32;
         let camera_far = FAR_Z_PADDING + volume_height + camera_near;
 
