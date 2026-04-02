@@ -1,0 +1,411 @@
+//! eframe::App trait implementation for MicrotomeApp.
+
+use std::sync::Arc;
+
+use glam::{Mat4, Quat, Vec3};
+use microtome_core::{GpuContext, MeshData, PrintMesh};
+use transform_gizmo_egui::math::Transform;
+use transform_gizmo_egui::prelude::*;
+
+use crate::slice_preview::SlicePreview;
+use crate::ui::panels::{self, AppState};
+use crate::viewport::ViewportPaintCallback;
+use crate::viewport_renderer::ViewportRenderer;
+
+use super::state::MicrotomeApp;
+
+impl eframe::App for MicrotomeApp {
+    /// Main UI rendering called each frame.
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Poll for slicing job progress
+        self.poll_slicing_progress();
+
+        // Track whether the panel requests an STL load
+        let mut stl_loaded: Option<(String, MeshData)> = None;
+
+        egui::Panel::left("controls_panel")
+            .default_size(260.0)
+            .show_inside(ui, |ui| {
+                let mut state = AppState {
+                    scene: &mut self.scene,
+                    printer_config: &mut self.printer_config,
+                    job_config: &mut self.job_config,
+                    selected_mesh: &mut self.selected_mesh,
+                    overhang_angle_degrees: &mut self.overhang_angle_degrees,
+                    slicing_progress: &mut self.slicing_progress,
+                    export_path: &mut self.export_path,
+                    cancel_flag: &mut self.cancel_flag,
+                    stl_loaded: &mut stl_loaded,
+                };
+                panels::controls_panel(ui, &mut state);
+            });
+
+        // Handle deferred STL loading (needs render_state which is not available inside panel)
+        if let Some((filename, mesh_data)) = stl_loaded {
+            if let Some(render_state) = _frame.wgpu_render_state() {
+                self.upload_mesh(render_state, &mesh_data);
+            }
+            let mut print_mesh = PrintMesh::new(filename, mesh_data);
+            let bbox = &print_mesh.mesh_data.bbox;
+            let center = bbox.center();
+            print_mesh.position = Vec3::new(
+                -center.x,
+                -center.y,
+                -bbox.min.z + self.job_config.z_offset_mm as f32,
+            );
+            self.scene.add_mesh(print_mesh);
+            self.slice_preview.mark_buffers_dirty();
+        }
+
+        // Detect printer config changes and propagate to dependent views
+        if self.printer_config.volume != self.prev_volume {
+            self.scene.volume.resize(&self.printer_config.volume);
+            if let Some(render_state) = _frame.wgpu_render_state() {
+                let mut renderer_lock = render_state.renderer.write();
+                if let Some(renderer) = renderer_lock
+                    .callback_resources
+                    .get_mut::<ViewportRenderer>()
+                {
+                    renderer.update_volume_lines(&render_state.device, &self.scene.volume);
+                }
+            }
+            self.slice_preview.mark_slice_dirty();
+            self.prev_volume = self.printer_config.volume.clone();
+        }
+        if self.printer_config.projector != self.prev_projector {
+            let preview_width = self.printer_config.projector.x_res_px / 2;
+            let preview_height = self.printer_config.projector.y_res_px / 2;
+            self.slice_preview = SlicePreview::new(preview_width, preview_height);
+            self.slice_preview.mark_buffers_dirty();
+            self.prev_projector = self.printer_config.projector.clone();
+        }
+
+        // Start slicing job if an export path was just set and no job is running
+        if self.export_path.is_some() && self.progress_rx.is_none() {
+            self.start_slicing_job();
+        }
+
+        // Show bottom panel only when an export is active (progress bar).
+        if self.slicing_progress.is_some() {
+            egui::Panel::bottom("slice_panel")
+                .min_size(40.0)
+                .show_inside(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if let Some(progress) = self.slicing_progress {
+                            ui.label("Exporting...");
+                            ui.add(
+                                egui::ProgressBar::new(progress)
+                                    .desired_width(200.0)
+                                    .show_percentage(),
+                            );
+                        }
+                    });
+                });
+        }
+
+        // Update slice preview if we have a render state
+        if let Some(render_state) = _frame.wgpu_render_state() {
+            let gpu = GpuContext::from_existing(
+                Arc::new(render_state.device.clone()),
+                Arc::new(render_state.queue.clone()),
+            );
+            if self.slice_preview.buffers_dirty() {
+                self.slice_preview
+                    .update_mesh_buffers(&gpu, &self.scene.meshes);
+            }
+            if let Err(e) = self.slice_preview.update_slice(
+                ui.ctx(),
+                &gpu,
+                self.slice_z,
+                self.printer_config.volume.width_mm as f32,
+                self.printer_config.volume.depth_mm as f32,
+                self.printer_config.volume.height_mm as f32,
+            ) {
+                log::error!("Slice preview error: {e}");
+            }
+        }
+
+        egui::Panel::right("slice_preview_panel")
+            .default_size(300.0)
+            .show_inside(ui, |ui| {
+                ui.heading("Slice Preview");
+                ui.separator();
+                self.slice_preview.show(ui);
+                ui.separator();
+                ui.checkbox(&mut self.show_slice_overlay, "Show Slice Overlay");
+                ui.separator();
+
+                // Z slider and layer slider (moved from bottom bar)
+                let max_z = self.printer_config.volume.height_mm as f32;
+                let layer_height = self.job_config.layer_height_mm();
+                let total_layers = if layer_height > 0.0 {
+                    (max_z as f64 / layer_height).ceil() as u32
+                } else {
+                    0
+                };
+
+                // Expand slider rail to fill the panel width.
+                // Use max_rect (the panel's allocated region) not available_width
+                // (which grows with content, causing a feedback loop).
+                let panel_width = ui.max_rect().width();
+                ui.spacing_mut().slider_width =
+                    (panel_width - 60.0 - ui.spacing().item_spacing.x * 2.0).max(50.0);
+
+                ui.label("Slice Z (mm):");
+                let z_changed = ui
+                    .add(
+                        egui::Slider::new(&mut self.slice_z, 0.0..=max_z)
+                            .step_by(0.1_f64)
+                            .smart_aim(false)
+                            .suffix(" mm"),
+                    )
+                    .changed();
+
+                if layer_height > 0.0 {
+                    ui.add_space(4.0);
+                    let mut layer_num = (self.slice_z as f64 / layer_height).round() as u32;
+                    ui.label(format!("Layer (of {total_layers}):"));
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut layer_num, 0..=total_layers)
+                                .step_by(1.0_f64)
+                                .smart_aim(false),
+                        )
+                        .changed()
+                    {
+                        self.slice_z = (layer_num as f64 * layer_height) as f32;
+                    } else if z_changed {
+                        // Z slider moved -- layer slider follows automatically
+                    }
+                }
+            });
+
+        // Handle keyboard shortcuts
+        ui.ctx().input(|i| {
+            // Escape deselects
+            if i.key_pressed(egui::Key::Escape) {
+                self.selected_mesh = None;
+            }
+            // Delete/Backspace removes selected mesh
+            if let Some(idx) = self.selected_mesh
+                && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
+                && idx < self.scene.meshes.len()
+            {
+                self.scene.remove_mesh(idx);
+                self.gpu_meshes.remove(idx);
+                self.selected_mesh = None;
+                self.slice_preview.mark_buffers_dirty();
+            }
+        });
+
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            // View toolbar
+            ui.horizontal(|ui| {
+                if ui
+                    .selectable_label(self.camera.use_perspective, "Perspective")
+                    .clicked()
+                {
+                    self.camera.use_perspective = true;
+                }
+                if ui
+                    .selectable_label(!self.camera.use_perspective, "Orthographic")
+                    .clicked()
+                {
+                    self.camera.use_perspective = false;
+                }
+                ui.separator();
+                if ui.button("Front").clicked() {
+                    self.camera.set_view_front();
+                }
+                if ui.button("Right").clicked() {
+                    self.camera.set_view_right();
+                }
+                if ui.button("Top").clicked() {
+                    self.camera.set_view_top();
+                }
+                if ui.button("Iso").clicked() {
+                    self.camera.set_view_isometric();
+                }
+                ui.separator();
+                if ui.button("Recenter").clicked() {
+                    self.camera.reset_target();
+                }
+            });
+
+            let (response, painter) =
+                ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+            self.camera.handle_input(&response);
+
+            if self.has_render_state {
+                let rect = response.rect;
+                let aspect = rect.width() / rect.height().max(1.0);
+                let view = self.camera.view_matrix();
+                let proj = self.camera.projection_matrix(aspect);
+
+                // Ray-pick on click to select/deselect mesh.
+                // Use raw input instead of response.clicked() because the
+                // gizmo's interact() can consume the click on the same frame.
+                let clicked = ui.ctx().input(|i| {
+                    i.pointer.button_released(egui::PointerButton::Primary)
+                        && !i.pointer.is_decidedly_dragging()
+                });
+                if clicked {
+                    self.selected_mesh =
+                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                            // Only pick if the click is inside the viewport rect
+                            if rect.contains(egui::pos2(pos.x, pos.y)) {
+                                let model_matrices: Vec<Mat4> =
+                                    self.scene.meshes.iter().map(Self::model_matrix).collect();
+                                let screen = glam::Vec2::new(pos.x, pos.y);
+                                let rect_min = glam::Vec2::new(rect.min.x, rect.min.y);
+                                let rect_size = glam::Vec2::new(rect.width(), rect.height());
+                                crate::picking::pick_mesh(
+                                    screen,
+                                    rect_min,
+                                    rect_size,
+                                    view,
+                                    proj,
+                                    &self.scene.meshes,
+                                    &model_matrices,
+                                )
+                            } else {
+                                self.selected_mesh
+                            }
+                        } else {
+                            None
+                        };
+                }
+                let view_proj = proj * view;
+
+                let mesh_buffers = Arc::new(self.collect_mesh_buffers());
+
+                let ppp = ui.ctx().pixels_per_point();
+                let vol_bbox = self.scene.volume.bounding_box();
+                let slice_texture_view = if self.show_slice_overlay {
+                    self.slice_preview
+                        .wgpu_texture_view()
+                        .map(|v| Arc::new(v.clone()))
+                } else {
+                    None
+                };
+
+                let callback = egui_wgpu::Callback::new_paint_callback(
+                    rect,
+                    ViewportPaintCallback {
+                        view_proj,
+                        meshes: mesh_buffers,
+                        selected_index: self.selected_mesh,
+                        width: (rect.width() * ppp) as u32,
+                        height: (rect.height() * ppp) as u32,
+                        volume_min: vol_bbox.min.into(),
+                        volume_max: vol_bbox.max.into(),
+                        slice_z: self.slice_z,
+                        volume_width: self.printer_config.volume.width_mm as f32,
+                        volume_depth: self.printer_config.volume.depth_mm as f32,
+                        slice_texture_view,
+                    },
+                );
+                painter.add(callback);
+
+                // 3D transform gizmo for the selected mesh
+                if let Some(idx) = self.selected_mesh
+                    && idx < self.scene.meshes.len()
+                {
+                    let mesh = &self.scene.meshes[idx];
+
+                    // Gizmo should be centered on the mesh's world-space bbox center.
+                    // Model matrix = translation * rotation * scale, so:
+                    // world_center = position + rotation * (bbox_center * scale)
+                    let bbox_center = mesh.mesh_data.bbox.center();
+                    let rot_quat_for_center = Quat::from_euler(
+                        glam::EulerRot::XYZ,
+                        mesh.rotation.x,
+                        mesh.rotation.y,
+                        mesh.rotation.z,
+                    );
+                    let world_center =
+                        mesh.position + rot_quat_for_center * (bbox_center * mesh.scale);
+
+                    let rot_quat = Quat::from_euler(
+                        glam::EulerRot::XYZ,
+                        mesh.rotation.x,
+                        mesh.rotation.y,
+                        mesh.rotation.z,
+                    );
+                    let mint_rot: mint::Quaternion<f64> = mint::Quaternion {
+                        v: mint::Vector3 {
+                            x: f64::from(rot_quat.x),
+                            y: f64::from(rot_quat.y),
+                            z: f64::from(rot_quat.z),
+                        },
+                        s: f64::from(rot_quat.w),
+                    };
+                    let gizmo_transform = Transform::from_scale_rotation_translation(
+                        mint::Vector3 {
+                            x: f64::from(mesh.scale.x),
+                            y: f64::from(mesh.scale.y),
+                            z: f64::from(mesh.scale.z),
+                        },
+                        mint_rot,
+                        mint::Vector3 {
+                            x: f64::from(world_center.x),
+                            y: f64::from(world_center.y),
+                            z: f64::from(world_center.z),
+                        },
+                    );
+
+                    let view_mint: mint::RowMatrix4<f64> = view.as_dmat4().into();
+                    let proj_mint: mint::RowMatrix4<f64> = proj.as_dmat4().into();
+                    self.gizmo.update_config(GizmoConfig {
+                        view_matrix: view_mint,
+                        projection_matrix: proj_mint,
+                        viewport: rect,
+                        modes: self.gizmo_modes,
+                        orientation: GizmoOrientation::Global,
+                        ..Default::default()
+                    });
+
+                    if let Some((_result, new_transforms)) =
+                        self.gizmo.interact(ui, &[gizmo_transform])
+                    {
+                        let t = &new_transforms[0];
+                        let mesh = &mut self.scene.meshes[idx];
+
+                        let new_rot = Quat::from_xyzw(
+                            t.rotation.v.x as f32,
+                            t.rotation.v.y as f32,
+                            t.rotation.v.z as f32,
+                            t.rotation.s as f32,
+                        );
+                        let new_scale =
+                            Vec3::new(t.scale.x as f32, t.scale.y as f32, t.scale.z as f32);
+                        let new_world_center = Vec3::new(
+                            t.translation.x as f32,
+                            t.translation.y as f32,
+                            t.translation.z as f32,
+                        );
+
+                        // The model matrix applies: translation * rotation * scale * vertex.
+                        // The gizmo's world center = position + rotation * (bbox_center * scale).
+                        // Solve for position:
+                        mesh.position = new_world_center - new_rot * (bbox_center * new_scale);
+
+                        let (rx, ry, rz) = new_rot.to_euler(glam::EulerRot::XYZ);
+                        mesh.rotation = Vec3::new(rx, ry, rz);
+                        mesh.scale = new_scale;
+                        self.slice_preview.mark_buffers_dirty();
+                    }
+                }
+            } else {
+                let center = response.rect.center();
+                painter.text(
+                    center,
+                    egui::Align2::CENTER_CENTER,
+                    "3D Viewport (no GPU)",
+                    egui::FontId::proportional(24.0),
+                    ui.visuals().text_color(),
+                );
+            }
+        });
+    }
+}
