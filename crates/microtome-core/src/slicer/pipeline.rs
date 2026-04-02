@@ -1,7 +1,4 @@
-//! GPU-accelerated mesh slicing pipeline.
-//!
-//! Implements the intersection-test / slice-extract two-pass algorithm
-//! ported from the original TypeScript/GLSL slicer.
+//! Core slicer pipeline — struct definition and GPU pipeline construction.
 
 use std::sync::Arc;
 
@@ -10,43 +7,10 @@ use image::ImageEncoder;
 use crate::error::{MicrotomeError, Result};
 use crate::gpu::GpuContext;
 
-/// Padding added to the far plane so geometry on the z=0 plane is not ambiguous.
-const FAR_Z_PADDING: f32 = 1.0;
-
-/// Number of bytes per pixel in Rgba8Unorm format.
-const BYTES_PER_PIXEL: u32 = 4;
-
-/// Pre-uploaded GPU buffers for a single mesh ready for slicing.
-pub struct SliceMeshBuffers {
-    /// Vertex buffer containing interleaved position + normal data.
-    pub vertex_buffer: wgpu::Buffer,
-    /// Index buffer containing triangle indices.
-    pub index_buffer: wgpu::Buffer,
-    /// Number of indices (triangles * 3).
-    pub index_count: u32,
-}
-
-/// Intersection pass uniform data.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct IntersectionUniforms {
-    cutoff: f32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
-    view_proj: [[f32; 4]; 4],
-}
-
-/// Slice extraction pass uniform data.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct SliceUniforms {
-    cutoff: f32,
-    _pad0: f32,
-    view_width: f32,
-    view_height: f32,
-    view_proj: [[f32; 4]; 4],
-}
+use super::types::{
+    BYTES_PER_PIXEL, FAR_Z_PADDING, IntersectionUniforms, SliceMeshBuffers, SliceUniforms,
+    aligned_bytes_per_row,
+};
 
 /// GPU-accelerated slicer implementing the intersection-test / slice-extract pipeline.
 ///
@@ -86,13 +50,6 @@ pub struct AdvancedSlicer {
     height: u32,
 }
 
-/// Computes the number of bytes per row, aligned to wgpu's required 256-byte alignment.
-fn aligned_bytes_per_row(width: u32) -> u32 {
-    let unaligned = width * BYTES_PER_PIXEL;
-    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    unaligned.div_ceil(align) * align
-}
-
 impl AdvancedSlicer {
     /// Creates a new slicer with all GPU pipelines and textures at the given resolution.
     pub fn new(gpu: &GpuContext, width: u32, height: u32) -> Result<Self> {
@@ -101,17 +58,17 @@ impl AdvancedSlicer {
         // Load shaders
         let intersection_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("intersection-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/intersection.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/intersection.wgsl").into()),
         });
 
         let slice_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("slice-extract-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/slice_extract.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/slice_extract.wgsl").into()),
         });
 
         let erode_dilate_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("erode-dilate-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/erode_dilate.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/erode_dilate.wgsl").into()),
         });
 
         // Vertex buffer layout: position(vec3) + normal(vec3)
@@ -719,56 +676,5 @@ impl AdvancedSlicer {
     /// Returns the height of the slice output in pixels.
     pub fn height(&self) -> u32 {
         self.height
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    /// Parses a WGSL shader and validates it using naga, returning any error.
-    fn validate_wgsl(source: &str, label: &str) {
-        let module = naga::front::wgsl::parse_str(source)
-            .unwrap_or_else(|e| panic!("{label}: WGSL parse error: {e}"));
-
-        let mut validator = naga::valid::Validator::new(
-            naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::all(),
-        );
-        validator
-            .validate(&module)
-            .unwrap_or_else(|e| panic!("{label}: WGSL validation error: {e}"));
-    }
-
-    #[test]
-    fn intersection_shader_is_valid_wgsl() {
-        validate_wgsl(
-            include_str!("shaders/intersection.wgsl"),
-            "intersection.wgsl",
-        );
-    }
-
-    #[test]
-    fn slice_extract_shader_is_valid_wgsl() {
-        validate_wgsl(
-            include_str!("shaders/slice_extract.wgsl"),
-            "slice_extract.wgsl",
-        );
-    }
-
-    #[test]
-    fn erode_dilate_shader_is_valid_wgsl() {
-        validate_wgsl(
-            include_str!("shaders/erode_dilate.wgsl"),
-            "erode_dilate.wgsl",
-        );
-    }
-
-    #[test]
-    fn boolean_ops_shader_is_valid_wgsl() {
-        validate_wgsl(include_str!("shaders/boolean_ops.wgsl"), "boolean_ops.wgsl");
-    }
-
-    #[test]
-    fn overhang_shader_is_valid_wgsl() {
-        validate_wgsl(include_str!("shaders/overhang.wgsl"), "overhang.wgsl");
     }
 }
