@@ -5,8 +5,8 @@
 //! contouring (cell, face, and edge procedures).
 
 use super::indicators::{
-    CELL_PROC_EDGE_MASK, CELL_PROC_FACE_MASK, EDGE_PROC_EDGE_MASK, FACE_NODE_ORDER,
-    FACE_PROC_EDGE_MASK, FACE_PROC_FACE_MASK, PositionCode, min_offset_subdivision,
+    CELL_PROC_EDGE_MASK, CELL_PROC_FACE_MASK, FACE_PROC_EDGE_MASK, FACE_PROC_FACE_MASK,
+    PositionCode, encode_cell, min_offset_subdivision,
 };
 use super::mesh_output::IsoMesh;
 use super::qef::QefSolver;
@@ -554,14 +554,13 @@ impl OctreeNode {
         }
 
         // Subdivide into 4 sub-faces
-        for i in 0..4 {
-            let mask = FACE_PROC_FACE_MASK[dir][i];
+        // C++ always picks sub0 from nodes[0] and sub1 from nodes[1]
+        for mask in &FACE_PROC_FACE_MASK[dir] {
             let child0_idx = mask[0];
             let child1_idx = mask[1];
 
-            let sub0: &OctreeNode = Self::get_child_or_self(nodes[FACE_NODE_ORDER[i]], child0_idx);
-            let sub1: &OctreeNode =
-                Self::get_child_or_self(nodes[1 - FACE_NODE_ORDER[i]], child1_idx);
+            let sub0: &OctreeNode = Self::get_child_or_self(nodes[0], child0_idx);
+            let sub1: &OctreeNode = Self::get_child_or_self(nodes[1], child1_idx);
 
             Self::contour_face(
                 &[sub0, sub1],
@@ -627,15 +626,22 @@ impl OctreeNode {
             return;
         }
 
-        // Subdivide
-        for mask in &EDGE_PROC_EDGE_MASK[dir] {
+        // Subdivide: compute child indices dynamically from quadDir1, quadDir2
+        // matching C++ exactly: code[dir]=i, code[quadDir1]=(3-j)%2, code[quadDir2]=(3-j)/2
+        let quad_dir1 = 3 - dir - quad_dir2;
+        for i in 0..2_i32 {
             let mut sub_nodes: [&OctreeNode; 4] = [nodes[0], nodes[1], nodes[2], nodes[3]];
 
-            for j in 0..4 {
-                if !nodes[j].is_leaf
-                    && let Some(c) = &nodes[j].children[mask[j]]
-                {
-                    sub_nodes[j] = c;
+            for j in 0..4_i32 {
+                if !nodes[j as usize].is_leaf {
+                    let mut code = glam::IVec3::ZERO;
+                    code[dir] = i;
+                    code[quad_dir1] = (3 - j) % 2;
+                    code[quad_dir2] = (3 - j) / 2;
+                    let child_idx = encode_cell(code);
+                    if let Some(c) = &nodes[j as usize].children[child_idx] {
+                        sub_nodes[j as usize] = c;
+                    }
                 }
             }
 
