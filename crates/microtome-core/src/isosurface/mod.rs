@@ -10,6 +10,7 @@ pub mod qef;
 pub mod rectilinear_grid;
 pub mod scalar_field;
 pub mod vertex;
+pub mod volume_data;
 
 pub use indicators::PositionCode;
 pub use kdtree::KdTreeNode;
@@ -22,3 +23,4 @@ pub use scalar_field::{
     Torus, TransformedField, Union, UnionList,
 };
 pub use vertex::Vertex;
+pub use volume_data::VolumeData;
