@@ -4,7 +4,6 @@
 //! to composite the offscreen target into egui's render pass.
 
 use glam::Mat4;
-use wgpu::util::DeviceExt;
 
 /// Offscreen render target format.
 const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -17,16 +16,6 @@ const UNIFORM_ALIGN: u64 = 256;
 
 /// Default mesh color: light gray.
 const DEFAULT_COLOR: [f32; 4] = [0.812, 0.812, 0.812, 1.0];
-
-/// A single vertex for line/wireframe rendering (position + color).
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct LineVertex {
-    /// Vertex position in world space.
-    pub position: [f32; 3],
-    /// Vertex color (RGBA).
-    pub color: [f32; 4],
-}
 
 /// Uniform data for a single draw call, padded to 256 bytes.
 #[repr(C)]
@@ -63,12 +52,10 @@ pub struct MeshBuffers {
 /// offscreen target, then blits the result to egui's render pass.
 pub struct ViewportRenderer {
     phong_pipeline: wgpu::RenderPipeline,
-    line_pipeline: wgpu::RenderPipeline,
+    wireframe_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     max_draw_calls: u32,
-    line_vertex_buffer: wgpu::Buffer,
-    line_vertex_count: u32,
 
     color_texture: wgpu::Texture,
     color_view: wgpu::TextureView,
@@ -191,20 +178,15 @@ impl ViewportRenderer {
             cache: None,
         });
 
-        // --- Line pipeline ---
-        let line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("line_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/line.wgsl").into()),
-        });
-
-        let line_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("line_pipeline"),
+        // --- Wireframe pipeline (same as phong but PolygonMode::Line with depth bias) ---
+        let wireframe_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("wireframe_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &line_shader,
+                module: &phong_shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<LineVertex>() as u64,
+                    array_stride: std::mem::size_of::<microtome_core::MeshVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
                         wgpu::VertexAttribute {
@@ -213,7 +195,7 @@ impl ViewportRenderer {
                             shader_location: 0,
                         },
                         wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x4,
+                            format: wgpu::VertexFormat::Float32x3,
                             offset: 12,
                             shader_location: 1,
                         },
@@ -222,17 +204,30 @@ impl ViewportRenderer {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineList,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                polygon_mode: wgpu::PolygonMode::Line,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState {
+                    constant: -2,
+                    slope_scale: -1.0,
+                    clamp: 0.0,
+                },
+            }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &line_shader,
+                module: &phong_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: OFFSCREEN_FORMAT,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -319,21 +314,12 @@ impl ViewportRenderer {
         let blit_bind_group =
             create_blit_bind_group(device, &blit_bind_group_layout, &color_view, &blit_sampler);
 
-        let line_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("line_vertices"),
-            size: 4,
-            usage: wgpu::BufferUsages::VERTEX,
-            mapped_at_creation: false,
-        });
-
         Self {
             phong_pipeline,
-            line_pipeline,
+            wireframe_pipeline,
             uniform_buffer,
             uniform_bind_group,
             max_draw_calls,
-            line_vertex_buffer,
-            line_vertex_count: 0,
             color_texture,
             color_view,
             depth_texture,
@@ -345,62 +331,6 @@ impl ViewportRenderer {
             blit_bind_group_layout,
             blit_sampler,
         }
-    }
-
-    /// Updates the wireframe line vertex buffer from mesh triangle edges.
-    pub fn update_wireframe_lines(
-        &mut self,
-        device: &wgpu::Device,
-        mesh: &microtome_core::isosurface::IsoMesh,
-    ) {
-        let color: [f32; 4] = [0.0, 0.0, 0.0, 0.6];
-        let tri_count = mesh.indices.len() / 3;
-        let mut vertices = Vec::with_capacity(tri_count * 6);
-
-        for i in 0..tri_count {
-            let i0 = mesh.indices[i * 3] as usize;
-            let i1 = mesh.indices[i * 3 + 1] as usize;
-            let i2 = mesh.indices[i * 3 + 2] as usize;
-
-            let p0 = mesh.positions[i0];
-            let p1 = mesh.positions[i1];
-            let p2 = mesh.positions[i2];
-
-            vertices.push(LineVertex {
-                position: [p0.x, p0.y, p0.z],
-                color,
-            });
-            vertices.push(LineVertex {
-                position: [p1.x, p1.y, p1.z],
-                color,
-            });
-            vertices.push(LineVertex {
-                position: [p1.x, p1.y, p1.z],
-                color,
-            });
-            vertices.push(LineVertex {
-                position: [p2.x, p2.y, p2.z],
-                color,
-            });
-            vertices.push(LineVertex {
-                position: [p2.x, p2.y, p2.z],
-                color,
-            });
-            vertices.push(LineVertex {
-                position: [p0.x, p0.y, p0.z],
-                color,
-            });
-        }
-
-        self.line_vertex_count = vertices.len() as u32;
-        if vertices.is_empty() {
-            return;
-        }
-        self.line_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("line_vertices"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
     }
 
     /// Renders the scene to the offscreen target with depth testing.
@@ -514,12 +444,14 @@ impl ViewportRenderer {
                 pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
             }
 
-            // Draw wireframe lines.
-            if show_wireframe && self.line_vertex_count > 0 {
-                pass.set_pipeline(&self.line_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[0]);
-                pass.set_vertex_buffer(0, self.line_vertex_buffer.slice(..));
-                pass.draw(0..self.line_vertex_count, 0..1);
+            // Draw wireframe overlay using PolygonMode::Line on the same mesh.
+            if show_wireframe && let Some(mesh_buf) = mesh {
+                let offset = UNIFORM_ALIGN as u32;
+                pass.set_pipeline(&self.wireframe_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
+                pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
+                pass.set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
             }
         }
     }

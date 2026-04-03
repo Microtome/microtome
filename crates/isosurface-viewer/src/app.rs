@@ -56,10 +56,6 @@ pub struct IsosurfaceApp {
     octree_depth: u32,
     show_wireframe: bool,
     needs_rebuild: bool,
-    /// Cached iso mesh for wireframe generation.
-    cached_iso_mesh: Option<IsoMesh>,
-    /// Whether the renderer needs updated wireframe data.
-    wireframe_dirty: bool,
     /// Receiver for async build results.
     build_rx: Option<mpsc::Receiver<BuildResult>>,
     /// Whether a build is currently in progress.
@@ -91,8 +87,6 @@ impl IsosurfaceApp {
             octree_depth: 8,
             show_wireframe: false,
             needs_rebuild: true,
-            cached_iso_mesh: None,
-            wireframe_dirty: false,
             build_rx: None,
             building: false,
             build_start: None,
@@ -222,12 +216,8 @@ impl IsosurfaceApp {
                             index_count: mesh_data.indices.len() as u32,
                         }),
                     });
-
-                    self.cached_iso_mesh = Some(result.mesh);
-                    self.wireframe_dirty = true;
                 } else {
                     self.gpu_mesh = None;
-                    self.cached_iso_mesh = None;
                 }
 
                 self.building = false;
@@ -242,7 +232,6 @@ impl IsosurfaceApp {
                 log::info!("Build completed with no sign changes (empty mesh)");
                 self.triangle_count = 0;
                 self.gpu_mesh = None;
-                self.cached_iso_mesh = None;
                 self.building = false;
                 self.build_rx = None;
                 self.build_start = None;
@@ -266,22 +255,6 @@ impl eframe::App for IsosurfaceApp {
             }
             // Keep repainting while building so we see progress.
             ui.ctx().request_repaint();
-        }
-
-        // Update wireframe if needed.
-        if self.wireframe_dirty {
-            if let Some(ref iso_mesh) = self.cached_iso_mesh
-                && let Some(render_state) = frame.wgpu_render_state()
-            {
-                let mut renderer_guard = render_state.renderer.write();
-                if let Some(renderer) = renderer_guard
-                    .callback_resources
-                    .get_mut::<ViewportRenderer>()
-                {
-                    renderer.update_wireframe_lines(&render_state.device, iso_mesh);
-                }
-            }
-            self.wireframe_dirty = false;
         }
 
         egui::Panel::left("controls")
