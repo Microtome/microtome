@@ -4,10 +4,13 @@
 //! Each grid represents an axis-aligned cell that stores QEF data, corner signs,
 //! connected component information, and solved vertex positions.
 
+use std::collections::BTreeMap;
+
 use glam::Vec3;
 
 use super::indicators::{
-    EDGE_MAP, EDGE_TEST_NODE_ORDER, PositionCode, code_to_pos, decode_cell, encode_cell, quad_index,
+    CELL_PROC_FACE_MASK, EDGE_MAP, PositionCode, code_to_pos, decode_cell, encode_cell,
+    opposite_quad_index, quad_index, symmetry_quad_index,
 };
 use super::mesh_output::IsoMesh;
 use super::qef::QefSolver;
@@ -102,8 +105,13 @@ impl RectilinearGrid {
         }
     }
 
-    /// Solves a QEF and writes the result into a vertex, clamping the position
-    /// to the cell defined by `min_code`..`max_code`.
+    /// Solves a QEF and writes the result into a vertex.
+    ///
+    /// The bounds are expanded by half the cell extent in each direction.
+    /// If the solved position falls outside the expanded bounds, falls back
+    /// to the unclamped mass point. Matches C++ `solve()` exactly.
+    ///
+    /// Public alias: [`solve_qef_pub`](Self::solve_qef_pub).
     fn solve_qef(
         qef: &mut QefSolver,
         vertex: &mut Vertex,
@@ -112,18 +120,33 @@ impl RectilinearGrid {
         unit_size: f32,
     ) {
         let (mut pos, error) = qef.solve();
-        let min_pos = code_to_pos(min_code, unit_size);
-        let max_pos = code_to_pos(max_code, unit_size);
-        pos = pos.clamp(min_pos, max_pos);
-
-        // If error is too large, fall back to the mass point
-        if error > 1.0e-2 {
-            let mp = qef.mass_point();
-            pos = mp.clamp(min_pos, max_pos);
+        let extends = code_to_pos(max_code - min_code, unit_size) * 0.5;
+        let min_pos = code_to_pos(min_code, unit_size) - extends;
+        let max_pos = code_to_pos(max_code, unit_size) + extends;
+        if pos.x < min_pos.x
+            || pos.x > max_pos.x
+            || pos.y < min_pos.y
+            || pos.y > max_pos.y
+            || pos.z < min_pos.z
+            || pos.z > max_pos.z
+        {
+            pos = qef.mass_point();
         }
 
         vertex.hermite_p = pos;
         vertex.error = error;
+    }
+
+    /// Public version of [`solve_qef`](Self::solve_qef) for use by callers
+    /// outside this module (octree, kdtree).
+    pub fn solve_qef_pub(
+        qef: &mut QefSolver,
+        vertex: &mut Vertex,
+        min_code: PositionCode,
+        max_code: PositionCode,
+        unit_size: f32,
+    ) {
+        Self::solve_qef(qef, vertex, min_code, max_code, unit_size);
     }
 
     /// Samples the scalar field at each of the 8 corners and records their signs.
@@ -146,54 +169,69 @@ impl RectilinearGrid {
         self.is_signed = has_inside && has_outside;
     }
 
-    /// Computes connected components among same-sign corners using union-find.
+    /// Computes connected components among inside corners using union-find.
     ///
-    /// Two corners sharing an edge and having the same sign belong to the same
-    /// component. Each corner is assigned a component index in
-    /// `component_indices`.
+    /// Only corners with `corner_signs[i] != 0` (inside corners) participate.
+    /// Two inside corners sharing an edge belong to the same component.
+    /// Outside corners get `component_indices[i] = -1`.
+    ///
+    /// This matches the C++ `calCornerComponents` exactly: it uses
+    /// `cellProcFaceMask` (12 edges) for the union step, then reorders
+    /// component indices sequentially starting from 0.
     pub fn cal_corner_components(&mut self) {
-        // Union-find parent array, initially each corner is its own root
-        let mut parent: [usize; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+        debug_assert!(self.components.is_empty());
 
-        // Find with path compression
-        fn find(parent: &mut [usize; 8], mut x: usize) -> usize {
-            while parent[x] != x {
-                parent[x] = parent[parent[x]];
-                x = parent[x];
+        // clusters[i] tracks the set of corners merged with corner i.
+        // component_indices[i] tracks the current root for corner i.
+        let mut clusters: [Vec<usize>; 8] = Default::default();
+
+        for (i, cluster) in clusters.iter_mut().enumerate() {
+            if self.corner_signs[i] != 0 {
+                cluster.push(i);
+                self.component_indices[i] = i as i8;
             }
-            x
         }
 
-        // Union corners sharing an edge with the same sign
-        for edge in &EDGE_MAP {
-            let c0 = edge[0];
-            let c1 = edge[1];
-            if self.corner_signs[c0] == self.corner_signs[c1] {
-                let r0 = find(&mut parent, c0);
-                let r1 = find(&mut parent, c1);
-                if r0 != r1 {
-                    parent[r1] = r0;
+        // Union using the 12 edges from CELL_PROC_FACE_MASK (matches C++ exactly)
+        for mask in &CELL_PROC_FACE_MASK {
+            let c1 = mask[0];
+            let c2 = mask[1];
+            if self.corner_signs[c1] == self.corner_signs[c2] && self.corner_signs[c2] != 0 {
+                let co1 = self.component_indices[c1] as usize;
+                let co2 = self.component_indices[c2] as usize;
+                // Merge co2's cluster into co1
+                let c2_members: Vec<usize> = clusters[co2].clone();
+                for &comp in &c2_members {
+                    clusters[co1].push(comp);
+                }
+                // Update all members of co1's cluster to point to co1
+                let co1_members: Vec<usize> = clusters[co1].clone();
+                for &comp in &co1_members {
+                    self.component_indices[comp] = co1 as i8;
                 }
             }
         }
 
-        // Assign component indices: map each root to a sequential index
-        let mut component_count: i8 = 0;
-        let mut root_to_component: [i8; 8] = [-1; 8];
+        // Reorder: map root indices to sequential 0, 1, 2, ...
+        // Outside corners (corner_signs == 0) get -1.
+        let mut reorder_map: [i8; 8] = [-1; 8];
+        let mut new_order: i8 = 0;
 
         for i in 0..8 {
-            let root = find(&mut parent, i);
-            if root_to_component[root] < 0 {
-                root_to_component[root] = component_count;
-                component_count += 1;
+            if self.corner_signs[i] != 0 && reorder_map[self.component_indices[i] as usize] == -1 {
+                reorder_map[self.component_indices[i] as usize] = new_order;
+                new_order += 1;
             }
-            self.component_indices[i] = root_to_component[root];
         }
 
-        self.components
-            .resize_with(component_count as usize, QefSolver::new);
+        for i in 0..8 {
+            self.component_indices[i] = reorder_map[self.component_indices[i] as usize];
+        }
+
         self.vertices
-            .resize_with(component_count as usize, Vertex::default);
+            .resize_with(new_order as usize, Vertex::default);
+        self.components
+            .resize_with(new_order as usize, QefSolver::new);
     }
 
     /// Samples edge crossings to build QEF data for each connected component.
@@ -265,26 +303,24 @@ impl RectilinearGrid {
 
     /// Returns the component index for the edge between two corners.
     ///
-    /// If the corners belong to different components, returns `-1`.
-    /// Otherwise returns the component index of the "inside" corner.
+    /// Returns the component index of whichever corner is inside (sign != 0).
+    /// Assumes the caller has verified a sign change exists on this edge.
     pub fn edge_component_index(&self, corner1: usize, corner2: usize) -> i8 {
-        if self.corner_signs[corner1] != self.corner_signs[corner2] {
-            // Sign change: return the inside corner's component
-            if self.corner_signs[corner1] == 1 {
-                self.component_indices[corner1]
-            } else {
-                self.component_indices[corner2]
-            }
+        if self.corner_signs[corner1] != 0 {
+            self.component_indices[corner1]
         } else {
-            -1
+            self.component_indices[corner2]
         }
     }
 
     /// Returns the component index for a face-edge configuration.
     ///
     /// Given a face direction, edge direction, face side, and edge side,
-    /// computes the two corners that share the edge and returns the
-    /// component index (or -1 if no sign change).
+    /// finds the inside corner's component along that face. First checks
+    /// corners on the given edge side, then falls back to the opposite
+    /// edge side. Returns -1 if no inside corner is found.
+    ///
+    /// Matches C++ `faceComponentIndex` exactly.
     pub fn face_component_index(
         &self,
         face_dir: usize,
@@ -292,23 +328,36 @@ impl RectilinearGrid {
         face_side: usize,
         edge_side: usize,
     ) -> i8 {
-        let other_dir = 3 - face_dir - edge_dir;
-        let mut code1 = glam::IVec3::ZERO;
-        let mut code2 = glam::IVec3::ZERO;
+        let mut component: i8 = -1;
+        let dir = 3 - face_dir - edge_dir;
 
-        code1[face_dir] = face_side as i32;
-        code2[face_dir] = face_side as i32;
+        // First pass: check corners on the given edge side
+        for i in 0..2 {
+            let mut code = glam::IVec3::ZERO;
+            code[face_dir] = face_side as i32;
+            code[edge_dir] = edge_side as i32;
+            code[dir] = i;
+            let corner = encode_cell(code);
+            if self.corner_signs[corner] > 0 {
+                component = self.component_indices[corner];
+            }
+        }
+        if component != -1 {
+            return component;
+        }
 
-        code1[edge_dir] = edge_side as i32;
-        code2[edge_dir] = edge_side as i32;
-
-        code1[other_dir] = 0;
-        code2[other_dir] = 1;
-
-        let c1 = encode_cell(code1);
-        let c2 = encode_cell(code2);
-
-        self.edge_component_index(c1, c2)
+        // Second pass: check corners on the opposite edge side
+        for i in 0..2 {
+            let mut code = glam::IVec3::ZERO;
+            code[face_dir] = face_side as i32;
+            code[edge_dir] = 1 - edge_side as i32;
+            code[dir] = i;
+            let corner = encode_cell(code);
+            if self.corner_signs[corner] > 0 {
+                component = self.component_indices[corner];
+            }
+        }
+        component
     }
 
     /// Checks whether two adjacent grids can be clustered (merged).
@@ -375,17 +424,20 @@ impl RectilinearGrid {
     /// Combines QEF data from two adjacent grids into an output grid.
     ///
     /// `dir` is the axis along which the grids are adjacent (0=X, 1=Y, 2=Z).
+    /// Sets the output grid's corner signs from the children, computes
+    /// corner components, then maps child component QEFs to output components.
+    ///
+    /// Matches C++ `combineAAGrid` logic: uses `cellProcFaceMask[dir*4+i]`
+    /// to find the 4 face edges, maps child component indices to output
+    /// component indices, then combines QEFs.
     pub fn combine_aa_grid(
         left: &RectilinearGrid,
         right: &RectilinearGrid,
         dir: usize,
         out: &mut RectilinearGrid,
-        unit_size: f32,
+        _unit_size: f32,
     ) {
-        out.all_qef = left.all_qef.clone();
-        out.all_qef.combine(&right.all_qef);
-
-        // Combine corner signs: take left for dir==0 side, right for dir==1 side
+        // Set corner signs from children: left provides dir==0 side, right provides dir==1 side
         for i in 0..8 {
             let corner = decode_cell(i);
             if corner[dir] == 0 {
@@ -397,52 +449,56 @@ impl RectilinearGrid {
 
         out.cal_corner_components();
 
-        // Distribute left/right component QEFs into the output components
-        for i in 0..8 {
-            let corner = decode_cell(i);
-            let out_comp = out.component_indices[i];
-            if out_comp < 0 {
-                continue;
-            }
-            let out_idx = out_comp as usize;
-            if out_idx >= out.components.len() {
-                continue;
-            }
+        // Build combine maps: for each of left[0] and right[1],
+        // maps output_component_index -> child_component_index
+        let mut combine_maps: [BTreeMap<usize, usize>; 2] = [BTreeMap::new(), BTreeMap::new()];
+        let grids: [&RectilinearGrid; 2] = [left, right];
 
-            if corner[dir] == 0 {
-                let src_comp = left.component_indices[i];
-                if src_comp >= 0 && (src_comp as usize) < left.components.len() {
-                    out.components[out_idx].combine(&left.components[src_comp as usize]);
+        for i in 0..4 {
+            let mask = &CELL_PROC_FACE_MASK[dir * 4 + i];
+            // Find output component index c by checking which output corner
+            // on this edge is inside
+            let mut c: i8 = -1;
+            for &corner_idx in mask.iter().take(2) {
+                if out.corner_signs[corner_idx] != 0 {
+                    c = out.component_indices[corner_idx];
+                    break;
                 }
-            } else {
-                let src_comp = right.component_indices[i];
-                if src_comp >= 0 && (src_comp as usize) < right.components.len() {
-                    out.components[out_idx].combine(&right.components[src_comp as usize]);
+            }
+            if c == -1 {
+                continue;
+            }
+            let out_c = c as usize;
+
+            // For each child (left, right), find the child component
+            for (j, child) in grids.iter().enumerate() {
+                for &corner_idx in mask.iter().take(2) {
+                    if child.corner_signs[corner_idx] != 0 {
+                        let child_c = child.component_indices[corner_idx];
+                        if child_c >= 0 && (child_c as usize) < child.components.len() {
+                            combine_maps[j].insert(out_c, child_c as usize);
+                        }
+                        break;
+                    }
                 }
             }
         }
 
-        // Solve each component
-        for i in 0..out.components.len() {
-            out.solve_component(i, unit_size);
+        // Combine child QEFs into output components
+        for i in 0..2 {
+            for (&out_c, &child_c) in &combine_maps[i] {
+                if out_c < out.components.len() && child_c < grids[i].components.len() {
+                    out.components[out_c].combine(&grids[i].components[child_c]);
+                }
+            }
         }
 
-        // Solve the combined approximate vertex
-        let min_code = out.min_code;
-        let max_code = out.max_code;
-        Self::solve_qef(
-            &mut out.all_qef,
-            &mut out.approximate,
-            min_code,
-            max_code,
-            unit_size,
-        );
-
+        // Set is_signed
         out.is_signed = {
             let mut has_in = false;
             let mut has_out = false;
             for &s in &out.corner_signs {
-                if s == 1 {
+                if s != 0 {
                     has_in = true;
                 } else {
                     has_out = true;
@@ -508,10 +564,14 @@ impl RectilinearGrid {
 /// Checks whether an edge between grid holders has a sign change.
 ///
 /// Examines the 4 grid holders surrounding an edge (identified by the two
-/// quad directions) and returns sign/code information if a sign change exists.
+/// quad directions). Determines the min/max endpoints along the edge direction,
+/// samples the scalar field at both endpoints, and returns `None` if no sign
+/// change exists.
 ///
-/// Returns `Some((sign, code_min, code_max))` if a sign change is detected,
-/// or `None` if all corners share the same sign.
+/// Returns `Some((side, min_end, max_end))` where `side` is 0 or 1 indicating
+/// which end is positive.
+///
+/// Matches C++ `checkSign` exactly.
 pub fn check_sign(
     nodes: &[&dyn HasGrid],
     quad_dir1: usize,
@@ -519,137 +579,182 @@ pub fn check_sign(
     field: &dyn ScalarField,
     unit_size: f32,
 ) -> Option<(i32, PositionCode, PositionCode)> {
-    let _ = field; // reserved for future use
+    let dir = 3 - quad_dir1 - quad_dir2;
 
-    let mut min_code = PositionCode::splat(i32::MAX);
-    let mut max_code = PositionCode::splat(i32::MIN);
-
-    // The edge direction is the axis not in quad_dir1 or quad_dir2
-    let edge_dir = 3 - quad_dir1 - quad_dir2;
-
-    let mut sign: Option<i32> = None;
-    let mut has_change = false;
-
-    for (i, order) in EDGE_TEST_NODE_ORDER.iter().enumerate() {
-        let node = nodes[i];
-        let grid = node.grid();
-
-        let (p1, p2) = quad_index(quad_dir1, quad_dir2, order[0]);
-
-        let s1 = grid.corner_signs[p1] as i32;
-        let s2 = grid.corner_signs[p2] as i32;
-
-        if s1 != s2 {
-            has_change = true;
-        }
-
-        if let Some(prev) = sign
-            && prev != s1
-        {
-            has_change = true;
-        }
-        sign = Some(s1);
-
-        // Track bounding box across all participating grids
-        min_code = min_code.min(grid.min_code);
-        max_code = max_code.max(grid.max_code);
-
-        let _ = (p2, edge_dir, unit_size);
-    }
-
-    if has_change {
-        Some((sign.unwrap_or(0), min_code, max_code))
+    // Determine initial min_end/max_end based on whether nodes[0] != nodes[1]
+    let (mut min_end, mut max_end) = if !std::ptr::eq(nodes[0].grid(), nodes[1].grid()) {
+        let code = nodes[0].grid().max_code;
+        (code, code)
     } else {
-        None
+        let code = nodes[3].grid().min_code;
+        (code, code)
+    };
+
+    // Compute max along dir from all 4 nodes' maxCodes
+    max_end[dir] = nodes[0].grid().max_code[dir]
+        .min(nodes[1].grid().max_code[dir])
+        .min(nodes[2].grid().max_code[dir])
+        .min(nodes[3].grid().max_code[dir]);
+
+    // Compute min along dir from all 4 nodes' minCodes
+    min_end[dir] = nodes[0].grid().min_code[dir]
+        .max(nodes[1].grid().min_code[dir])
+        .max(nodes[2].grid().min_code[dir])
+        .max(nodes[3].grid().min_code[dir]);
+
+    if min_end[dir] >= max_end[dir] {
+        return None;
     }
+
+    let v1 = field.index(min_end, unit_size);
+    let v2 = field.index(max_end, unit_size);
+
+    // Same sign at both endpoints: no sign change
+    if (v1 >= 0.0 && v2 >= 0.0) || (v1 < 0.0 && v2 < 0.0) {
+        return None;
+    }
+
+    let side = if v2 >= 0.0 && v1 <= 0.0 { 0 } else { 1 };
+
+    Some((side, min_end, max_end))
 }
 
 /// Generates a quad (two triangles) from 4 grid holders surrounding an edge.
 ///
-/// The quad connects the solved vertices from each of the 4 grids. The winding
-/// order is determined by the sign of the edge crossing.
+/// Matches C++ `generateQuad` exactly:
+/// - Calls `check_sign` to get `edge_side`, `min_end`, `max_end`
+/// - For each node, checks if `nodes[i] != nodes[opposite_quad_index(i)]`
+///   - If different: uses `edgeComponentIndex` via `quad_index(symmetryQuadIndex(i))`
+///   - If same: uses `faceComponentIndex`
+/// - Builds polygon with 2-4 vertices based on same-node checks
+/// - Deduplicates, returns if < 3 unique
+/// - Fan triangulates
+#[allow(clippy::too_many_arguments)]
 pub fn generate_quad(
     nodes: &[&dyn HasGrid; 4],
     quad_dir1: usize,
     quad_dir2: usize,
     mesh: &mut IsoMesh,
     field: &dyn ScalarField,
-    threshold: f32,
+    _threshold: f32,
     unit_size: f32,
 ) {
-    // Find the component index for each node
-    let edge_dir = 3 - quad_dir1 - quad_dir2;
-    let mut vertex_indices: [Option<usize>; 4] = [None; 4];
-    let mut vertices_ref: Vec<Option<usize>> = Vec::with_capacity(4);
+    let check = check_sign(
+        &[nodes[0], nodes[1], nodes[2], nodes[3]],
+        quad_dir1,
+        quad_dir2,
+        field,
+        unit_size,
+    );
+    let (edge_side, min_end, max_end) = match check {
+        Some(v) => v,
+        None => return,
+    };
 
-    for (i, order) in EDGE_TEST_NODE_ORDER.iter().enumerate() {
-        let grid = nodes[i].grid();
-        let (p1, p2) = quad_index(quad_dir1, quad_dir2, order[0]);
-        let comp_idx = grid.edge_component_index(p1, p2);
+    let line_dir = 3 - quad_dir1 - quad_dir2;
+    let mut comp_indices: [i8; 4] = [-1; 4];
 
-        if comp_idx >= 0 && (comp_idx as usize) < grid.vertices.len() {
-            vertex_indices[i] = Some(comp_idx as usize);
-            vertices_ref.push(Some(i));
+    for i in 0..4 {
+        let opp = opposite_quad_index(i);
+        if !std::ptr::eq(nodes[i].grid(), nodes[opp].grid()) {
+            // Different nodes: use edgeComponentIndex
+            let (c1, c2) = quad_index(quad_dir1, quad_dir2, symmetry_quad_index(i));
+            comp_indices[i] = nodes[i].grid().edge_component_index(c1, c2);
         } else {
-            vertices_ref.push(None);
+            // Same node: use faceComponentIndex
+            comp_indices[i] = nodes[i].grid().face_component_index(
+                quad_dir2,
+                line_dir,
+                1 - i / 2,
+                edge_side as usize,
+            );
         }
-        let _ = (edge_dir, threshold);
-    }
-
-    // Ensure all 4 vertices exist
-    for vi in &vertex_indices {
-        if vi.is_none() {
+        if comp_indices[i] == -1 {
             return;
         }
     }
 
-    // Get mutable access to emit vertices into the mesh
-    // We need to collect the vertex data first, then emit
-    let mut quad_verts: [Vertex; 4] = [
-        Vertex::default(),
-        Vertex::default(),
-        Vertex::default(),
-        Vertex::default(),
-    ];
+    // Build polygon: always include nodes[0], conditionally nodes[1],
+    // always nodes[3], conditionally nodes[2]
+    let mut polygons: Vec<(usize, usize)> = Vec::with_capacity(4); // (node_index, comp_index)
 
-    for i in 0..4 {
-        let grid = nodes[i].grid();
-        if let Some(comp_idx) = vertex_indices[i]
-            && comp_idx < grid.vertices.len()
-        {
-            quad_verts[i] = grid.vertices[comp_idx].clone();
+    polygons.push((0, comp_indices[0] as usize));
+    if !std::ptr::eq(nodes[0].grid(), nodes[1].grid()) {
+        polygons.push((1, comp_indices[1] as usize));
+    }
+    polygons.push((3, comp_indices[3] as usize));
+    if !std::ptr::eq(nodes[2].grid(), nodes[3].grid()) {
+        polygons.push((2, comp_indices[2] as usize));
+    }
+
+    // Deduplicate by checking vertex identity (pointer equality via grid + comp index)
+    // Use a set of (grid_ptr, comp_idx) pairs to detect duplicates
+    let mut unique_count = 0;
+    let mut seen: Vec<(*const RectilinearGrid, usize)> = Vec::with_capacity(4);
+    for &(ni, ci) in &polygons {
+        let key = (nodes[ni].grid() as *const RectilinearGrid, ci);
+        if !seen.contains(&key) {
+            seen.push(key);
+            unique_count += 1;
         }
     }
 
-    // Add vertices to the mesh if not already added (vertex_index == 0 and error >= 0 means uninitialized)
-    for vert in &mut quad_verts {
-        if vert.vertex_index == 0 && vert.error >= 0.0 {
-            mesh.add_vertex(vert, |p| field.normal(p));
+    if unique_count < 3 {
+        return;
+    }
+
+    // Collect vertex data
+    let mut verts: Vec<Vertex> = Vec::with_capacity(polygons.len());
+    for &(ni, ci) in &polygons {
+        let grid = nodes[ni].grid();
+        if ci < grid.vertices.len() {
+            verts.push(grid.vertices[ci].clone());
+        } else {
+            return;
         }
     }
 
-    // Determine winding order from the sign of the first node's relevant corner
-    let (p1, _p2) = quad_index(quad_dir1, quad_dir2, EDGE_TEST_NODE_ORDER[0][0]);
-    let flip = nodes[0].grid().corner_signs[p1] == 1;
+    // Intersection-free condition 2 check and optional reorder for 4-vertex polygons
+    let p1 = code_to_pos(min_end, unit_size);
+    let p2 = code_to_pos(max_end, unit_size);
 
-    // Simple fan triangulation (skip intersection-free path for initial port)
-    if flip {
-        mesh.add_triangle([&quad_verts[0], &quad_verts[1], &quad_verts[2]], |p| {
-            field.normal(p)
-        });
-        mesh.add_triangle([&quad_verts[0], &quad_verts[2], &quad_verts[3]], |p| {
-            field.normal(p)
-        });
-    } else {
-        mesh.add_triangle([&quad_verts[0], &quad_verts[2], &quad_verts[1]], |p| {
-            field.normal(p)
-        });
-        mesh.add_triangle([&quad_verts[0], &quad_verts[3], &quad_verts[2]], |p| {
-            field.normal(p)
-        });
+    let _condition2_failed =
+        RectilinearGrid::is_inter_free_condition2_failed(&fan_triangles(&verts), p1, p2);
+    if verts.len() > 3 {
+        let reverse_verts = vec![
+            verts[1].clone(),
+            verts[2].clone(),
+            verts[3].clone(),
+            verts[0].clone(),
+        ];
+        let reverse_condition2_failed = RectilinearGrid::is_inter_free_condition2_failed(
+            &fan_triangles(&reverse_verts),
+            p1,
+            p2,
+        );
+        if !reverse_condition2_failed {
+            // Swap to reverse order (matches C++ behavior)
+            verts = reverse_verts;
+        }
     }
 
-    let _ = unit_size;
+    // Fan triangulation
+    for i in 2..verts.len() {
+        mesh.add_triangle([&verts[0], &verts[i - 1], &verts[i]], |p| field.normal(p));
+    }
+}
+
+/// Helper to build fan-triangulated triangles from a polygon for intersection testing.
+fn fan_triangles(verts: &[Vertex]) -> Vec<(Vec3, Vec3, Vec3)> {
+    let mut tris = Vec::new();
+    for i in 2..verts.len() {
+        tris.push((
+            verts[0].hermite_p,
+            verts[i - 1].hermite_p,
+            verts[i].hermite_p,
+        ));
+    }
+    tris
 }
 
 #[cfg(test)]
@@ -702,18 +807,19 @@ mod tests {
     }
 
     #[test]
-    fn corner_components_same_sign_single_component() {
+    fn corner_components_all_outside_gives_no_components() {
         let qef = QefSolver::new();
         let mut grid = RectilinearGrid::new(IVec3::ZERO, IVec3::ONE, qef, 1.0);
         // All corners outside
         grid.corner_signs = [0; 8];
         grid.cal_corner_components();
 
-        // All corners should be in the same component
-        let first = grid.component_indices[0];
+        // All outside corners should have component index -1
         for &ci in &grid.component_indices {
-            assert_eq!(ci, first);
+            assert_eq!(ci, -1);
         }
+        assert!(grid.components.is_empty());
+        assert!(grid.vertices.is_empty());
     }
 
     #[test]
@@ -724,26 +830,24 @@ mod tests {
         grid.corner_signs = [1, 0, 0, 0, 0, 0, 0, 0];
         grid.cal_corner_components();
 
-        // Corner 0 should be in a different component from the connected outside corners
+        // Corner 0 should have a valid component (>= 0)
         let comp0 = grid.component_indices[0];
-        let comp1 = grid.component_indices[1];
-        assert_ne!(comp0, comp1);
+        assert!(comp0 >= 0);
+        // Only one inside component
+        assert_eq!(grid.components.len(), 1);
     }
 
     #[test]
-    fn edge_component_index_sign_change() {
+    fn edge_component_index_returns_inside_corner() {
         let qef = QefSolver::new();
         let mut grid = RectilinearGrid::new(IVec3::ZERO, IVec3::ONE, qef, 1.0);
         grid.corner_signs = [1, 0, 0, 0, 0, 0, 0, 0];
         grid.cal_corner_components();
 
-        // Edge (0, 4): corners 0 (inside) and 4 (outside) — sign change
+        // Edge (0, 4): corner 0 is inside (sign != 0), so returns its component
         let comp = grid.edge_component_index(0, 4);
         assert!(comp >= 0);
-
-        // Edge (1, 5): both outside — no sign change
-        let comp_no = grid.edge_component_index(1, 5);
-        assert_eq!(comp_no, -1);
+        assert_eq!(comp, grid.component_indices[0]);
     }
 
     #[test]

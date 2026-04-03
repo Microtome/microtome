@@ -42,20 +42,13 @@ impl HasGrid for OctreeNode {
 }
 
 impl OctreeNode {
-    /// Solves the approximate vertex from the all_qef, clamped to the cell.
+    /// Solves the approximate vertex using the grid's solve_qef.
     fn solve_approximate(grid: &mut RectilinearGrid, unit_size: f32) {
         let min_c = grid.min_code;
         let max_c = grid.max_code;
-        let (mut pos, error) = grid.all_qef.solve();
-        let min_pos = super::indicators::code_to_pos(min_c, unit_size);
-        let max_pos = super::indicators::code_to_pos(max_c, unit_size);
-        pos = pos.clamp(min_pos, max_pos);
-        if error > 1.0e-2 {
-            let mp = grid.all_qef.mass_point();
-            pos = mp.clamp(min_pos, max_pos);
-        }
-        grid.approximate.hermite_p = pos;
-        grid.approximate.error = error;
+        let mut qef = grid.all_qef.clone();
+        RectilinearGrid::solve_qef_pub(&mut qef, &mut grid.approximate, min_c, max_c, unit_size);
+        grid.all_qef = qef;
     }
 
     /// Recursively builds an octree from a scalar field.
