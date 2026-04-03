@@ -81,35 +81,22 @@ impl IsoMesh {
 
         let tri_count = self.indices.len() / 3;
         for i in 0..tri_count {
-            let i0 = self.indices[i * 3] as usize;
-            let i1 = self.indices[i * 3 + 1] as usize;
-            let i2 = self.indices[i * 3 + 2] as usize;
+            let p0 = self.positions[self.indices[i * 3] as usize];
+            let p1 = self.positions[self.indices[i * 3 + 1] as usize];
+            let p2 = self.positions[self.indices[i * 3 + 2] as usize];
 
-            let normal = self.normals[i0] + self.normals[i1] + self.normals[i2];
-
-            let c1_raw = self.positions[i0] - self.positions[i1];
-            let c2 = (self.positions[i0] - self.positions[i2]).normalize_or_zero();
-            let mut c1 = c1_raw.normalize_or_zero();
-
-            // Orthogonalize c1 against c2
-            c1 -= c1.dot(c2) * c2;
-            c1 = c1.normalize_or_zero();
-
-            // Project normal onto the plane perpendicular to c1 and c2
-            let mut n = normal;
-            n -= n.dot(c1) * c1;
-            n -= n.dot(c2) * c2;
+            let edge1 = p1 - p0;
+            let edge2 = p2 - p0;
+            let n = edge1.cross(edge2).normalize_or_zero();
 
             if n == Vec3::ZERO {
                 continue;
             }
-            n = n.normalize();
 
-            for j in 0..3 {
-                flat_normals.push(n);
-                flat_positions.push(self.positions[self.indices[i * 3 + j] as usize]);
-                flat_indices.push((3 * i + j) as u32);
-            }
+            let base = flat_positions.len() as u32;
+            flat_positions.extend_from_slice(&[p0, p1, p2]);
+            flat_normals.extend_from_slice(&[n, n, n]);
+            flat_indices.extend_from_slice(&[base, base + 1, base + 2]);
         }
 
         self.positions = flat_positions;

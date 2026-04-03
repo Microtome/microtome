@@ -333,7 +333,7 @@ impl eframe::App for IsosurfaceApp {
                         }
                     });
 
-                    if ui.button("Rebuild").clicked() || changed {
+                    if !self.building && (ui.button("Rebuild").clicked() || changed) {
                         self.needs_rebuild = true;
                     }
                 });

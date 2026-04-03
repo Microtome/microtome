@@ -13,17 +13,17 @@ const PHI_MIN: f32 = 0.01;
 const PHI_MAX: f32 = std::f32::consts::PI - 0.01;
 
 /// Minimum zoom distance.
-const RADIUS_MIN: f32 = 5.0;
+const RADIUS_MIN: f32 = 1.0;
 
 /// Maximum zoom distance.
-const RADIUS_MAX: f32 = 1000.0;
+const RADIUS_MAX: f32 = 500.0;
 
-/// Field of view in degrees, matching the original TypeScript implementation.
+/// Field of view in degrees.
 #[allow(dead_code)]
 const FOV_DEGREES: f32 = 37.0;
 
-/// Zoom amount per scroll event, matching the original 10-unit zoom.
-const SCROLL_ZOOM_STEP: f32 = 10.0;
+/// Zoom factor per scroll event (proportion of current radius).
+const SCROLL_ZOOM_FACTOR: f32 = 0.1;
 
 /// Orbit camera that rotates around a target point using spherical coordinates.
 ///
@@ -60,7 +60,7 @@ impl OrbitCamera {
         Self {
             theta: std::f32::consts::FRAC_PI_4,
             phi: std::f32::consts::FRAC_PI_3,
-            radius: 200.0,
+            radius: 16.0,
             target: Vec3::ZERO,
             dragging: false,
             drag_start_theta: 0.0,
@@ -164,14 +164,10 @@ impl OrbitCamera {
             self.target += (-right * delta.x + up * delta.y) * pan_speed;
         }
 
-        // Handle scroll to zoom
+        // Handle scroll to zoom (proportional to current distance)
         let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
         if scroll_delta.abs() > 0.0 {
-            let zoom = if scroll_delta > 0.0 {
-                SCROLL_ZOOM_STEP
-            } else {
-                -SCROLL_ZOOM_STEP
-            };
+            let zoom = scroll_delta.signum() * self.radius * SCROLL_ZOOM_FACTOR;
             self.radius = (self.radius - zoom).clamp(RADIUS_MIN, RADIUS_MAX);
         }
     }
@@ -196,15 +192,14 @@ mod tests {
     fn default_camera_position() {
         let cam = OrbitCamera::new();
         let eye = cam.eye_position();
-        // With theta=PI/4, phi=PI/3, radius=200:
-        // x = 200 * sin(PI/3) * cos(PI/4) = 200 * (sqrt(3)/2) * (sqrt(2)/2)
-        // y = 200 * sin(PI/3) * sin(PI/4) = same as x
-        // z = 200 * cos(PI/3) = 200 * 0.5 = 100
+        // With theta=PI/4, phi=PI/3, radius=16:
+        let r = 16.0_f32;
         let expected_xy =
-            200.0 * (std::f32::consts::FRAC_PI_3).sin() * (std::f32::consts::FRAC_PI_4).cos();
+            r * (std::f32::consts::FRAC_PI_3).sin() * (std::f32::consts::FRAC_PI_4).cos();
+        let expected_z = r * (std::f32::consts::FRAC_PI_3).cos();
         assert!((eye.x - expected_xy).abs() < 1e-4);
         assert!((eye.y - expected_xy).abs() < 1e-4);
-        assert!((eye.z - 100.0).abs() < 1e-4);
+        assert!((eye.z - expected_z).abs() < 1e-4);
     }
 
     #[test]
