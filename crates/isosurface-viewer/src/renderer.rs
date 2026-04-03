@@ -178,12 +178,17 @@ impl ViewportRenderer {
             cache: None,
         });
 
-        // --- Wireframe pipeline (same as phong but PolygonMode::Line with depth bias) ---
+        // --- Wireframe pipeline (flat red, PolygonMode::Line with depth bias) ---
+        let wireframe_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("wireframe_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/wireframe.wgsl").into()),
+        });
+
         let wireframe_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("wireframe_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &phong_shader,
+                module: &wireframe_shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<microtome_core::MeshVertex>() as u64,
@@ -223,7 +228,7 @@ impl ViewportRenderer {
             }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &phong_shader,
+                module: &wireframe_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: OFFSCREEN_FORMAT,
