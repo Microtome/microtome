@@ -16,6 +16,25 @@ fn main() {
             .with_inner_size([1280.0, 720.0])
             .with_title("Isosurface Viewer"),
         renderer: eframe::Renderer::Wgpu,
+        wgpu_options: egui_wgpu::WgpuConfiguration {
+            wgpu_setup: egui_wgpu::WgpuSetup::CreateNew({
+                let mut setup = egui_wgpu::WgpuSetupCreateNew::without_display_handle();
+                setup.device_descriptor = std::sync::Arc::new(|adapter| {
+                    let base_limits = if adapter.get_info().backend == wgpu::Backend::Gl {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    };
+                    wgpu::DeviceDescriptor {
+                        required_features: wgpu::Features::POLYGON_MODE_LINE,
+                        required_limits: base_limits,
+                        ..Default::default()
+                    }
+                });
+                setup
+            }),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
