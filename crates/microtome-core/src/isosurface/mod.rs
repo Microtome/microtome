@@ -3,6 +3,7 @@
 //! Port of the KdtreeISO library: discrete k-d tree hierarchy for isosurface extraction.
 
 pub mod indicators;
+pub mod kdtree;
 pub mod mesh_output;
 pub mod octree;
 pub mod qef;
@@ -11,6 +12,7 @@ pub mod scalar_field;
 pub mod vertex;
 
 pub use indicators::PositionCode;
+pub use kdtree::KdTreeNode;
 pub use mesh_output::IsoMesh;
 pub use octree::OctreeNode;
 pub use qef::QefSolver;
