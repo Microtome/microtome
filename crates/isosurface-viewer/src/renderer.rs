@@ -172,7 +172,7 @@ impl ViewportRenderer {
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None, // DC output has mixed winding; render both faces
                 ..Default::default()
             },
             depth_stencil: depth_stencil.clone(),

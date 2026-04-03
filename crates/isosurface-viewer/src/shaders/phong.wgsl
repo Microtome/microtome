@@ -43,8 +43,12 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let n = normalize(in.world_normal);
+fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    // Flip normal for back-facing fragments (DC output has mixed winding)
+    var n = normalize(in.world_normal);
+    if (!front_facing) {
+        n = -n;
+    }
 
     // Ambient: #777777
     let ambient_color = vec3<f32>(0.467, 0.467, 0.467);
