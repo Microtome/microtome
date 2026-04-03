@@ -573,28 +573,24 @@ impl OctreeNode {
             );
         }
 
-        // Process 4 edges along this face
+        // Process 4 edges along this face.
+        // C++ uses faceNodeOrder = {0, 0, 1, 1} for node selection:
+        // e0, e1 come from nodes[0]; e2, e3 come from nodes[1].
+        // C++ passes `dir` (the face direction) as quadDir2 to contourEdge.
         for mask in &FACE_PROC_EDGE_MASK[dir] {
-            let order = mask[0]; // node selector for child pairing
-            let c0_idx = mask[1];
-            let c1_idx = mask[2];
-            let c2_idx = mask[3];
-            let c3_idx = mask[4];
-            let edge_dir = mask[5]; // the actual 3D edge direction
+            let c = [mask[1], mask[2], mask[3], mask[4]];
+            let edge_dir = mask[5];
 
-            let e0 = Self::get_child_or_self(nodes[order], c0_idx);
-            let e1 = Self::get_child_or_self(nodes[order], c1_idx);
-            let e2 = Self::get_child_or_self(nodes[1 - order], c2_idx);
-            let e3 = Self::get_child_or_self(nodes[1 - order], c3_idx);
-
-            // For an edge along edge_dir, the two quad directions are
-            // the other two axes.
-            let quad_dir2 = 3 - dir - edge_dir;
+            // faceNodeOrder = {0, 0, 1, 1}
+            let e0 = Self::get_child_or_self(nodes[0], c[0]);
+            let e1 = Self::get_child_or_self(nodes[0], c[1]);
+            let e2 = Self::get_child_or_self(nodes[1], c[2]);
+            let e3 = Self::get_child_or_self(nodes[1], c[3]);
 
             Self::contour_edge(
                 &[e0, e1, e2, e3],
                 edge_dir,
-                quad_dir2,
+                dir, // quadDir2 = face direction, matching C++
                 mesh,
                 field,
                 threshold,
