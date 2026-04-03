@@ -117,8 +117,10 @@ impl IsosurfaceApp {
         structure: Structure,
         threshold: f32,
     ) -> Option<IsoMesh> {
-        let unit_size = 16.0 / (depth as f32 * depth as f32);
+        // Keep a constant world volume of [-16, 16]³ regardless of depth.
+        // The C++ uses octSize=16, octDepth=8 giving unitSize=0.25, extent=32.
         let size_code = IVec3::splat(1 << (depth - 1));
+        let unit_size = 32.0 / size_code.x as f32;
         let min_code = -size_code / 2;
 
         let mut octree = OctreeNode::build_with_scalar_field(
