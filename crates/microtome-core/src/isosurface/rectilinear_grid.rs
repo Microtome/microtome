@@ -362,106 +362,104 @@ impl RectilinearGrid {
 
     /// Checks whether two adjacent grids can be clustered (merged).
     ///
-    /// Tests that the combined QEF error is acceptable and that no intersection
-    /// would be introduced by merging.
+    /// Matches C++ `RectilinearGrid::calClusterability` exactly:
+    /// 1. If both grids are None, return true.
+    /// 2. Sample the scalar field at the combined cell's 8 corners.
+    /// 3. If all corners have the same sign (homogeneous), return false.
+    /// 4. If only one grid exists, return true.
+    /// 5. Check the 4 face edges along `dir`: if both grids have a sign
+    ///    change on the same edge, return false (max 1 sign change per edge).
     pub fn cal_clusterability(
-        left: &RectilinearGrid,
-        right: &RectilinearGrid,
+        left: Option<&RectilinearGrid>,
+        right: Option<&RectilinearGrid>,
         dir: usize,
         min_code: PositionCode,
         max_code: PositionCode,
         field: &dyn ScalarField,
         unit_size: f32,
     ) -> bool {
-        // Check that the merge would not introduce sign changes on shared corners
-        // that belong to different components
-        let _ = (min_code, max_code); // used for bounds in full implementation
-
-        // Verify edge compatibility along the merge direction
-        for edge in &EDGE_MAP {
-            let c0 = edge[0];
-            let c1 = edge[1];
-            let corner0 = decode_cell(c0);
-            let corner1 = decode_cell(c1);
-
-            // Only check edges perpendicular to the merge direction
-            if corner0[dir] == corner1[dir] {
-                continue;
-            }
-
-            // Left side corner is the one with corner[dir] == 0
-            let (left_corner, right_corner) = if corner0[dir] == 0 {
-                (c0, c1)
-            } else {
-                (c1, c0)
-            };
-
-            if left.corner_signs[left_corner] != right.corner_signs[right_corner] {
-                // Sign change across the boundary — check component compatibility
-                let left_comp = left.component_indices[left_corner];
-                let right_comp = right.component_indices[right_corner];
-                if left_comp < 0 || right_comp < 0 {
-                    return false;
-                }
-            }
+        if left.is_none() && right.is_none() {
+            return true;
         }
 
-        // Check combined QEF error threshold
-        let mut combined = left.all_qef.clone();
-        combined.combine(&right.all_qef);
-        let min_pos = code_to_pos(min_code, unit_size);
-        let max_pos = code_to_pos(max_code, unit_size);
-        let (mut pos, _) = combined.solve();
-        pos = pos.clamp(min_pos, max_pos);
+        // Sample field at the combined cell's 8 corners
+        let size_code = max_code - min_code;
+        let mut cluster_corner_signs = [0usize; 8];
+        for (i, sign) in cluster_corner_signs.iter_mut().enumerate() {
+            let code = min_code + size_code * decode_cell(i);
+            let val = field.index(code, unit_size);
+            *sign = if val >= 0.0 { 0 } else { 1 };
+        }
 
-        let error = combined.get_error_at(pos);
-        let threshold = unit_size * unit_size * 0.1;
-        let _ = field; // reserved for future normal-based checks
+        // Check homogeneity
+        let mut homogeneous = true;
+        for i in 1..8 {
+            if cluster_corner_signs[i] != cluster_corner_signs[0] {
+                homogeneous = false;
+            }
+        }
+        if homogeneous {
+            return false;
+        }
 
-        error < threshold
+        // If only one child exists, clusterable
+        let (left, right) = match (left, right) {
+            (Some(l), Some(r)) => (l, r),
+            _ => return true,
+        };
+
+        // Check sign changes along the 4 face edges for this direction
+        let grids = [left, right];
+        for i in 0..4 {
+            let edge_min_index = CELL_PROC_FACE_MASK[dir * 4 + i][0];
+            let edge_max_index = CELL_PROC_FACE_MASK[dir * 4 + i][1];
+            let mut sign_changes = 0usize;
+            for grid in &grids {
+                if grid.corner_signs[edge_min_index] != grid.corner_signs[edge_max_index] {
+                    sign_changes += 1;
+                }
+            }
+            if sign_changes > 1 {
+                return false;
+            }
+        }
+        true
     }
 
     /// Combines QEF data from two adjacent grids into an output grid.
     ///
-    /// `dir` is the axis along which the grids are adjacent (0=X, 1=Y, 2=Z).
-    /// Sets the output grid's corner signs from the children, computes
-    /// corner components, then maps child component QEFs to output components.
-    ///
-    /// Matches C++ `combineAAGrid` logic: uses `cellProcFaceMask[dir*4+i]`
-    /// to find the 4 face edges, maps child component indices to output
-    /// component indices, then combines QEFs.
+    /// Matches C++ `combineAAGrid` exactly:
+    /// - `out` must already have correct corner signs (caller calls `assign_sign`).
+    /// - Calls `cal_corner_components` on `out`.
+    /// - For each of the 4 face edges along `dir`, maps child component
+    ///   indices to output component indices, then combines QEFs.
+    /// - Either or both children may be `None`.
     pub fn combine_aa_grid(
-        left: &RectilinearGrid,
-        right: &RectilinearGrid,
+        left: Option<&RectilinearGrid>,
+        right: Option<&RectilinearGrid>,
         dir: usize,
         out: &mut RectilinearGrid,
-        _unit_size: f32,
+        field: &dyn ScalarField,
+        unit_size: f32,
     ) {
-        // Set corner signs from children: left provides dir==0 side, right provides dir==1 side
-        for i in 0..8 {
-            let corner = decode_cell(i);
-            if corner[dir] == 0 {
-                out.corner_signs[i] = left.corner_signs[i];
-            } else {
-                out.corner_signs[i] = right.corner_signs[i];
-            }
-        }
-
+        out.assign_sign(field, unit_size);
         out.cal_corner_components();
 
-        // Build combine maps: for each of left[0] and right[1],
-        // maps output_component_index -> child_component_index
-        let mut combine_maps: [BTreeMap<usize, usize>; 2] = [BTreeMap::new(), BTreeMap::new()];
-        let grids: [&RectilinearGrid; 2] = [left, right];
+        if left.is_none() && right.is_none() {
+            return;
+        }
 
+        let grids: [Option<&RectilinearGrid>; 2] = [left, right];
+        let mut combine_maps: [BTreeMap<usize, usize>; 2] = [BTreeMap::new(), BTreeMap::new()];
+
+        #[allow(clippy::needless_range_loop)]
         for i in 0..4 {
             let mask = &CELL_PROC_FACE_MASK[dir * 4 + i];
-            // Find output component index c by checking which output corner
-            // on this edge is inside
+            // Find output component index c
             let mut c: i8 = -1;
-            for &corner_idx in mask.iter().take(2) {
-                if out.corner_signs[corner_idx] != 0 {
-                    c = out.component_indices[corner_idx];
+            for &corner in mask.iter().take(2) {
+                if out.corner_signs[corner] != 0 {
+                    c = out.component_indices[corner];
                     break;
                 }
             }
@@ -471,14 +469,16 @@ impl RectilinearGrid {
             let out_c = c as usize;
 
             // For each child (left, right), find the child component
-            for (j, child) in grids.iter().enumerate() {
-                for &corner_idx in mask.iter().take(2) {
-                    if child.corner_signs[corner_idx] != 0 {
-                        let child_c = child.component_indices[corner_idx];
-                        if child_c >= 0 && (child_c as usize) < child.components.len() {
-                            combine_maps[j].insert(out_c, child_c as usize);
+            for (j, child_opt) in grids.iter().enumerate() {
+                if let Some(child) = child_opt {
+                    for &corner in mask.iter().take(2) {
+                        if child.corner_signs[corner] != 0 {
+                            let child_c = child.component_indices[corner];
+                            if child_c >= 0 {
+                                combine_maps[j].insert(out_c, child_c as usize);
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
             }
@@ -486,26 +486,14 @@ impl RectilinearGrid {
 
         // Combine child QEFs into output components
         for i in 0..2 {
-            for (&out_c, &child_c) in &combine_maps[i] {
-                if out_c < out.components.len() && child_c < grids[i].components.len() {
-                    out.components[out_c].combine(&grids[i].components[child_c]);
+            if let Some(child) = grids[i] {
+                for (&out_c, &child_c) in &combine_maps[i] {
+                    if out_c < out.components.len() && child_c < child.components.len() {
+                        out.components[out_c].combine(&child.components[child_c]);
+                    }
                 }
             }
         }
-
-        // Set is_signed
-        out.is_signed = {
-            let mut has_in = false;
-            let mut has_out = false;
-            for &s in &out.corner_signs {
-                if s != 0 {
-                    has_in = true;
-                } else {
-                    has_out = true;
-                }
-            }
-            has_in && has_out
-        };
     }
 
     /// Möller-Trumbore ray-triangle intersection test.

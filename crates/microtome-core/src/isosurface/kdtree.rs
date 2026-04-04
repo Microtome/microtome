@@ -76,27 +76,25 @@ impl KdTreeNode {
     }
 
     /// Combines QEF data from children into this node's grid.
-    fn combine_qef(&mut self, unit_size: f32) {
+    fn combine_qef(&mut self, field: &dyn ScalarField, unit_size: f32) {
         if !self.clusterable || self.is_leaf() {
             return;
         }
-        let left = self.children[0].as_ref();
-        let right = self.children[1].as_ref();
-        if let (Some(l), Some(r)) = (left, right) {
-            let dir = self.plane_dir;
-            let min_code = self.grid.min_code;
-            let max_code = self.grid.max_code;
-            let qef = QefSolver::new();
-            let mut out = RectilinearGrid::new(min_code, max_code, qef, unit_size);
-            RectilinearGrid::combine_aa_grid(&l.grid, &r.grid, dir, &mut out, unit_size);
-            self.grid.components = out.components;
-            self.grid.vertices = out.vertices;
-            self.grid.corner_signs = out.corner_signs;
-            self.grid.component_indices = out.component_indices;
-            self.grid.is_signed = out.is_signed;
-            self.grid.all_qef = out.all_qef;
-            self.grid.approximate = out.approximate;
-        }
+        let left = self.children[0].as_ref().map(|c| &c.grid);
+        let right = self.children[1].as_ref().map(|c| &c.grid);
+        let dir = self.plane_dir;
+        let min_code = self.grid.min_code;
+        let max_code = self.grid.max_code;
+        let qef = QefSolver::new();
+        let mut out = RectilinearGrid::new(min_code, max_code, qef, unit_size);
+        RectilinearGrid::combine_aa_grid(left, right, dir, &mut out, field, unit_size);
+        self.grid.components = out.components;
+        self.grid.vertices = out.vertices;
+        self.grid.corner_signs = out.corner_signs;
+        self.grid.component_indices = out.component_indices;
+        self.grid.is_signed = out.is_signed;
+        self.grid.all_qef = out.all_qef;
+        self.grid.approximate = out.approximate;
     }
 
     /// Checks whether this node can be clustered (merged with its children).
@@ -106,21 +104,20 @@ impl KdTreeNode {
             return;
         }
 
-        // C++ checks calClusterability first, then checks children
-        if let (Some(left), Some(right)) = (&self.children[0], &self.children[1]) {
-            let dir = self.plane_dir;
-            if !RectilinearGrid::cal_clusterability(
-                &left.grid,
-                &right.grid,
-                dir,
-                self.grid.min_code,
-                self.grid.max_code,
-                field,
-                unit_size,
-            ) {
-                self.clusterable = false;
-                return;
-            }
+        let left = self.children[0].as_ref().map(|c| &c.grid);
+        let right = self.children[1].as_ref().map(|c| &c.grid);
+        let dir = self.plane_dir;
+        if !RectilinearGrid::cal_clusterability(
+            left,
+            right,
+            dir,
+            self.grid.min_code,
+            self.grid.max_code,
+            field,
+            unit_size,
+        ) {
+            self.clusterable = false;
+            return;
         }
 
         for child in self.children.iter().flatten() {
@@ -308,7 +305,7 @@ impl KdTreeNode {
             // Internal: assign signs and check clusterability
             node.grid.assign_sign(field, unit_size);
             node.cal_clusterability(field, unit_size);
-            node.combine_qef(unit_size);
+            node.combine_qef(field, unit_size);
         }
 
         if node.clusterable {
@@ -456,6 +453,7 @@ fn contour_face(
     for i in 0..2 {
         if !nodes[i].is_contouring_leaf(threshold) {
             // Recurse into both children
+            // C++: passes children directly (may be null), contourFace returns on null
             for j in 0..2 {
                 if let Some(child) = &nodes[i].children[j] {
                     let mut next_face = nodes;
@@ -467,13 +465,15 @@ fn contour_face(
             if nodes[i].axis() > face_min[nodes[i].plane_dir]
                 && nodes[i].axis() < face_max[nodes[i].plane_dir]
             {
-                let mut edge_nodes: [&KdTreeNode; 4] = [nodes[0], nodes[0], nodes[1], nodes[1]];
-                if let Some(c0) = &nodes[i].children[0] {
-                    edge_nodes[i * 2] = c0;
-                }
-                if let Some(c1) = &nodes[i].children[1] {
-                    edge_nodes[i * 2 + 1] = c1;
-                }
+                // C++: edgeNodes[i*2] = children[0], edgeNodes[i*2+1] = children[1] (may be null)
+                let mut edge_nodes: [Option<&KdTreeNode>; 4] = [
+                    Some(nodes[0]),
+                    Some(nodes[0]),
+                    Some(nodes[1]),
+                    Some(nodes[1]),
+                ];
+                edge_nodes[i * 2] = nodes[i].children[0].as_deref();
+                edge_nodes[i * 2 + 1] = nodes[i].children[1].as_deref();
                 let line = construct_line(nodes, i, dir, axis);
                 contour_edge(
                     edge_nodes,
@@ -524,11 +524,21 @@ fn next_quad_index(dir1: usize, dir2: usize, plane_dir: usize, i: usize) -> usiz
 }
 
 /// Descends paired nodes to the correct children for quad detection.
-fn detect_quad(nodes: &mut [&KdTreeNode; 4], line: &AALine, threshold: f32) {
+///
+/// Matches C++ `detectQuad`: nodes can become None when a child is null.
+#[allow(clippy::while_let_loop)]
+fn detect_quad(nodes: &mut [Option<&KdTreeNode>; 4], line: &AALine, threshold: f32) {
     for i in 0..2 {
+        // C++: while (nodes[i*2] && nodes[i*2+1] && !leaf && same_ptr && planeDir != dir) { ... }
         loop {
-            let a = nodes[i * 2];
-            let b = nodes[i * 2 + 1];
+            let a = match nodes[i * 2] {
+                Some(n) => n,
+                None => break,
+            };
+            let b = match nodes[i * 2 + 1] {
+                Some(n) => n,
+                None => break,
+            };
             if !std::ptr::eq(a, b) {
                 break;
             }
@@ -540,48 +550,48 @@ fn detect_quad(nodes: &mut [&KdTreeNode; 4], line: &AALine, threshold: f32) {
             }
             let common = a;
             if common.axis() == line.point[common.plane_dir] {
-                match (&common.children[0], &common.children[1]) {
-                    (Some(c0), Some(c1)) => {
-                        nodes[i * 2] = c0;
-                        nodes[i * 2 + 1] = c1;
-                    }
-                    _ => break,
-                }
+                nodes[i * 2] = common.children[0].as_deref();
+                nodes[i * 2 + 1] = common.children[1].as_deref();
             } else if common.axis() > line.point[common.plane_dir] {
-                match &common.children[0] {
-                    Some(c0) => {
-                        nodes[i * 2] = c0;
-                        nodes[i * 2 + 1] = c0;
-                    }
-                    None => break,
-                }
+                let c = common.children[0].as_deref();
+                nodes[i * 2] = c;
+                nodes[i * 2 + 1] = c;
             } else {
-                match &common.children[1] {
-                    Some(c1) => {
-                        nodes[i * 2] = c1;
-                        nodes[i * 2 + 1] = c1;
-                    }
-                    None => break,
-                }
+                let c = common.children[1].as_deref();
+                nodes[i * 2] = c;
+                nodes[i * 2 + 1] = c;
             }
         }
     }
 }
 
 /// Sets a quad node, also updating the opposite node if they point to the same node.
-fn set_quad_node<'a>(nodes: &mut [&'a KdTreeNode; 4], i: usize, new_node: &'a KdTreeNode) {
-    if std::ptr::eq(nodes[opposite_quad_index(i)], nodes[i]) {
-        nodes[opposite_quad_index(i)] = new_node;
+#[allow(clippy::needless_lifetimes)]
+fn set_quad_node<'a>(
+    nodes: &mut [Option<&'a KdTreeNode>; 4],
+    i: usize,
+    new_node: Option<&'a KdTreeNode>,
+) {
+    // C++: if (nodes[opposite] == nodes[i]) nodes[opposite] = p;
+    let opp = opposite_quad_index(i);
+    match (nodes[opp], nodes[i]) {
+        (Some(a), Some(b)) if std::ptr::eq(a, b) => {
+            nodes[opp] = new_node;
+        }
+        (None, None) => {
+            nodes[opp] = new_node;
+        }
+        _ => {}
     }
     nodes[i] = new_node;
 }
 
 /// Edge procedure: generates quads along an edge shared by 4 nodes.
 ///
-/// Matches C++ `contourEdge` (lines 332-390).
+/// Matches C++ `contourEdge`: nodes may be None (null in C++).
 #[allow(clippy::too_many_arguments)]
 fn contour_edge(
-    mut nodes: [&KdTreeNode; 4],
+    mut nodes: [Option<&KdTreeNode>; 4],
     line: &AALine,
     quad_dir1: usize,
     field: &dyn ScalarField,
@@ -591,19 +601,39 @@ fn contour_edge(
 ) {
     detect_quad(&mut nodes, line, threshold);
 
+    // C++: for (auto n : nodes) { if (!n) return; }
+    let n0 = match nodes[0] {
+        Some(n) => n,
+        None => return,
+    };
+    let n1 = match nodes[1] {
+        Some(n) => n,
+        None => return,
+    };
+    let n2 = match nodes[2] {
+        Some(n) => n,
+        None => return,
+    };
+    let n3 = match nodes[3] {
+        Some(n) => n,
+        None => return,
+    };
+
     let quad_dir2 = 3 - quad_dir1 - line.dir;
 
-    if check_minimal_edge(nodes, line).is_none() {
+    if check_minimal_edge([n0, n1, n2, n3], line).is_none() {
         return;
     }
 
     // Descend non-leaf nodes that don't split along line.dir
+    let mut unwrapped: [&KdTreeNode; 4] = [n0, n1, n2, n3];
     for i in 0..4 {
-        if !std::ptr::eq(nodes[i], nodes[opposite_quad_index(i)]) {
-            while !nodes[i].is_contouring_leaf(threshold) && nodes[i].plane_dir != line.dir {
-                let child_idx = next_quad_index(quad_dir1, quad_dir2, nodes[i].plane_dir, i);
-                match &nodes[i].children[child_idx] {
-                    Some(c) => nodes[i] = c,
+        if !std::ptr::eq(unwrapped[i], unwrapped[opposite_quad_index(i)]) {
+            while !unwrapped[i].is_contouring_leaf(threshold) && unwrapped[i].plane_dir != line.dir
+            {
+                let child_idx = next_quad_index(quad_dir1, quad_dir2, unwrapped[i].plane_dir, i);
+                match &unwrapped[i].children[child_idx] {
+                    Some(c) => unwrapped[i] = c,
                     None => return,
                 }
             }
@@ -611,34 +641,41 @@ fn contour_edge(
     }
 
     // All 4 are contouring leaves: generate quad
-    if nodes[0].is_contouring_leaf(threshold)
-        && nodes[1].is_contouring_leaf(threshold)
-        && nodes[2].is_contouring_leaf(threshold)
-        && nodes[3].is_contouring_leaf(threshold)
+    if unwrapped[0].is_contouring_leaf(threshold)
+        && unwrapped[1].is_contouring_leaf(threshold)
+        && unwrapped[2].is_contouring_leaf(threshold)
+        && unwrapped[3].is_contouring_leaf(threshold)
     {
         kd_generate_quad(
-            nodes, quad_dir1, quad_dir2, mesh, field, threshold, unit_size,
+            unwrapped, quad_dir1, quad_dir2, mesh, field, threshold, unit_size,
         );
         return;
     }
 
     // Recurse: find a node splitting along line.dir
+    // Re-wrap into Options for recursion
+    let opt_nodes: [Option<&KdTreeNode>; 4] = [
+        Some(unwrapped[0]),
+        Some(unwrapped[1]),
+        Some(unwrapped[2]),
+        Some(unwrapped[3]),
+    ];
     for i in 0..4 {
-        if !nodes[i].is_contouring_leaf(threshold) && nodes[i].plane_dir == line.dir {
-            if let Some(c0) = &nodes[i].children[0] {
-                let mut next_nodes = nodes;
-                set_quad_node(&mut next_nodes, i, c0);
-                contour_edge(
-                    next_nodes, line, quad_dir1, field, threshold, mesh, unit_size,
-                );
-            }
-            if let Some(c1) = &nodes[i].children[1] {
-                let mut next_nodes = nodes;
-                set_quad_node(&mut next_nodes, i, c1);
-                contour_edge(
-                    next_nodes, line, quad_dir1, field, threshold, mesh, unit_size,
-                );
-            }
+        if let Some(n) = opt_nodes[i]
+            && !n.is_contouring_leaf(threshold)
+            && n.plane_dir == line.dir
+        {
+            let mut next_nodes = opt_nodes;
+            set_quad_node(&mut next_nodes, i, n.children[0].as_deref());
+            contour_edge(
+                next_nodes, line, quad_dir1, field, threshold, mesh, unit_size,
+            );
+
+            let mut next_nodes = opt_nodes;
+            set_quad_node(&mut next_nodes, i, n.children[1].as_deref());
+            contour_edge(
+                next_nodes, line, quad_dir1, field, threshold, mesh, unit_size,
+            );
             return;
         }
     }
@@ -675,11 +712,12 @@ mod tests {
         let result = std::thread::Builder::new()
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
-                let sphere = Sphere::with_center(3.0, glam::Vec3::new(8.0, 8.0, 8.0));
+                let sphere = Sphere::with_center(3.0, glam::Vec3::new(4.0, 4.0, 4.0));
                 let unit_size = 1.0;
-                let depth = 4; // 16x16x16 grid
+                let depth = 4;
+                // C++: sizeCode = 1 << (depth - 1) = 8
                 let size_code = PositionCode::splat(1 << (depth - 1));
-                let min_code = -size_code / 2;
+                let min_code = PositionCode::splat(0);
                 let max_code = size_code;
 
                 // Build octree first

@@ -8,7 +8,7 @@ use glam::{IVec3, Vec3};
 use wgpu::util::DeviceExt;
 
 use microtome_core::isosurface::{
-    Aabb, Cylinder, Difference, Intersection, IsoMesh, KdTreeNode, OctreeNode, ScalarField,
+    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, OctreeNode, ScalarField,
 };
 
 use crate::camera::OrbitCamera;
@@ -93,14 +93,11 @@ impl IsosurfaceApp {
         }
     }
 
-    /// Builds the default SDF scene.
+    /// Builds the default SDF scene: cube with a cylindrical hole through it.
     fn build_default_scene() -> Box<dyn ScalarField> {
-        Box::new(Intersection::new(
-            Difference::new(
-                Cylinder::new(Vec3::new(0.0, 0.0, 4.0)),
-                Cylinder::new(Vec3::new(0.0, 0.0, 3.2)),
-            ),
+        Box::new(Difference::new(
             Aabb::new(Vec3::splat(-4.0), Vec3::splat(4.0)),
+            Cylinder::new(Vec3::new(0.0, 0.0, 3.0)),
         ))
     }
 

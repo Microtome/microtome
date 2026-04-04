@@ -67,7 +67,8 @@ impl OctreeNode {
         as_mipmap: bool,
         unit_size: f32,
     ) -> Option<Box<OctreeNode>> {
-        let size = 1_i32 << depth;
+        // C++: sizeCode = 1 << (depth - 1)
+        let size = 1_i32 << (depth - 1);
         let max_code = min_code + PositionCode::splat(size);
 
         let qef = QefSolver::new();
@@ -82,70 +83,68 @@ impl OctreeNode {
             depth,
         });
 
+        // C++: assignSign is called for ALL nodes (leaf and internal)
+        node.grid.assign_sign(field, unit_size);
+
         if depth == 1 {
             // Leaf level
-            node.grid.assign_sign(field, unit_size);
             if !node.grid.is_signed {
                 return None;
             }
+            // C++: sampleQef calls calCornerComponents internally
             node.grid.cal_corner_components();
             let mut all_qef = QefSolver::new();
             node.grid.sample_qef(field, &mut all_qef, unit_size);
             node.grid.all_qef = all_qef;
+            node.is_leaf = true;
+            node.clusterable = true; // C++: clusterable defaults to true
+        } else {
+            // Internal node: recursively build 8 children
+            // C++: subSizeCode = 1 << (depth - 2)
+            let half = size / 2;
+            let mut any_child = false;
+            for i in 0..8 {
+                let offset = min_offset_subdivision(i);
+                let child_min = min_code
+                    + PositionCode::new(
+                        (offset.x as i32) * half,
+                        (offset.y as i32) * half,
+                        (offset.z as i32) * half,
+                    );
+                let child = Self::build_with_scalar_field(
+                    child_min,
+                    depth - 1,
+                    field,
+                    as_mipmap,
+                    unit_size,
+                );
+                if let Some(mut c) = child {
+                    c.child_index = i as i8;
+                    // C++: accumulate allQef during child loop
+                    node.grid.all_qef.combine(&c.grid.all_qef);
+                    node.children[i] = Some(c);
+                    any_child = true;
+                }
+            }
 
+            if !any_child {
+                return None;
+            }
+
+            Self::cal_clusterability(&mut node, field, unit_size);
+
+            if node.clusterable && !as_mipmap {
+                node.combine_components(field, unit_size);
+            }
+            node.is_leaf = false;
+        }
+
+        // Solve components and approximate (C++: only solve components when !as_mipmap)
+        if !as_mipmap {
             for i in 0..node.grid.components.len() {
                 node.grid.solve_component(i, unit_size);
             }
-            Self::solve_approximate(&mut node.grid, unit_size);
-
-            node.is_leaf = true;
-            node.clusterable = true;
-            return Some(node);
         }
-
-        // Internal node: recursively build 8 children
-        let half = size / 2;
-        let mut any_child = false;
-        for i in 0..8 {
-            let offset = min_offset_subdivision(i);
-            let child_min = min_code
-                + PositionCode::new(
-                    (offset.x as i32) * half,
-                    (offset.y as i32) * half,
-                    (offset.z as i32) * half,
-                );
-            let child =
-                Self::build_with_scalar_field(child_min, depth - 1, field, as_mipmap, unit_size);
-            if let Some(mut c) = child {
-                c.child_index = i as i8;
-                node.children[i] = Some(c);
-                any_child = true;
-            }
-        }
-
-        if !any_child {
-            return None;
-        }
-
-        // Accumulate children's QEFs into this node
-        node.grid.all_qef.reset();
-        for c in node.children.iter().flatten() {
-            node.grid.all_qef.combine(&c.grid.all_qef);
-        }
-
-        // Calculate clusterability
-        Self::cal_clusterability(&mut node, field, unit_size);
-
-        // If clusterable and not building a mipmap, combine components
-        if node.clusterable && !as_mipmap {
-            node.combine_components(unit_size);
-        }
-
-        // Solve all components
-        for i in 0..node.grid.components.len() {
-            node.grid.solve_component(i, unit_size);
-        }
-
         Self::solve_approximate(&mut node.grid, unit_size);
 
         Some(node)
@@ -234,8 +233,10 @@ impl OctreeNode {
 
     /// Checks whether this node's children can be clustered (merged).
     ///
-    /// Sets `clusterable` on the node based on whether all children are
-    /// themselves clusterable and the face-pair compatibility checks pass.
+    /// Matches C++ `Octree::calClusterbility` exactly:
+    /// 1. If any present child is not clusterable, this node is not.
+    /// 2. For each of the 12 face pairs, compute proper bounds spanning
+    ///    the two children and call `RectilinearGrid::cal_clusterability`.
     fn cal_clusterability(node: &mut OctreeNode, field: &dyn ScalarField, unit_size: f32) {
         // All present children must be clusterable
         for c in node.children.iter().flatten() {
@@ -246,24 +247,26 @@ impl OctreeNode {
         }
 
         // Check face-pair clusterability across the 12 face pairs
+        // C++: compute halfSize and per-pair bounds
+        let half_size = (node.grid.max_code - node.grid.min_code) / 2;
+
         for mask in &CELL_PROC_FACE_MASK {
-            let c0_idx = mask[0];
-            let c1_idx = mask[1];
+            let left_index = mask[0];
+            let right_index = mask[1];
             let dir = mask[2];
 
-            let (left, right) = match (&node.children[c0_idx], &node.children[c1_idx]) {
-                (Some(l), Some(r)) => (l, r),
-                _ => continue,
-            };
+            let left = node.children[left_index].as_ref().map(|c| &c.grid);
+            let right = node.children[right_index].as_ref().map(|c| &c.grid);
+
+            // C++: minCode = grid.minCode + decodeCell(leftIndex) * halfSize
+            //      maxCode = grid.minCode + halfSize + decodeCell(rightIndex) * halfSize
+            let left_decode = super::indicators::decode_cell(left_index);
+            let right_decode = super::indicators::decode_cell(right_index);
+            let pair_min = node.grid.min_code + left_decode * half_size;
+            let pair_max = node.grid.min_code + half_size + right_decode * half_size;
 
             if !RectilinearGrid::cal_clusterability(
-                &left.grid,
-                &right.grid,
-                dir,
-                node.grid.min_code,
-                node.grid.max_code,
-                field,
-                unit_size,
+                left, right, dir, pair_min, pair_max, field, unit_size,
             ) {
                 node.clusterable = false;
                 return;
@@ -275,135 +278,99 @@ impl OctreeNode {
 
     /// Hierarchically combines child grid components along Z, Y, then X axes.
     ///
-    /// This is the core of the multi-component QEF merge.  It creates
-    /// intermediate grids by combining pairs of children along each axis,
-    /// then resolves parent pointers so the final combined grid has the
-    /// correct component structure.
-    fn combine_components(&mut self, unit_size: f32) {
-        let min_code = self.grid.min_code;
-        let max_code = self.grid.max_code;
-        let mid_code = (min_code + max_code) / 2;
+    /// Matches C++ `Octree::combineComponents` exactly:
+    /// - For x in 0..2, for y in 0..2: z-merge children (x,y,0) and (x,y,1)
+    /// - Then y-merge the z-results
+    /// - Then x-merge the y-results into this node's grid
+    /// - Each intermediate grid calls assign_sign and accumulates allQef
+    /// - Final MC edge case check + parent pointer path compression
+    fn combine_components(&mut self, field: &dyn ScalarField, unit_size: f32) {
+        let half_size = (self.grid.max_code - self.grid.min_code) / 2;
 
-        // Step 1: Combine along Z axis (4 pairs)
-        // Pairs: (0,1), (2,3), (4,5), (6,7)
-        let z_pairs: [(usize, usize); 4] = [(0, 1), (2, 3), (4, 5), (6, 7)];
-        let mut z_grids: [Option<RectilinearGrid>; 4] = Default::default();
+        // C++ uses ygridPool[4] and xgridPool[2]
+        let mut y_grid_pool: [Option<RectilinearGrid>; 4] = Default::default();
+        let mut x_grid_pool: [Option<RectilinearGrid>; 2] = Default::default();
 
-        for (gi, &(left_idx, right_idx)) in z_pairs.iter().enumerate() {
-            let (left, right) = match (&self.children[left_idx], &self.children[right_idx]) {
-                (Some(l), Some(r)) => (l, r),
-                (Some(l), None) => {
-                    z_grids[gi] = Some(l.grid.clone());
+        for x in 0..2 {
+            // C++: yMinCode = PositionCode(x, 0, 0) * halfSize + grid.minCode
+            //      yMaxCode = PositionCode(x, 1, 1) * halfSize + halfSize + grid.minCode
+            let y_min_code = PositionCode::new(x, 0, 0) * half_size + self.grid.min_code;
+            let y_max_code =
+                PositionCode::new(x, 1, 1) * half_size + half_size + self.grid.min_code;
+
+            let mut y_grids: [Option<usize>; 2] = [None; 2]; // indices into y_grid_pool
+
+            for y in 0..2 {
+                // C++: zMinCode = PositionCode(x, y, 0) * halfSize + grid.minCode
+                //      zMaxCode = PositionCode(x, y, 1) * halfSize + halfSize + grid.minCode
+                let z_min_code = PositionCode::new(x, y, 0) * half_size + self.grid.min_code;
+                let z_max_code =
+                    PositionCode::new(x, y, 1) * half_size + half_size + self.grid.min_code;
+
+                let l_idx = encode_cell(glam::IVec3::new(x, y, 0));
+                let r_idx = encode_cell(glam::IVec3::new(x, y, 1));
+                let l = self.children[l_idx].as_ref().map(|c| &c.grid);
+                let r = self.children[r_idx].as_ref().map(|c| &c.grid);
+
+                if l.is_none() && r.is_none() {
                     continue;
                 }
-                (None, Some(r)) => {
-                    z_grids[gi] = Some(r.grid.clone());
-                    continue;
+
+                let pool_idx = (x as usize) * 2 + (y as usize);
+                let mut out =
+                    RectilinearGrid::new(z_min_code, z_max_code, QefSolver::new(), unit_size);
+                // C++: assignSign and accumulate allQef before combineAAGrid
+                out.assign_sign(field, unit_size);
+                if let Some(lg) = l {
+                    out.all_qef.combine(&lg.all_qef);
                 }
-                (None, None) => continue,
-            };
-
-            let offset = min_offset_subdivision(left_idx);
-            let half = (max_code - min_code) / 2;
-            let g_min = PositionCode::new(
-                min_code.x + (offset.x as i32) * half.x,
-                min_code.y + (offset.y as i32) * half.y,
-                min_code.z,
-            );
-            let g_max = PositionCode::new(g_min.x + half.x, g_min.y + half.y, max_code.z);
-
-            let qef = QefSolver::new();
-            let mut out = RectilinearGrid::new(g_min, g_max, qef, unit_size);
-            RectilinearGrid::combine_aa_grid(&left.grid, &right.grid, 2, &mut out, unit_size);
-            z_grids[gi] = Some(out);
-        }
-
-        // Step 2: Combine along Y axis (2 pairs from the Z results)
-        // Pairs: (z0, z1) and (z2, z3)
-        let y_pairs: [(usize, usize); 2] = [(0, 1), (2, 3)];
-        let mut y_grids: [Option<RectilinearGrid>; 2] = Default::default();
-
-        for (gi, &(left_idx, right_idx)) in y_pairs.iter().enumerate() {
-            let (left, right) = match (&z_grids[left_idx], &z_grids[right_idx]) {
-                (Some(l), Some(r)) => (l, r),
-                (Some(l), None) => {
-                    y_grids[gi] = Some(l.clone());
-                    continue;
+                if let Some(rg) = r {
+                    out.all_qef.combine(&rg.all_qef);
                 }
-                (None, Some(r)) => {
-                    y_grids[gi] = Some(r.clone());
-                    continue;
-                }
-                (None, None) => continue,
-            };
-
-            let g_min = PositionCode::new(
-                if gi == 0 { min_code.x } else { mid_code.x },
-                min_code.y,
-                min_code.z,
-            );
-            let g_max = PositionCode::new(
-                if gi == 0 { mid_code.x } else { max_code.x },
-                max_code.y,
-                max_code.z,
-            );
-
-            let qef = QefSolver::new();
-            let mut out = RectilinearGrid::new(g_min, g_max, qef, unit_size);
-            RectilinearGrid::combine_aa_grid(left, right, 1, &mut out, unit_size);
-            y_grids[gi] = Some(out);
-        }
-
-        // Step 3: Combine along X axis (final merge)
-        match (&y_grids[0], &y_grids[1]) {
-            (Some(left), Some(right)) => {
-                let qef = QefSolver::new();
-                let mut out = RectilinearGrid::new(min_code, max_code, qef, unit_size);
-                RectilinearGrid::combine_aa_grid(left, right, 0, &mut out, unit_size);
-
-                // Check for MC edge case: if combined component point counts
-                // don't match all_qef, mark not clusterable.
-                let total_component_points: i32 =
-                    out.components.iter().map(|c| c.point_count()).sum();
-                if total_component_points != out.all_qef.point_count() {
-                    self.clusterable = false;
-                }
-
-                self.grid.components = out.components;
-                self.grid.vertices = out.vertices;
-                self.grid.corner_signs = out.corner_signs;
-                self.grid.component_indices = out.component_indices;
-                self.grid.is_signed = out.is_signed;
+                RectilinearGrid::combine_aa_grid(l, r, 2, &mut out, field, unit_size);
+                y_grid_pool[pool_idx] = Some(out);
+                y_grids[y as usize] = Some(pool_idx);
             }
-            (Some(single), None) | (None, Some(single)) => {
-                self.grid.components = single.components.clone();
-                self.grid.vertices = single.vertices.clone();
-                self.grid.corner_signs = single.corner_signs;
-                self.grid.component_indices = single.component_indices;
-                self.grid.is_signed = single.is_signed;
+
+            // Y-merge
+            let yg0 = y_grids[0].and_then(|i| y_grid_pool[i].as_ref());
+            let yg1 = y_grids[1].and_then(|i| y_grid_pool[i].as_ref());
+
+            if yg0.is_none() && yg1.is_none() {
+                continue;
             }
-            (None, None) => {}
+
+            let mut out = RectilinearGrid::new(y_min_code, y_max_code, QefSolver::new(), unit_size);
+            out.assign_sign(field, unit_size);
+            if let Some(g) = yg0 {
+                out.all_qef.combine(&g.all_qef);
+            }
+            if let Some(g) = yg1 {
+                out.all_qef.combine(&g.all_qef);
+            }
+            RectilinearGrid::combine_aa_grid(yg0, yg1, 1, &mut out, field, unit_size);
+            x_grid_pool[x as usize] = Some(out);
         }
 
-        // Resolve parent pointers: set each child vertex's parent to the
-        // corresponding component vertex index in this node.
-        for ci in 0..8 {
-            if let Some(child) = &mut self.children[ci] {
-                for corner in 0..8 {
-                    let child_comp = child.grid.component_indices[corner];
-                    if child_comp < 0 {
-                        continue;
-                    }
-                    let parent_comp = self.grid.component_indices[corner];
-                    if parent_comp < 0 {
-                        continue;
-                    }
-                    let child_comp_idx = child_comp as usize;
-                    let parent_comp_idx = parent_comp as usize;
-                    if child_comp_idx < child.grid.vertices.len()
-                        && parent_comp_idx < self.grid.vertices.len()
-                    {
-                        child.grid.vertices[child_comp_idx].parent = Some(parent_comp_idx);
+        // X-merge (final merge into self.grid)
+        // C++: combineAAGrid(xgrids[0], xgrids[1], 0, &grid)
+        // self.grid already has assignSign called (from build_with_scalar_field)
+        let xg0 = x_grid_pool[0].as_ref();
+        let xg1 = x_grid_pool[1].as_ref();
+        RectilinearGrid::combine_aa_grid(xg0, xg1, 0, &mut self.grid, field, unit_size);
+
+        // C++ MC edge case: check if combined point counts match
+        let mut count = 0;
+        for c in &self.grid.components {
+            count += c.point_count();
+        }
+        if count != self.grid.all_qef.point_count() {
+            self.clusterable = false;
+            // Null out all child parent pointers
+            for ci in 0..8 {
+                if let Some(child) = &mut self.children[ci] {
+                    for v in &mut child.grid.vertices {
+                        v.parent = None;
                     }
                 }
             }
@@ -436,6 +403,9 @@ impl OctreeNode {
     }
 
     /// Cell procedure: recurse into children, then process face and edge pairs.
+    ///
+    /// Matches C++ `contourCell` exactly: passes potentially-null children
+    /// to contour_face and contour_edge via Option.
     fn contour_cell(
         node: &OctreeNode,
         mesh: &mut IsoMesh,
@@ -452,93 +422,38 @@ impl OctreeNode {
             Self::contour_cell(c, mesh, field, threshold, unit_size);
         }
 
-        // Process 12 face pairs
+        // Process 12 face pairs — pass children directly (may be None)
         for mask in &CELL_PROC_FACE_MASK {
-            let c0 = mask[0];
-            let c1 = mask[1];
+            let n0 = node.children[mask[0]].as_deref();
+            let n1 = node.children[mask[1]].as_deref();
             let dir = mask[2];
-
-            let n0: &OctreeNode = match &node.children[c0] {
-                Some(c) => c,
-                None => continue,
-            };
-            let n1: &OctreeNode = match &node.children[c1] {
-                Some(c) => c,
-                None => continue,
-            };
-
-            Self::contour_face(
-                &[n0, n1],
-                dir,
-                mesh,
-                field,
-                threshold,
-                unit_size,
-                node.depth,
-            );
+            Self::contour_face([n0, n1], dir, mesh, field, threshold, unit_size, node.depth);
         }
 
-        // Process 6 edge groups
+        // Process 6 edge groups — pass children directly (may be None)
         for mask in &CELL_PROC_EDGE_MASK {
             let dir = mask[4];
-            let mut nodes: [Option<&OctreeNode>; 4] = [None; 4];
-            let mut all_present = true;
-            for i in 0..4 {
-                match &node.children[mask[i]] {
-                    Some(c) => nodes[i] = Some(c),
-                    None => {
-                        all_present = false;
-                        break;
-                    }
-                }
-            }
-            if !all_present {
-                continue;
-            }
-            let quad_dir2 = match dir {
-                0 => 2,
-                1 => 0,
-                2 => 1,
-                _ => continue,
-            };
+            let nodes: [Option<&OctreeNode>; 4] = [
+                node.children[mask[0]].as_deref(),
+                node.children[mask[1]].as_deref(),
+                node.children[mask[2]].as_deref(),
+                node.children[mask[3]].as_deref(),
+            ];
+            let quad_dir2 = (dir + 2) % 3;
             Self::contour_edge(
-                &[
-                    nodes[0].unwrap_or(node),
-                    nodes[1].unwrap_or(node),
-                    nodes[2].unwrap_or(node),
-                    nodes[3].unwrap_or(node),
-                ],
-                dir,
-                quad_dir2,
-                mesh,
-                field,
-                threshold,
-                unit_size,
-                node.depth,
+                nodes, dir, quad_dir2, mesh, field, threshold, unit_size, node.depth,
             );
-        }
-    }
-
-    /// Returns a child node for face/edge subdivision.
-    ///
-    /// If the node is a leaf, returns the node itself.  If the node is
-    /// internal and the child exists, returns that child.  If the child is
-    /// `None` the node itself is returned -- the caller treats it as having
-    /// no geometry in that octant.
-    fn get_child_or_self(node: &OctreeNode, child_idx: usize) -> &OctreeNode {
-        if node.is_leaf {
-            return node;
-        }
-        match &node.children[child_idx] {
-            Some(c) => c,
-            None => node,
         }
     }
 
     /// Face procedure: subdivide across a shared face between two nodes.
+    ///
+    /// Matches C++ `contourFace`: if either node is None, return immediately.
+    /// When subdividing, a non-leaf node's child may be None — propagated
+    /// through to the recursive call.
     #[allow(clippy::too_many_arguments)]
     fn contour_face(
-        nodes: &[&OctreeNode; 2],
+        nodes: [Option<&OctreeNode>; 2],
         dir: usize,
         mesh: &mut IsoMesh,
         field: &dyn ScalarField,
@@ -546,7 +461,16 @@ impl OctreeNode {
         unit_size: f32,
         max_depth: u32,
     ) {
-        if nodes[0].is_leaf && nodes[1].is_leaf {
+        // C++: if (!nodes[0] || !nodes[1]) return;
+        let n0 = match nodes[0] {
+            Some(n) => n,
+            None => return,
+        };
+        let n1 = match nodes[1] {
+            Some(n) => n,
+            None => return,
+        };
+        if n0.is_leaf && n1.is_leaf {
             return;
         }
         if max_depth == 0 {
@@ -554,16 +478,24 @@ impl OctreeNode {
         }
 
         // Subdivide into 4 sub-faces
-        // C++ always picks sub0 from nodes[0] and sub1 from nodes[1]
         for mask in &FACE_PROC_FACE_MASK[dir] {
             let child0_idx = mask[0];
             let child1_idx = mask[1];
 
-            let sub0: &OctreeNode = Self::get_child_or_self(nodes[0], child0_idx);
-            let sub1: &OctreeNode = Self::get_child_or_self(nodes[1], child1_idx);
+            // C++: if (!subdivision_face[j]->isLeaf) { subdivision_face[j] = children[...]; }
+            let sub0 = if n0.is_leaf {
+                Some(n0)
+            } else {
+                n0.children[child0_idx].as_deref()
+            };
+            let sub1 = if n1.is_leaf {
+                Some(n1)
+            } else {
+                n1.children[child1_idx].as_deref()
+            };
 
             Self::contour_face(
-                &[sub0, sub1],
+                [sub0, sub1],
                 dir,
                 mesh,
                 field,
@@ -573,24 +505,28 @@ impl OctreeNode {
             );
         }
 
-        // Process 4 edges along this face.
-        // C++ uses faceNodeOrder = {0, 0, 1, 1} for node selection:
-        // e0, e1 come from nodes[0]; e2, e3 come from nodes[1].
-        // C++ passes `dir` (the face direction) as quadDir2 to contourEdge.
+        // Process 4 edges along this face
+        // C++ faceNodeOrder = {0, 0, 1, 1}
+        let face_nodes = [n0, n1];
         for mask in &FACE_PROC_EDGE_MASK[dir] {
             let c = [mask[1], mask[2], mask[3], mask[4]];
             let edge_dir = mask[5];
+            let order = [0usize, 0, 1, 1]; // faceNodeOrder
 
-            // faceNodeOrder = {0, 0, 1, 1}
-            let e0 = Self::get_child_or_self(nodes[0], c[0]);
-            let e1 = Self::get_child_or_self(nodes[0], c[1]);
-            let e2 = Self::get_child_or_self(nodes[1], c[2]);
-            let e3 = Self::get_child_or_self(nodes[1], c[3]);
+            let mut edge_nodes: [Option<&OctreeNode>; 4] = [None; 4];
+            for j in 0..4 {
+                let src = face_nodes[order[j]];
+                if src.is_leaf {
+                    edge_nodes[j] = Some(src);
+                } else {
+                    edge_nodes[j] = src.children[c[j]].as_deref();
+                }
+            }
 
             Self::contour_edge(
-                &[e0, e1, e2, e3],
+                edge_nodes,
                 edge_dir,
-                dir, // quadDir2 = face direction, matching C++
+                dir, // quadDir2 = face direction
                 mesh,
                 field,
                 threshold,
@@ -601,9 +537,12 @@ impl OctreeNode {
     }
 
     /// Edge procedure: either generate a quad or subdivide further.
+    ///
+    /// Matches C++ `contourEdge`: if any node is None, return immediately.
+    /// When subdividing, a non-leaf node's child may be None.
     #[allow(clippy::too_many_arguments)]
     fn contour_edge(
-        nodes: &[&OctreeNode; 4],
+        nodes: [Option<&OctreeNode>; 4],
         dir: usize,
         quad_dir2: usize,
         mesh: &mut IsoMesh,
@@ -612,9 +551,33 @@ impl OctreeNode {
         unit_size: f32,
         max_depth: u32,
     ) {
-        if nodes[0].is_leaf && nodes[1].is_leaf && nodes[2].is_leaf && nodes[3].is_leaf {
+        // C++: if (!nodes[0] || !nodes[1] || !nodes[2] || !nodes[3]) return;
+        let n0 = match nodes[0] {
+            Some(n) => n,
+            None => return,
+        };
+        let n1 = match nodes[1] {
+            Some(n) => n,
+            None => return,
+        };
+        let n2 = match nodes[2] {
+            Some(n) => n,
+            None => return,
+        };
+        let n3 = match nodes[3] {
+            Some(n) => n,
+            None => return,
+        };
+
+        if n0.is_leaf && n1.is_leaf && n2.is_leaf && n3.is_leaf {
             Self::generate_quad_from_nodes(
-                nodes, dir, quad_dir2, mesh, field, threshold, unit_size,
+                &[n0, n1, n2, n3],
+                dir,
+                quad_dir2,
+                mesh,
+                field,
+                threshold,
+                unit_size,
             );
             return;
         }
@@ -622,27 +585,27 @@ impl OctreeNode {
             return;
         }
 
-        // Subdivide: compute child indices dynamically from quadDir1, quadDir2
-        // matching C++ exactly: code[dir]=i, code[quadDir1]=(3-j)%2, code[quadDir2]=(3-j)/2
+        // Subdivide: matching C++ exactly
         let quad_dir1 = 3 - dir - quad_dir2;
-        for i in 0..2_i32 {
-            let mut sub_nodes: [&OctreeNode; 4] = [nodes[0], nodes[1], nodes[2], nodes[3]];
+        let all = [n0, n1, n2, n3];
+        for i in 0i32..2 {
+            let mut sub_nodes: [Option<&OctreeNode>; 4] = [Some(n0), Some(n1), Some(n2), Some(n3)];
 
-            for j in 0..4_i32 {
-                if !nodes[j as usize].is_leaf {
+            for j in 0..4usize {
+                if !all[j].is_leaf {
                     let mut code = glam::IVec3::ZERO;
                     code[dir] = i;
-                    code[quad_dir1] = (3 - j) % 2;
-                    code[quad_dir2] = (3 - j) / 2;
+                    let ji = j as i32;
+                    code[quad_dir1] = (3 - ji) % 2;
+                    code[quad_dir2] = (3 - ji) / 2;
                     let child_idx = encode_cell(code);
-                    if let Some(c) = &nodes[j as usize].children[child_idx] {
-                        sub_nodes[j as usize] = c;
-                    }
+                    // C++: subdivision_edge[j] = nodes[j]->children[...]; (can be null)
+                    sub_nodes[j] = all[j].children[child_idx].as_deref();
                 }
             }
 
             Self::contour_edge(
-                &sub_nodes,
+                sub_nodes,
                 dir,
                 quad_dir2,
                 mesh,
@@ -691,9 +654,9 @@ mod tests {
         let result = std::thread::Builder::new()
             .stack_size(16 * 1024 * 1024)
             .spawn(|| {
-                let sphere = Sphere::with_center(3.0, glam::Vec3::new(8.0, 8.0, 8.0));
+                let sphere = Sphere::with_center(3.0, glam::Vec3::new(4.0, 4.0, 4.0));
                 let unit_size = 1.0;
-                let depth = 4; // 16x16x16 grid
+                let depth = 4; // sizeCode = 1 << 3 = 8 → grid 0..8
                 let min_code = PositionCode::splat(0);
 
                 let root =
@@ -767,5 +730,67 @@ mod tests {
             .flatten()
             .map(|c| count_leaves(c))
             .sum()
+    }
+
+    fn count_clusterable(node: &OctreeNode) -> (usize, usize) {
+        if node.is_leaf {
+            return (0, 0); // leaves don't count
+        }
+        let mut total = 1usize;
+        let mut clusterable = if node.clusterable { 1usize } else { 0 };
+        for c in node.children.iter().flatten() {
+            let (ct, cc) = count_clusterable(c);
+            total += ct;
+            clusterable += cc;
+        }
+        (total, clusterable)
+    }
+
+    #[test]
+    fn aabb_simplification_works() {
+        use crate::isosurface::scalar_field::Aabb;
+        let result = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                // Simple box — no cylinder — so flat faces are easy to simplify
+                let field = Aabb::new(glam::Vec3::splat(-3.0), glam::Vec3::splat(3.0));
+                let depth = 5_u32;
+                // size_code = 16, unit_size = 0.5 → world [-8, 8], box [-3, 3] fits
+                let size_code = glam::IVec3::splat(1 << (depth - 1));
+                let unit_size = 0.5;
+                let min_code = -size_code / 2;
+
+                let root = OctreeNode::build_with_scalar_field(
+                    min_code, depth, &field, false, unit_size,
+                );
+                assert!(root.is_some(), "Octree should not be empty for box-cylinder");
+                let mut root = root.unwrap_or_else(|| unreachable!());
+
+                let (total_internal, num_clusterable) = count_clusterable(&root);
+                let leaves_before = count_leaves(&root);
+                eprintln!(
+                    "Before simplify: {leaves_before} leaves, {total_internal} internal, {num_clusterable} clusterable"
+                );
+                assert!(
+                    num_clusterable > 0,
+                    "Some internal nodes should be clusterable for a box scene, got 0/{total_internal}"
+                );
+
+                OctreeNode::simplify(&mut root, 1.0);
+                let leaves_after = count_leaves(&root);
+                eprintln!("After simplify: {leaves_after} leaves (was {leaves_before})");
+                assert!(
+                    leaves_after < leaves_before,
+                    "Simplify should reduce leaves: before={leaves_before}, after={leaves_after}"
+                );
+            });
+        match result {
+            Ok(handle) => {
+                if let Err(e) = handle.join() {
+                    std::panic::resume_unwind(e);
+                }
+            }
+            Err(e) => panic!("Failed to spawn test thread: {e}"),
+        }
     }
 }
