@@ -152,60 +152,40 @@ impl OctreeNode {
 
     /// Accumulates QEF data from the octree within the given bounding box.
     ///
-    /// Walks the tree and returns the combined QEF for all leaves whose
-    /// cells overlap `[min_pos, max_pos]`.
+    /// Matches C++ `Octree::getSum` exactly: uses integer PositionCode
+    /// comparisons and clamps the query bounds to the node bounds before
+    /// recursing into children.
     pub fn get_sum(
         root: &OctreeNode,
-        min_pos: glam::Vec3,
-        max_pos: glam::Vec3,
-        unit_size: f32,
-    ) -> QefSolver {
-        let mut result = QefSolver::new();
-        Self::get_sum_recursive(root, min_pos, max_pos, unit_size, &mut result);
-        result
-    }
-
-    fn get_sum_recursive(
-        node: &OctreeNode,
-        min_pos: glam::Vec3,
-        max_pos: glam::Vec3,
-        unit_size: f32,
+        min_pos: PositionCode,
+        max_pos: PositionCode,
         out: &mut QefSolver,
     ) {
-        let node_min = super::indicators::code_to_pos(node.grid.min_code, unit_size);
-        let node_max = super::indicators::code_to_pos(node.grid.max_code, unit_size);
-
-        // No overlap
-        if node_max.x <= min_pos.x
-            || node_max.y <= min_pos.y
-            || node_max.z <= min_pos.z
-            || node_min.x >= max_pos.x
-            || node_min.y >= max_pos.y
-            || node_min.z >= max_pos.z
+        // C++: if (any(greaterThanEqual(minPos, maxPos))) return;
+        if min_pos.x >= max_pos.x || min_pos.y >= max_pos.y || min_pos.z >= max_pos.z {
+            return;
+        }
+        // C++: no overlap check
+        if min_pos.x >= root.grid.max_code.x
+            || min_pos.y >= root.grid.max_code.y
+            || min_pos.z >= root.grid.max_code.z
+            || max_pos.x <= root.grid.min_code.x
+            || max_pos.y <= root.grid.min_code.y
+            || max_pos.z <= root.grid.min_code.z
         {
             return;
         }
-
-        // Fully contained
-        if node_min.x >= min_pos.x
-            && node_min.y >= min_pos.y
-            && node_min.z >= min_pos.z
-            && node_max.x <= max_pos.x
-            && node_max.y <= max_pos.y
-            && node_max.z <= max_pos.z
-        {
-            out.combine(&node.grid.all_qef);
+        // C++: clamp to node bounds
+        let min_bound = root.grid.min_code.max(min_pos);
+        let max_bound = root.grid.max_code.min(max_pos);
+        // C++: fully contained check
+        if min_bound == root.grid.min_code && max_bound == root.grid.max_code {
+            out.combine(&root.grid.all_qef);
             return;
         }
-
-        if node.is_leaf {
-            // Partial overlap at leaf: include anyway
-            out.combine(&node.grid.all_qef);
-            return;
-        }
-
-        for c in node.children.iter().flatten() {
-            Self::get_sum_recursive(c, min_pos, max_pos, unit_size, out);
+        // C++: recurse into octree children with clamped bounds
+        for c in root.children.iter().flatten() {
+            Self::get_sum(c, min_bound, max_bound, out);
         }
     }
 

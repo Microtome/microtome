@@ -85,7 +85,7 @@ impl IsosurfaceApp {
             triangle_count: 0,
             build_time_ms: 0.0,
             structure: Structure::Octree,
-            error_threshold: 1e-7,
+            error_threshold: 1e-2,
             octree_depth: 8,
             show_wireframe: false,
             needs_rebuild: true,

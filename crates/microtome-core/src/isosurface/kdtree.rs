@@ -4,7 +4,7 @@
 //! triangles than the octree alone for the same error threshold. This is a
 //! port of the KdtreeISO algorithm.
 
-use super::indicators::{PositionCode, code_to_pos, opposite_quad_index};
+use super::indicators::{PositionCode, opposite_quad_index};
 use super::mesh_output::IsoMesh;
 use super::octree::OctreeNode;
 use super::qef::QefSolver;
@@ -184,7 +184,6 @@ impl KdTreeNode {
         min_code: PositionCode,
         max_code: PositionCode,
         axis: usize,
-        unit_size: f32,
     ) -> (PositionCode, PositionCode) {
         let mut min_axis = min_code[axis];
         let mut max_axis = max_code[axis];
@@ -201,18 +200,10 @@ impl KdTreeNode {
             let mut left_max_code = max_code;
             left_max_code[axis] = mid;
 
-            let mut left_sum = OctreeNode::get_sum(
-                octree,
-                code_to_pos(min_code, unit_size),
-                code_to_pos(left_max_code, unit_size),
-                unit_size,
-            );
-            let mut right_sum = OctreeNode::get_sum(
-                octree,
-                code_to_pos(right_min_code, unit_size),
-                code_to_pos(max_code, unit_size),
-                unit_size,
-            );
+            let mut left_sum = QefSolver::new();
+            OctreeNode::get_sum(octree, min_code, left_max_code, &mut left_sum);
+            let mut right_sum = QefSolver::new();
+            OctreeNode::get_sum(octree, right_min_code, max_code, &mut right_sum);
 
             let (_left_approx, left_error) = left_sum.solve();
             let (_right_approx, right_error) = right_sum.solve();
@@ -260,9 +251,9 @@ impl KdTreeNode {
         }
 
         // Accumulate QEF from octree for this region
-        let min_pos = code_to_pos(min_code, unit_size);
-        let max_pos = code_to_pos(max_code, unit_size);
-        let mut qef = OctreeNode::get_sum(octree, min_pos, max_pos, unit_size);
+        // C++: Octree::getSum(octree, minCode, maxCode, sum) uses integer codes
+        let mut qef = QefSolver::new();
+        OctreeNode::get_sum(octree, min_code, max_code, &mut qef);
 
         if qef.point_count() <= 0 {
             return None;
@@ -273,7 +264,7 @@ impl KdTreeNode {
 
         // Find split plane via binary search
         let (best_left_max, best_right_min) =
-            Self::find_split_plane(octree, min_code, max_code, dir, unit_size);
+            Self::find_split_plane(octree, min_code, max_code, dir);
 
         // Create the node
         let grid = RectilinearGrid::new(min_code, max_code, qef, unit_size);
