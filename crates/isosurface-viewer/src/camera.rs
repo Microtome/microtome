@@ -23,7 +23,7 @@ const RADIUS_MAX: f32 = 500.0;
 const FOV_DEGREES: f32 = 37.0;
 
 /// Zoom factor per scroll event (proportion of current radius).
-const SCROLL_ZOOM_FACTOR: f32 = 0.1;
+const SCROLL_ZOOM_FACTOR: f32 = 0.03;
 
 /// Orbit camera that rotates around a target point using spherical coordinates.
 ///
@@ -167,7 +167,7 @@ impl OrbitCamera {
         // Handle scroll to zoom (proportional to current distance)
         let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
         if scroll_delta.abs() > 0.0 {
-            let zoom = scroll_delta.signum() * self.radius * SCROLL_ZOOM_FACTOR;
+            let zoom = scroll_delta * SCROLL_ZOOM_FACTOR * self.radius / 100.0;
             self.radius = (self.radius - zoom).clamp(RADIUS_MIN, RADIUS_MAX);
         }
     }
