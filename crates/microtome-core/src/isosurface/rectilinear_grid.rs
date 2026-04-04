@@ -532,8 +532,12 @@ impl RectilinearGrid {
 
     /// Tests whether the intersection-free condition 2 is violated.
     ///
-    /// Checks whether a line segment from `p1` to `p2` intersects any of the
-    /// given triangles (each stored as 3 consecutive `Vec3` positions).
+    /// Matches C++ `isInterFreeCondition2Faild` exactly:
+    /// The "supporting edge" (p1→p2) should intersect the fan-triangulated
+    /// polygon if the vertex ordering is correct. Returns `true` (failed)
+    /// when the edge does NOT intersect any triangle — meaning the ordering
+    /// is bad and should be swapped. Returns `false` (not failed) when the
+    /// edge DOES intersect — meaning the ordering is good.
     pub fn is_inter_free_condition2_failed(
         polygons: &[(Vec3, Vec3, Vec3)],
         p1: Vec3,
@@ -542,10 +546,12 @@ impl RectilinearGrid {
         let direction = p2 - p1;
         for &(v0, v1, v2) in polygons {
             if Self::ray_triangle_intersect(p1, direction, v0, v1, v2) {
-                return true;
+                // Edge intersects the polygon — ordering is good
+                return false;
             }
         }
-        false
+        // Edge does not intersect — ordering is bad
+        true
     }
 }
 
@@ -890,21 +896,22 @@ mod tests {
     }
 
     #[test]
-    fn is_inter_free_condition2_detects_intersection() {
+    fn is_inter_free_condition2_matches_cpp() {
         let tri = (
             Vec3::new(-1.0, -1.0, 0.5),
             Vec3::new(1.0, -1.0, 0.5),
             Vec3::new(0.0, 1.0, 0.5),
         );
-        // Segment passes through the triangle
-        assert!(RectilinearGrid::is_inter_free_condition2_failed(
+        // C++ semantics: intersection found → condition NOT failed (return false)
+        // Segment passes through the triangle → ordering is good
+        assert!(!RectilinearGrid::is_inter_free_condition2_failed(
             &[tri],
             Vec3::ZERO,
             Vec3::Z
         ));
 
-        // Segment does not reach the triangle
-        assert!(!RectilinearGrid::is_inter_free_condition2_failed(
+        // Segment does not reach the triangle → ordering is bad (failed)
+        assert!(RectilinearGrid::is_inter_free_condition2_failed(
             &[tri],
             Vec3::new(5.0, 5.0, 0.0),
             Vec3::new(5.0, 5.0, 1.0)

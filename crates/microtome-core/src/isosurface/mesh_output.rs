@@ -43,28 +43,14 @@ impl IsoMesh {
     /// differ significantly from the field normal at a slightly offset
     /// position (for better shading at sharp features).
     ///
-    /// Matches C++ `Mesh::addTriangle` exactly.
-    pub fn add_triangle<F>(&mut self, vertices: [&Vertex; 3], normal_fn: F)
+    /// Adds a triangle. Uses simple index push for now to isolate
+    /// contouring issues from normal-splitting issues.
+    pub fn add_triangle<F>(&mut self, vertices: [&Vertex; 3], _normal_fn: F)
     where
         F: Fn(Vec3) -> Vec3,
     {
-        let cos_threshold = (15.0_f32.to_radians()).cos();
-        for j in 0..3 {
-            let target = &vertices[j];
-            let adj0 = &vertices[(j + 1) % 3];
-            let adj1 = &vertices[(j + 2) % 3];
-            let offset =
-                (adj1.hermite_p - target.hermite_p + adj0.hermite_p - target.hermite_p) * 0.05;
-            let normal = normal_fn(target.hermite_p + offset);
-            if target.hermite_n.dot(normal) < cos_threshold {
-                // Split: create a new vertex with the offset normal
-                let idx = self.positions.len() as u32;
-                self.positions.push(target.hermite_p);
-                self.normals.push(normal);
-                self.indices.push(idx);
-            } else {
-                self.indices.push(target.vertex_index);
-            }
+        for v in &vertices {
+            self.indices.push(v.vertex_index);
         }
     }
 

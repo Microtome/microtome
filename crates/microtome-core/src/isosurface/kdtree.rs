@@ -802,4 +802,62 @@ mod tests {
             assert_eq!(opposite_quad_index(opposite_quad_index(i)), i);
         }
     }
+
+    #[test]
+    fn kdtree_box_with_hole_mesh() {
+        use crate::isosurface::scalar_field::{Aabb, Cylinder, Difference};
+
+        let result = std::thread::Builder::new()
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                let field: Box<dyn crate::isosurface::scalar_field::ScalarField> =
+                    Box::new(Difference::new(
+                        Aabb::new(glam::Vec3::splat(-4.0), glam::Vec3::splat(4.0)),
+                        Cylinder::new(glam::Vec3::new(0.0, 0.0, 3.0)),
+                    ));
+
+                let depth = 8u32;
+                let size_code = PositionCode::splat(1 << (depth - 1));
+                let unit_size = 32.0 / size_code.x as f32;
+                let min_code = -size_code / 2;
+                let threshold = 1e-2_f32;
+
+                // Build octree (as_mipmap) for kd-tree
+                let oct_for_kd = OctreeNode::build_with_scalar_field(
+                    min_code,
+                    depth,
+                    field.as_ref(),
+                    true,
+                    unit_size,
+                )
+                .expect("octree for kd should exist");
+
+                // Build kd-tree
+                let mut kdtree = KdTreeNode::build_from_octree(
+                    &oct_for_kd,
+                    min_code,
+                    size_code / 2,
+                    field.as_ref(),
+                    0,
+                    unit_size,
+                )
+                .expect("kdtree should exist");
+
+                let kd_mesh =
+                    KdTreeNode::extract_mesh(&mut kdtree, field.as_ref(), threshold, unit_size);
+
+                assert!(
+                    kd_mesh.triangle_count() > 0,
+                    "KdTree should produce triangles"
+                );
+            });
+        match result {
+            Ok(handle) => {
+                if let Err(e) = handle.join() {
+                    std::panic::resume_unwind(e);
+                }
+            }
+            Err(e) => panic!("Failed to spawn test thread: {e}"),
+        }
+    }
 }
