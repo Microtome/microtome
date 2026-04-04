@@ -56,6 +56,8 @@ pub struct IsosurfaceApp {
     octree_depth: u32,
     show_wireframe: bool,
     needs_rebuild: bool,
+    /// Whether settings have changed since the last build.
+    stale: bool,
     /// Receiver for async build results.
     build_rx: Option<mpsc::Receiver<BuildResult>>,
     /// Whether a build is currently in progress.
@@ -87,6 +89,7 @@ impl IsosurfaceApp {
             octree_depth: 8,
             show_wireframe: false,
             needs_rebuild: true,
+            stale: false,
             build_rx: None,
             building: false,
             build_start: None,
@@ -240,8 +243,8 @@ impl IsosurfaceApp {
 impl eframe::App for IsosurfaceApp {
     /// Main UI rendering called each frame.
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        // Start async rebuild if requested.
-        if self.needs_rebuild && !self.building {
+        // Start async rebuild only when explicitly requested via button.
+        if self.needs_rebuild && !self.stale && !self.building {
             self.start_rebuild();
         }
 
@@ -305,7 +308,17 @@ impl eframe::App for IsosurfaceApp {
                         }
                     });
 
-                    if !self.building && (ui.button("Rebuild").clicked() || changed) {
+                    if changed {
+                        self.stale = true;
+                    }
+
+                    let rebuild_btn = if self.stale && !self.building {
+                        egui::Button::new("Rebuild").fill(egui::Color32::from_rgb(180, 80, 30))
+                    } else {
+                        egui::Button::new("Rebuild")
+                    };
+                    if ui.add_enabled(!self.building, rebuild_btn).clicked() {
+                        self.stale = false;
                         self.needs_rebuild = true;
                     }
                 });
