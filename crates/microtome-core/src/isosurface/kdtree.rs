@@ -76,6 +76,10 @@ impl KdTreeNode {
     }
 
     /// Combines QEF data from children into this node's grid.
+    ///
+    /// Matches C++ `combineQef`: calls `combineAAGrid` which populates
+    /// components/vertices/cornerSigns/componentIndices but does NOT
+    /// modify allQef or approximate (those come from the octree sum).
     fn combine_qef(&mut self, field: &dyn ScalarField, unit_size: f32) {
         if !self.clusterable || self.is_leaf() {
             return;
@@ -93,8 +97,9 @@ impl KdTreeNode {
         self.grid.corner_signs = out.corner_signs;
         self.grid.component_indices = out.component_indices;
         self.grid.is_signed = out.is_signed;
-        self.grid.all_qef = out.all_qef;
-        self.grid.approximate = out.approximate;
+        // C++: combineAAGrid operates on &grid directly, so allQef and
+        // approximate are preserved from the constructor (octree sum).
+        // Do NOT overwrite them with the empty temporary's values.
     }
 
     /// Checks whether this node can be clustered (merged with its children).
@@ -293,14 +298,14 @@ impl KdTreeNode {
         );
 
         if node.is_leaf() {
-            // Leaf: assign signs and sample QEF
+            // C++: kd->grid.assignSign(t); kd->grid.sampleQef(t, false);
+            // The `false` means do NOT accumulate into allQef — it already has
+            // the octree sum from the constructor. Only populate components.
             node.grid.assign_sign(field, unit_size);
-            if node.grid.is_signed {
-                node.grid.cal_corner_components();
-                let mut all_qef = QefSolver::new();
-                node.grid.sample_qef(field, &mut all_qef, unit_size);
-                node.grid.all_qef = all_qef;
-            }
+            node.grid.cal_corner_components();
+            let mut throwaway = QefSolver::new();
+            node.grid.sample_qef(field, &mut throwaway, unit_size);
+            // Do NOT overwrite grid.all_qef — it already has the octree QEF sum
         } else {
             // Internal: assign signs and check clusterability
             node.grid.assign_sign(field, unit_size);
@@ -334,7 +339,12 @@ impl KdTreeNode {
     }
 }
 
-/// Recursively assigns mesh vertex indices to all contouring leaf vertices.
+/// Recursively assigns mesh vertex indices to ALL node vertices.
+///
+/// Matches C++ exactly: adds vertices for the current node, then
+/// unconditionally recurses into children. Does NOT stop at contouring
+/// leaves — all vertices in the tree get indices assigned.
+#[allow(clippy::only_used_in_recursion)]
 fn generate_vertex_indices(
     node: &mut KdTreeNode,
     threshold: f32,
@@ -345,10 +355,7 @@ fn generate_vertex_indices(
         mesh.add_vertex(v, |p| field.normal(p));
     }
 
-    if node.is_contouring_leaf(threshold) {
-        return;
-    }
-
+    // C++: always recurse into children (no contouring leaf check)
     for child in node.children.iter_mut().flatten() {
         generate_vertex_indices(child, threshold, field, mesh);
     }
