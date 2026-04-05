@@ -121,22 +121,20 @@ impl KdTreeNode {
         if !self.clusterable || self.is_leaf() {
             return;
         }
-        let left = self.children[0].as_ref().map(|c| &c.grid);
-        let right = self.children[1].as_ref().map(|c| &c.grid);
+        // C++ passes &grid directly to combineAAGrid. We can't borrow
+        // children and &mut self.grid simultaneously, so clone the child
+        // grids, then operate on self.grid in place — matching C++ exactly.
+        let left = self.children[0].as_ref().map(|c| c.grid.clone());
+        let right = self.children[1].as_ref().map(|c| c.grid.clone());
         let dir = self.plane_dir;
-        let min_code = self.grid.min_code;
-        let max_code = self.grid.max_code;
-        let qef = QefSolver::new();
-        let mut out = RectilinearGrid::new(min_code, max_code, qef, unit_size);
-        RectilinearGrid::combine_aa_grid(left, right, dir, &mut out, field, unit_size);
-        // C++ combineAAGrid operates on &grid directly, so allQef and approximate
-        // are preserved from the constructor (octree sum). Copy only the fields
-        // that combineAAGrid populates.
-        self.grid.components = out.components;
-        self.grid.vertices = out.vertices;
-        self.grid.corner_signs = out.corner_signs;
-        self.grid.component_indices = out.component_indices;
-        self.grid.is_signed = out.is_signed;
+        RectilinearGrid::combine_aa_grid(
+            left.as_ref(),
+            right.as_ref(),
+            dir,
+            &mut self.grid,
+            field,
+            unit_size,
+        );
     }
 
     // ========================================================================
@@ -1155,33 +1153,55 @@ mod tests {
                 let size_code = PositionCode::splat(1 << (depth - 1));
                 let unit_size = 32.0 / size_code.x as f32;
                 let min_code = -size_code / 2;
-                let threshold = 1e-2_f32;
 
+                // Build octree mesh (reference) at threshold=0
+                let mut oct_normal = OctreeNode::build_with_scalar_field(
+                    min_code, depth, field.as_ref(), false, unit_size,
+                ).expect("octree should exist");
+                let oct_mesh = OctreeNode::extract_mesh(&mut oct_normal, field.as_ref(), unit_size);
+
+                // Build kd-tree mesh at threshold=0
                 let oct_for_kd = OctreeNode::build_with_scalar_field(
-                    min_code,
-                    depth,
-                    field.as_ref(),
-                    true,
-                    unit_size,
-                )
-                .expect("octree for kd should exist");
-
+                    min_code, depth, field.as_ref(), true, unit_size,
+                ).expect("octree for kd should exist");
                 let mut kdtree = KdTreeNode::build_from_octree(
-                    &oct_for_kd,
-                    min_code,
-                    size_code / 2,
-                    field.as_ref(),
-                    0,
-                    unit_size,
-                )
-                .expect("kdtree should exist");
+                    &oct_for_kd, min_code, size_code / 2, field.as_ref(), 0, unit_size,
+                ).expect("kdtree should exist");
+                let kd_mesh = KdTreeNode::extract_mesh(
+                    &mut kdtree, field.as_ref(), 0.0, unit_size,
+                );
 
-                let kd_mesh =
-                    KdTreeNode::extract_mesh(&mut kdtree, field.as_ref(), threshold, unit_size);
+                let oct_tris = oct_mesh.triangle_count();
+                let kd_tris = kd_mesh.triangle_count();
+                eprintln!("Octree: {oct_tris} triangles, {} vertices", oct_mesh.positions.len());
+                eprintln!("KdTree: {kd_tris} triangles, {} vertices", kd_mesh.positions.len());
 
+                // Count triangles with max edge > 2.0 (long-range connections)
+                let count_long = |mesh: &IsoMesh| -> usize {
+                    let mut n = 0;
+                    for t in 0..mesh.triangle_count() {
+                        let i0 = mesh.indices[t * 3] as usize;
+                        let i1 = mesh.indices[t * 3 + 1] as usize;
+                        let i2 = mesh.indices[t * 3 + 2] as usize;
+                        let p0 = mesh.positions[i0];
+                        let p1 = mesh.positions[i1];
+                        let p2 = mesh.positions[i2];
+                        let max_edge = (p1-p0).length().max((p2-p1).length()).max((p0-p2).length());
+                        if max_edge > 2.0 { n += 1; }
+                    }
+                    n
+                };
+
+                let oct_long = count_long(&oct_mesh);
+                let kd_long = count_long(&kd_mesh);
+                eprintln!("Octree long-edge tris: {oct_long}");
+                eprintln!("KdTree long-edge tris: {kd_long}");
+
+                assert!(kd_tris > 0, "KdTree should produce triangles");
+                // KdTree should not have massively more triangles than octree
                 assert!(
-                    kd_mesh.triangle_count() > 0,
-                    "KdTree should produce triangles"
+                    kd_tris < oct_tris * 2,
+                    "KdTree has {kd_tris} tris vs octree's {oct_tris} — too many extra"
                 );
             });
         match result {
@@ -1193,4 +1213,5 @@ mod tests {
             Err(e) => panic!("Failed to spawn test thread: {e}"),
         }
     }
+
 }
