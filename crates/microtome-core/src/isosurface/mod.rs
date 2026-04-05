@@ -7,6 +7,7 @@ pub mod indicators;
 pub mod kdtree;
 pub mod mesh_output;
 pub mod octree;
+#[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod qef;
 pub mod rectilinear_grid;
 pub mod scalar_field;

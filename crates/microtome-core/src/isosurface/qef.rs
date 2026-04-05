@@ -1,41 +1,81 @@
-//! Quadratic Error Function (QEF) solver for dual contouring.
-//!
-//! Solves for the optimal vertex position that minimizes the sum of squared
-//! distances to a set of tangent planes (hermite data: point + normal pairs).
-//! Uses a Jacobi SVD on the 3×3 normal equation matrix.
+// Quadratic Error Function (QEF) solver for dual contouring.
+//
+// Ported line-by-line from KdtreeISO-master/src/KdtreeISO/lib/Qef.cpp
+// and KdtreeISO-master/src/KdtreeISO/include/Qef.h
+//
+// Uses [[f32; 3]; 3] for matrices indexed as [col][row] to match
+// GLM's column-major mat3x3 convention exactly.
 
-use glam::{Mat3, Vec3};
+use glam::Vec3;
 
-/// Number of Jacobi rotation sweeps for the SVD.
+// #define SVD_NUM_SWEEPS 5
 const SVD_NUM_SWEEPS: usize = 5;
 
-/// Tolerance for pseudoinverse singular value cutoff.
+// const float Tiny_Number = 1.e-4f;
 const TINY_NUMBER: f32 = 1.0e-4;
 
-/// Quadratic Error Function solver for isosurface vertex placement.
-///
-/// Accumulates hermite data (intersection point + surface normal pairs)
-/// and solves for the position that minimizes the sum of squared distances
-/// to all tangent planes.
+/// 3x3 matrix stored as `[col][row]` to match GLM's `mat3x3[col][row]`.
+type Mat3x3 = [[f32; 3]; 3];
+
+/// Returns a zero 3x3 matrix (matches `glm::mat4(0.0)` → `glm::mat3x3`).
+fn mat3_zero() -> Mat3x3 {
+    [[0.0; 3]; 3]
+}
+
+/// Returns a 3x3 identity matrix.
+fn mat3_identity() -> Mat3x3 {
+    [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+}
+
+/// Matrix-vector multiply: `m * v` (matches GLM `mat3 * vec3`).
+fn mat3_mul_vec3(m: &Mat3x3, v: Vec3) -> Vec3 {
+    // result[row] = sum_col m[col][row] * v[col]
+    Vec3::new(
+        m[0][0] * v.x + m[1][0] * v.y + m[2][0] * v.z,
+        m[0][1] * v.x + m[1][1] * v.y + m[2][1] * v.z,
+        m[0][2] * v.x + m[1][2] * v.y + m[2][2] * v.z,
+    )
+}
+
+// ============================================================================
+// Qef.h — struct QefSolver
+// ============================================================================
+
+// struct QefSolver {
+//   glm::mat3x3 ATA;
+//   glm::fvec3 ATb;
+//   glm::fvec3 diag_ATc;
+//   float btb;
+//   glm::fvec3 diag_ctc;
+//   glm::fvec3 massPointSum;
+//   glm::fvec3 averageNormalSum;
+//   float roughness;
+//   int pointCount;
+//   QefSolver()
+//     : ATA(glm::mat4(0.0)),
+//       ATb(glm::fvec3(0.0)),
+//       diag_ATc(0.0),
+//       btb(0.f),
+//       diag_ctc(glm::fvec3(0.f)),
+//       massPointSum(glm::fvec3(0.f)),
+//       averageNormalSum(glm::fvec3(0.f)),
+//       roughness(0.f),
+//       pointCount(0) {}
+// };
 #[derive(Debug, Clone)]
 pub struct QefSolver {
-    /// Normal equation matrix A^T A (symmetric, only upper triangle used).
-    ata: Mat3,
-    /// Normal equation vector A^T b.
+    ata: Mat3x3,
     atb: Vec3,
-    /// Diagonal of A^T c (for covariance computation).
     diag_atc: Vec3,
-    /// b^T b scalar.
     btb: f32,
-    /// Diagonal of c^T c (for covariance computation).
     diag_ctc: Vec3,
-    /// Sum of all sample positions (for mass point computation).
     mass_point_sum: Vec3,
-    /// Sum of all sample normals (for roughness computation).
     average_normal_sum: Vec3,
-    /// Surface roughness metric (1 - |avg_normal| / count).
     roughness: f32,
-    /// Number of hermite samples added.
     point_count: i32,
 }
 
@@ -46,10 +86,9 @@ impl Default for QefSolver {
 }
 
 impl QefSolver {
-    /// Creates a new empty QEF solver.
     pub fn new() -> Self {
         Self {
-            ata: Mat3::ZERO,
+            ata: mat3_zero(),
             atb: Vec3::ZERO,
             diag_atc: Vec3::ZERO,
             btb: 0.0,
@@ -61,20 +100,82 @@ impl QefSolver {
         }
     }
 
-    /// Resets the solver to its initial empty state.
+    // ========================================================================
+    // Qef.cpp — void QefSolver::reset()
+    // ========================================================================
+
+    // void QefSolver::reset() {
+    //   ATA = glm::mat4(0.f);
+    //   ATb = glm::fvec3(0.f);
+    //   btb = 0.f;
+    //   massPointSum = glm::fvec3(0.f);
+    //   averageNormalSum = glm::fvec3(0.f);
+    //   pointCount = 0;
+    // }
     pub fn reset(&mut self) {
         *self = Self::new();
     }
 
-    /// Copies all data from another solver.
+    // ========================================================================
+    // Qef.cpp — void QefSolver::set(const QefSolver &other)
+    // ========================================================================
+
+    // void QefSolver::set(const QefSolver &other) {
+    //   ATA[0][0] = other.ATA[0][0];
+    //   ATA[1][1] = other.ATA[1][1];
+    //   ATA[2][2] = other.ATA[2][2];
+    //   ATA[0][1] = other.ATA[0][1];
+    //   ATA[0][2] = other.ATA[0][2];
+    //   ATA[1][2] = other.ATA[1][2];
+    //   ATb = other.ATb;
+    //   btb = other.btb;
+    //   massPointSum = other.massPointSum;
+    //   averageNormalSum = other.averageNormalSum;
+    //   pointCount = other.pointCount;
+    //   calRoughness();
+    // }
     pub fn set(&mut self, other: &QefSolver) {
-        self.clone_from(other);
+        self.ata[0][0] = other.ata[0][0];
+        self.ata[1][1] = other.ata[1][1];
+        self.ata[2][2] = other.ata[2][2];
+        self.ata[0][1] = other.ata[0][1];
+        self.ata[0][2] = other.ata[0][2];
+        self.ata[1][2] = other.ata[1][2];
+        self.atb = other.atb;
+        self.btb = other.btb;
+        self.mass_point_sum = other.mass_point_sum;
+        self.average_normal_sum = other.average_normal_sum;
+        self.point_count = other.point_count;
         self.cal_roughness();
     }
 
-    /// Accumulates another solver's data into this one.
+    // ========================================================================
+    // Qef.cpp — void QefSolver::combine(const QefSolver &other)
+    // ========================================================================
+
+    // void QefSolver::combine(const QefSolver &other) {
+    //   ATA[0][0] += other.ATA[0][0];
+    //   ATA[1][1] += other.ATA[1][1];
+    //   ATA[2][2] += other.ATA[2][2];
+    //   ATA[0][1] += other.ATA[0][1];
+    //   ATA[0][2] += other.ATA[0][2];
+    //   ATA[1][2] += other.ATA[1][2];
+    //   ATb += other.ATb;
+    //   diag_ATc += other.diag_ATc;
+    //   btb += other.btb;
+    //   diag_ctc += other.diag_ctc;
+    //   massPointSum += other.massPointSum;
+    //   pointCount += other.pointCount;
+    //   averageNormalSum += other.averageNormalSum;
+    //   calRoughness();
+    // }
     pub fn combine(&mut self, other: &QefSolver) {
-        self.ata = add_symmetric(self.ata, other.ata);
+        self.ata[0][0] += other.ata[0][0];
+        self.ata[1][1] += other.ata[1][1];
+        self.ata[2][2] += other.ata[2][2];
+        self.ata[0][1] += other.ata[0][1];
+        self.ata[0][2] += other.ata[0][2];
+        self.ata[1][2] += other.ata[1][2];
         self.atb += other.atb;
         self.diag_atc += other.diag_atc;
         self.btb += other.btb;
@@ -85,9 +186,31 @@ impl QefSolver {
         self.cal_roughness();
     }
 
-    /// Subtracts another solver's data from this one.
+    // ========================================================================
+    // Qef.cpp — void QefSolver::separate(const QefSolver &other)
+    // ========================================================================
+
+    // void QefSolver::separate(const QefSolver &other) {
+    //   ATA[0][0] -= other.ATA[0][0];
+    //   ATA[1][1] -= other.ATA[1][1];
+    //   ATA[2][2] -= other.ATA[2][2];
+    //   ATA[0][1] -= other.ATA[0][1];
+    //   ATA[0][2] -= other.ATA[0][2];
+    //   ATA[1][2] -= other.ATA[1][2];
+    //   ATb -= other.ATb;
+    //   btb -= other.btb;
+    //   massPointSum -= other.massPointSum;
+    //   pointCount -= other.pointCount;
+    //   averageNormalSum -= other.averageNormalSum;
+    //   calRoughness();
+    // }
     pub fn separate(&mut self, other: &QefSolver) {
-        self.ata = sub_symmetric(self.ata, other.ata);
+        self.ata[0][0] -= other.ata[0][0];
+        self.ata[1][1] -= other.ata[1][1];
+        self.ata[2][2] -= other.ata[2][2];
+        self.ata[0][1] -= other.ata[0][1];
+        self.ata[0][2] -= other.ata[0][2];
+        self.ata[1][2] -= other.ata[1][2];
         self.atb -= other.atb;
         self.btb -= other.btb;
         self.mass_point_sum -= other.mass_point_sum;
@@ -96,19 +219,34 @@ impl QefSolver {
         self.cal_roughness();
     }
 
-    /// Adds a hermite data sample (surface intersection point + normal).
+    // ========================================================================
+    // Qef.cpp — void QefSolver::add(const glm::fvec3 &p, const glm::fvec3 &n)
+    // ========================================================================
+
+    // void QefSolver::add(const glm::fvec3 &p, const glm::fvec3 &n) {
+    //   ATA[0][0] += n.x * n.x;
+    //   ATA[0][1] += n.x * n.y;
+    //   ATA[0][2] += n.x * n.z;
+    //   ATA[1][1] += n.y * n.y;
+    //   ATA[1][2] += n.y * n.z;
+    //   ATA[2][2] += n.z * n.z;
+    //   float dotp = glm::dot(p, n);
+    //   glm::fvec3 c = p * n;
+    //   ATb += n * dotp;
+    //   diag_ATc += n * c;
+    //   btb += dotp * dotp;
+    //   diag_ctc += c * c;
+    //   pointCount++;
+    //   massPointSum += p;
+    //   averageNormalSum += n;
+    // }
     pub fn add(&mut self, p: Vec3, n: Vec3) {
-        // Accumulate A^T A (symmetric: only store upper triangle)
-        let col0 = self.ata.col(0);
-        let col1 = self.ata.col(1);
-        let col2 = self.ata.col(2);
-
-        self.ata = Mat3::from_cols(
-            Vec3::new(col0.x + n.x * n.x, col0.y + n.x * n.y, col0.z + n.x * n.z),
-            Vec3::new(col1.x, col1.y + n.y * n.y, col1.z + n.y * n.z),
-            Vec3::new(col2.x, col2.y, col2.z + n.z * n.z),
-        );
-
+        self.ata[0][0] += n.x * n.x;
+        self.ata[0][1] += n.x * n.y;
+        self.ata[0][2] += n.x * n.z;
+        self.ata[1][1] += n.y * n.y;
+        self.ata[1][2] += n.y * n.z;
+        self.ata[2][2] += n.z * n.z;
         let dotp = p.dot(n);
         let c = p * n;
         self.atb += n * dotp;
@@ -120,43 +258,75 @@ impl QefSolver {
         self.average_normal_sum += n;
     }
 
-    /// Solves the QEF, returning the optimal position and the error.
-    ///
-    /// The solve uses a mass-point-centered coordinate system for numerical
-    /// stability, then applies a Lagrange multiplier via SVD pseudoinverse.
+    // ========================================================================
+    // Qef.cpp — void QefSolver::solve(...)
+    // ========================================================================
+
+    // void QefSolver::solve(glm::fvec3 &hermiteP, float &error) {
+    //   if (pointCount > 0) {
+    //     calRoughness();
+    //     glm::fvec3 massPoint = massPointSum / (float)pointCount;
+    //     glm::fvec3 _ATb = ATb - svd_vmul_sym(ATA, massPoint);
+    //     hermiteP = svd_solve_ATA_ATb(ATA, _ATb);
+    //     hermiteP += massPoint;
+    //     error = qef_calc_error(ATA, hermiteP, ATb, btb);
+    //     assert(!isnan(hermiteP.x));
+    //   }
+    // }
     pub fn solve(&mut self) -> (Vec3, f32) {
         if self.point_count <= 0 {
             return (Vec3::ZERO, 0.0);
         }
         self.cal_roughness();
         let mass_point = self.mass_point_sum / self.point_count as f32;
-        let shifted_atb = self.atb - svd_vmul_sym(self.ata, mass_point);
-        let mut hermite_p = svd_solve_ata_atb(self.ata, shifted_atb);
+        let shifted_atb = self.atb - svd_vmul_sym(&self.ata, mass_point);
+        let mut hermite_p = svd_solve_ata_atb(&self.ata, shifted_atb);
         hermite_p += mass_point;
-        let error = qef_calc_error(self.ata, hermite_p, self.atb, self.btb);
+        let error = qef_calc_error(&self.ata, hermite_p, self.atb, self.btb);
         (hermite_p, error)
     }
 
-    /// Computes the roughness metric (1 - |avg_normal| / count).
+    // ========================================================================
+    // Qef.cpp — void QefSolver::calRoughness()
+    // ========================================================================
+
+    // void QefSolver::calRoughness() {
+    //   roughness = 1.f - glm::length(averageNormalSum) / (float)pointCount;
+    // }
     pub fn cal_roughness(&mut self) {
         if self.point_count > 0 {
             self.roughness = 1.0 - self.average_normal_sum.length() / self.point_count as f32;
         }
     }
 
-    /// Returns the QEF error at a given position.
+    // ========================================================================
+    // Qef.cpp — float QefSolver::getError(const glm::fvec3 &p)
+    // ========================================================================
+
+    // float QefSolver::getError(const glm::fvec3 &p) {
+    //   return qef_calc_error(ATA, p, ATb, btb);
+    // }
     pub fn get_error_at(&self, p: Vec3) -> f32 {
-        qef_calc_error(self.ata, p, self.atb, self.btb)
+        qef_calc_error(&self.ata, p, self.atb, self.btb)
     }
 
-    /// Returns the QEF error at the A^T b point (default).
+    // float QefSolver::getError() {
+    //   return qef_calc_error(ATA, ATb, ATb, btb);
+    // }
     pub fn get_error(&self) -> f32 {
-        qef_calc_error(self.ata, self.atb, self.atb, self.btb)
+        qef_calc_error(&self.ata, self.atb, self.atb, self.btb)
     }
 
-    /// Returns the covariance at a given position.
+    // ========================================================================
+    // Qef.cpp — glm::fvec3 QefSolver::getVariance(const glm::fvec3 &p)
+    // ========================================================================
+
+    // glm::fvec3 QefSolver::getVariance(const glm::fvec3 &p) {
+    //   auto v = qef_calc_co_variance(ATA, p, diag_ATc, diag_ctc);
+    //   return v;
+    // }
     pub fn get_variance(&self, p: Vec3) -> Vec3 {
-        qef_calc_co_variance(self.ata, p, self.diag_atc, self.diag_ctc)
+        qef_calc_co_variance(&self.ata, p, self.diag_atc, self.diag_ctc)
     }
 
     /// Returns the current point count.
@@ -179,39 +349,50 @@ impl QefSolver {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SVD helpers (Jacobi eigenvalue solver for 3x3 symmetric matrices)
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Qef.cpp — SVD helper functions
+// ============================================================================
 
-/// Multiplies a symmetric 3x3 matrix by a vector.
-/// Only uses the upper triangle of `a`.
-fn svd_vmul_sym(a: Mat3, v: Vec3) -> Vec3 {
-    let a00 = a.col(0).x;
-    let a01 = a.col(0).y;
-    let a02 = a.col(0).z;
-    let a11 = a.col(1).y;
-    let a12 = a.col(1).z;
-    let a22 = a.col(2).z;
+// glm::fvec3 svd_vmul_sym(const glm::mat3x3 &a, const glm::fvec3 &v) {
+//   return glm::fvec3(
+//     (a[0][0] * v.x) + (a[0][1] * v.y) + (a[0][2] * v.z),
+//     (a[0][1] * v.x) + (a[1][1] * v.y) + (a[1][2] * v.z),
+//     (a[0][2] * v.x) + (a[1][2] * v.y) + (a[2][2] * v.z));
+// }
+fn svd_vmul_sym(a: &Mat3x3, v: Vec3) -> Vec3 {
     Vec3::new(
-        a00 * v.x + a01 * v.y + a02 * v.z,
-        a01 * v.x + a11 * v.y + a12 * v.z,
-        a02 * v.x + a12 * v.y + a22 * v.z,
+        (a[0][0] * v.x) + (a[0][1] * v.y) + (a[0][2] * v.z),
+        (a[0][1] * v.x) + (a[1][1] * v.y) + (a[1][2] * v.z),
+        (a[0][2] * v.x) + (a[1][2] * v.y) + (a[2][2] * v.z),
     )
 }
 
-/// Computes the QEF error: x^T ATA x - 2 x^T ATb + btb.
-fn qef_calc_error(ata: Mat3, x: Vec3, atb: Vec3, btb: f32) -> f32 {
+// float qef_calc_error(const glm::mat3x3 &ATA, const glm::fvec3 &x,
+//                      const glm::fvec3 &ATb, const float btb) {
+//   glm::fvec3 atax = svd_vmul_sym(ATA, x);
+//   return glm::dot(x, atax) - 2 * glm::dot(x, ATb) + btb;
+// }
+fn qef_calc_error(ata: &Mat3x3, x: Vec3, atb: Vec3, btb: f32) -> f32 {
     let atax = svd_vmul_sym(ata, x);
     x.dot(atax) - 2.0 * x.dot(atb) + btb
 }
 
-/// Computes the covariance at a point.
-fn qef_calc_co_variance(ata: Mat3, x: Vec3, diag_atc: Vec3, diag_ctc: Vec3) -> Vec3 {
-    let diag_ata = Vec3::new(ata.col(0).x, ata.col(1).y, ata.col(2).z);
+// glm::fvec3 qef_calc_co_variance(const glm::mat3x3 &ATA, const glm::fvec3 &x,
+//                                  const glm::fvec3 &diag_ATc, const glm::fvec3 &diag_ctc) {
+//   return x * diag(ATA) * x - 2.f * (x * diag_ATc) + diag_ctc;
+// }
+fn qef_calc_co_variance(ata: &Mat3x3, x: Vec3, diag_atc: Vec3, diag_ctc: Vec3) -> Vec3 {
+    // diag(ATA) = Vec3(ATA[0][0], ATA[1][1], ATA[2][2])
+    let diag_ata = Vec3::new(ata[0][0], ata[1][1], ata[2][2]);
     x * diag_ata * x - 2.0 * (x * diag_atc) + diag_ctc
 }
 
-/// Applies a Givens rotation in the XY plane.
+// void svd_rotate_xy(float &x, float &y, float c, float s) {
+//   float u = x;
+//   float v = y;
+//   x = c * u - s * v;
+//   y = s * u + c * v;
+// }
 fn svd_rotate_xy(x: &mut f32, y: &mut f32, c: f32, s: f32) {
     let u = *x;
     let v = *y;
@@ -219,7 +400,15 @@ fn svd_rotate_xy(x: &mut f32, y: &mut f32, c: f32, s: f32) {
     *y = s * u + c * v;
 }
 
-/// Applies a Givens rotation for a quadratic form.
+// void svd_rotateq_xy(float &x, float &y, float a, float c, float s) {
+//   float cc = c * c;
+//   float ss = s * s;
+//   float mx = 2.0f * c * s * a;
+//   float u = x;
+//   float v = y;
+//   x = cc * u - mx + ss * v;
+//   y = ss * u + mx + cc * v;
+// }
 fn svd_rotateq_xy(x: &mut f32, y: &mut f32, a: f32, c: f32, s: f32) {
     let cc = c * c;
     let ss = s * s;
@@ -230,7 +419,9 @@ fn svd_rotateq_xy(x: &mut f32, y: &mut f32, a: f32, c: f32, s: f32) {
     *y = ss * u + mx + cc * v;
 }
 
-/// Safe reciprocal for pseudoinverse (returns 0 if near-singular).
+// float svd_invdet(float x, float tol) {
+//   return (std::abs(x) < tol || std::abs(1.0f / x) < tol) ? 0.0f : 1.0f / x;
+// }
 fn svd_invdet(x: f32, tol: f32) -> f32 {
     if x.abs() < tol || (1.0 / x).abs() < tol {
         0.0
@@ -239,42 +430,61 @@ fn svd_invdet(x: f32, tol: f32) -> f32 {
     }
 }
 
-/// Computes the pseudoinverse from SVD eigenvalues and eigenvectors.
-///
-/// Given V and sigma from V^T A V = diag(sigma), computes V diag(1/sigma) V^T.
-fn svd_pseudoinverse(sigma: Vec3, v: Mat3) -> Mat3 {
+// void svd_pseudoinverse(glm::mat3x3 &o, const glm::fvec3 &sigma, const glm::mat3x3 &v) {
+//   float d0 = svd_invdet(sigma[0], Tiny_Number);
+//   float d1 = svd_invdet(sigma[1], Tiny_Number);
+//   float d2 = svd_invdet(sigma[2], Tiny_Number);
+//   o = glm::mat3(v[0][0] * d0 * v[0][0] + v[0][1] * d1 * v[0][1] + v[0][2] * d2 * v[0][2],
+//                 v[0][0] * d0 * v[1][0] + v[0][1] * d1 * v[1][1] + v[0][2] * d2 * v[1][2],
+//                 v[0][0] * d0 * v[2][0] + v[0][1] * d1 * v[2][1] + v[0][2] * d2 * v[2][2],
+//                 v[1][0] * d0 * v[0][0] + v[1][1] * d1 * v[0][1] + v[1][2] * d2 * v[0][2],
+//                 v[1][0] * d0 * v[1][0] + v[1][1] * d1 * v[1][1] + v[1][2] * d2 * v[1][2],
+//                 v[1][0] * d0 * v[2][0] + v[1][1] * d1 * v[2][1] + v[1][2] * d2 * v[2][2],
+//                 v[2][0] * d0 * v[0][0] + v[2][1] * d1 * v[0][1] + v[2][2] * d2 * v[0][2],
+//                 v[2][0] * d0 * v[1][0] + v[2][1] * d1 * v[1][1] + v[2][2] * d2 * v[1][2],
+//                 v[2][0] * d0 * v[2][0] + v[2][1] * d1 * v[2][1] + v[2][2] * d2 * v[2][2]);
+// }
+fn svd_pseudoinverse(sigma: Vec3, v: &Mat3x3) -> Mat3x3 {
     let d0 = svd_invdet(sigma.x, TINY_NUMBER);
     let d1 = svd_invdet(sigma.y, TINY_NUMBER);
     let d2 = svd_invdet(sigma.z, TINY_NUMBER);
-
-    // v is column-major in glam: v.col(j) = j-th column
-    let v0 = v.col(0); // column 0
-    let v1 = v.col(1); // column 1
-    let v2 = v.col(2); // column 2
-
-    // Compute V * diag(d) * V^T element by element
-    // o[row][col] = sum_k v[row][k] * dk * v[col][k]
-    // In glam column-major: o.col(col)[row]
-    let col0 = Vec3::new(
-        v0.x * d0 * v0.x + v1.x * d1 * v1.x + v2.x * d2 * v2.x,
-        v0.x * d0 * v0.y + v1.x * d1 * v1.y + v2.x * d2 * v2.y,
-        v0.x * d0 * v0.z + v1.x * d1 * v1.z + v2.x * d2 * v2.z,
-    );
-    let col1 = Vec3::new(
-        v0.y * d0 * v0.x + v1.y * d1 * v1.x + v2.y * d2 * v2.x,
-        v0.y * d0 * v0.y + v1.y * d1 * v1.y + v2.y * d2 * v2.y,
-        v0.y * d0 * v0.z + v1.y * d1 * v1.z + v2.y * d2 * v2.z,
-    );
-    let col2 = Vec3::new(
-        v0.z * d0 * v0.x + v1.z * d1 * v1.x + v2.z * d2 * v2.x,
-        v0.z * d0 * v0.y + v1.z * d1 * v1.y + v2.z * d2 * v2.y,
-        v0.z * d0 * v0.z + v1.z * d1 * v1.z + v2.z * d2 * v2.z,
-    );
-
-    Mat3::from_cols(col0, col1, col2)
+    // glm::mat3 constructor takes args in column-major order:
+    // (col0_row0, col0_row1, col0_row2, col1_row0, col1_row1, ...)
+    // Our Mat3x3 is [col][row], so we fill it directly.
+    [
+        // column 0
+        [
+            v[0][0] * d0 * v[0][0] + v[0][1] * d1 * v[0][1] + v[0][2] * d2 * v[0][2],
+            v[0][0] * d0 * v[1][0] + v[0][1] * d1 * v[1][1] + v[0][2] * d2 * v[1][2],
+            v[0][0] * d0 * v[2][0] + v[0][1] * d1 * v[2][1] + v[0][2] * d2 * v[2][2],
+        ],
+        // column 1
+        [
+            v[1][0] * d0 * v[0][0] + v[1][1] * d1 * v[0][1] + v[1][2] * d2 * v[0][2],
+            v[1][0] * d0 * v[1][0] + v[1][1] * d1 * v[1][1] + v[1][2] * d2 * v[1][2],
+            v[1][0] * d0 * v[2][0] + v[1][1] * d1 * v[2][1] + v[1][2] * d2 * v[2][2],
+        ],
+        // column 2
+        [
+            v[2][0] * d0 * v[0][0] + v[2][1] * d1 * v[0][1] + v[2][2] * d2 * v[0][2],
+            v[2][0] * d0 * v[1][0] + v[2][1] * d1 * v[1][1] + v[2][2] * d2 * v[1][2],
+            v[2][0] * d0 * v[2][0] + v[2][1] * d1 * v[2][1] + v[2][2] * d2 * v[2][2],
+        ],
+    ]
 }
 
-/// Computes Givens coefficients for a symmetric 2x2 rotation.
+// void givens_coeffs_sym(float a_pp, float a_pq, float a_qq, float &c, float &s) {
+//   if (a_pq == 0.0f) {
+//     c = 1.0f;
+//     s = 0.0f;
+//     return;
+//   }
+//   float tau = (a_qq - a_pp) / (2.0f * a_pq);
+//   float stt = sqrt(1.0f + tau * tau);
+//   float tan = 1.0f / (tau >= 0.0f ? tau + stt : tau - stt);
+//   c = 1.0f / sqrt(1.0f + tan * tan);
+//   s = tan * c;
+// }
 fn givens_coeffs_sym(a_pp: f32, a_pq: f32, a_qq: f32) -> (f32, f32) {
     if a_pq == 0.0 {
         return (1.0, 0.0);
@@ -287,118 +497,105 @@ fn givens_coeffs_sym(a_pp: f32, a_pq: f32, a_qq: f32) -> (f32, f32) {
     (c, s)
 }
 
-/// Helper to get a mutable reference to a matrix element by (row, col).
-///
-/// glam Mat3 is column-major: mat.col(col)[row].
-/// This helper reads/writes via columns.
-fn mat3_get(m: &Mat3, row: usize, col: usize) -> f32 {
-    m.col(col)[row]
-}
-
-fn mat3_set(m: &mut Mat3, row: usize, col: usize, val: f32) {
-    match col {
-        0 => {
-            let mut c = m.col(0);
-            c[row] = val;
-            *m = Mat3::from_cols(c, m.col(1), m.col(2));
-        }
-        1 => {
-            let mut c = m.col(1);
-            c[row] = val;
-            *m = Mat3::from_cols(m.col(0), c, m.col(2));
-        }
-        2 => {
-            let mut c = m.col(2);
-            c[row] = val;
-            *m = Mat3::from_cols(m.col(0), m.col(1), c);
-        }
-        _ => {}
-    }
-}
-
-/// Applies one Jacobi rotation to diagonalize the (a, b) element.
-fn svd_rotate(vtav: &mut Mat3, v: &mut Mat3, a: usize, b: usize) {
-    if mat3_get(vtav, a, b) == 0.0 {
+// void svd_rotate(glm::mat3x3 &vtav, glm::mat3x3 &v, int a, int b) {
+//   if (vtav[a][b] == 0.0)
+//     return;
+//   float c = 0.f, s = 0.f;
+//   givens_coeffs_sym(vtav[a][a], vtav[a][b], vtav[b][b], c, s);
+//   float x, y;
+//   x = vtav[a][a];
+//   y = vtav[b][b];
+//   svd_rotateq_xy(x, y, vtav[a][b], c, s);
+//   vtav[a][a] = x;
+//   vtav[b][b] = y;
+//   x = vtav[0][3 - b];
+//   y = vtav[1 - a][2];
+//   svd_rotate_xy(x, y, c, s);
+//   vtav[0][3 - b] = x;
+//   vtav[1 - a][2] = y;
+//   vtav[a][b] = 0.0f;
+//   x = v[0][a]; y = v[0][b];
+//   svd_rotate_xy(x, y, c, s);
+//   v[0][a] = x; v[0][b] = y;
+//   x = v[1][a]; y = v[1][b];
+//   svd_rotate_xy(x, y, c, s);
+//   v[1][a] = x; v[1][b] = y;
+//   x = v[2][a]; y = v[2][b];
+//   svd_rotate_xy(x, y, c, s);
+//   v[2][a] = x; v[2][b] = y;
+// }
+fn svd_rotate(vtav: &mut Mat3x3, v: &mut Mat3x3, a: usize, b: usize) {
+    if vtav[a][b] == 0.0 {
         return;
     }
 
-    let (c, s) = givens_coeffs_sym(
-        mat3_get(vtav, a, a),
-        mat3_get(vtav, a, b),
-        mat3_get(vtav, b, b),
-    );
+    let (c, s) = givens_coeffs_sym(vtav[a][a], vtav[a][b], vtav[b][b]);
 
-    let mut x = mat3_get(vtav, a, a);
-    let mut y = mat3_get(vtav, b, b);
-    svd_rotateq_xy(&mut x, &mut y, mat3_get(vtav, a, b), c, s);
-    mat3_set(vtav, a, a, x);
-    mat3_set(vtav, b, b, y);
+    let mut x = vtav[a][a];
+    let mut y = vtav[b][b];
+    svd_rotateq_xy(&mut x, &mut y, vtav[a][b], c, s);
+    vtav[a][a] = x;
+    vtav[b][b] = y;
 
-    x = mat3_get(vtav, 0, 3 - b);
-    y = mat3_get(vtav, 1 - a, 2);
+    x = vtav[0][3 - b];
+    y = vtav[1 - a][2];
     svd_rotate_xy(&mut x, &mut y, c, s);
-    mat3_set(vtav, 0, 3 - b, x);
-    mat3_set(vtav, 1 - a, 2, y);
+    vtav[0][3 - b] = x;
+    vtav[1 - a][2] = y;
 
-    mat3_set(vtav, a, b, 0.0);
+    vtav[a][b] = 0.0;
 
-    // Rotate columns of V
-    for row in 0..3 {
-        x = mat3_get(v, row, a);
-        y = mat3_get(v, row, b);
-        svd_rotate_xy(&mut x, &mut y, c, s);
-        mat3_set(v, row, a, x);
-        mat3_set(v, row, b, y);
-    }
+    x = v[0][a];
+    y = v[0][b];
+    svd_rotate_xy(&mut x, &mut y, c, s);
+    v[0][a] = x;
+    v[0][b] = y;
+
+    x = v[1][a];
+    y = v[1][b];
+    svd_rotate_xy(&mut x, &mut y, c, s);
+    v[1][a] = x;
+    v[1][b] = y;
+
+    x = v[2][a];
+    y = v[2][b];
+    svd_rotate_xy(&mut x, &mut y, c, s);
+    v[2][a] = x;
+    v[2][b] = y;
 }
 
-/// Solves the symmetric eigenvalue problem via Jacobi rotations.
-fn svd_solve_sym(mut vtav: Mat3) -> (Vec3, Mat3) {
-    let mut v = Mat3::IDENTITY;
+// void svd_solve_sym(glm::mat3x3 vtav, glm::fvec3 &sigma, glm::mat3x3 &v) {
+//   for (int i = 0; i < SVD_NUM_SWEEPS; ++i) {
+//     svd_rotate(vtav, v, 0, 1);
+//     svd_rotate(vtav, v, 0, 2);
+//     svd_rotate(vtav, v, 1, 2);
+//   }
+//   sigma = glm::fvec3(vtav[0][0], vtav[1][1], vtav[2][2]);
+// }
+fn svd_solve_sym(mut vtav: Mat3x3) -> (Vec3, Mat3x3) {
+    let mut v = mat3_identity();
     for _ in 0..SVD_NUM_SWEEPS {
         svd_rotate(&mut vtav, &mut v, 0, 1);
         svd_rotate(&mut vtav, &mut v, 0, 2);
         svd_rotate(&mut vtav, &mut v, 1, 2);
     }
-    let sigma = Vec3::new(
-        mat3_get(&vtav, 0, 0),
-        mat3_get(&vtav, 1, 1),
-        mat3_get(&vtav, 2, 2),
-    );
+    let sigma = Vec3::new(vtav[0][0], vtav[1][1], vtav[2][2]);
     (sigma, v)
 }
 
-/// Solves A^T A x = A^T b via SVD pseudoinverse.
-fn svd_solve_ata_atb(ata: Mat3, atb: Vec3) -> Vec3 {
-    let (sigma, v) = svd_solve_sym(ata);
-    let vinv = svd_pseudoinverse(sigma, v);
-    vinv * atb
-}
-
-/// Adds two symmetric matrices (only upper triangle).
-fn add_symmetric(a: Mat3, b: Mat3) -> Mat3 {
-    Mat3::from_cols(
-        Vec3::new(
-            a.col(0).x + b.col(0).x,
-            a.col(0).y + b.col(0).y,
-            a.col(0).z + b.col(0).z,
-        ),
-        Vec3::new(a.col(1).x, a.col(1).y + b.col(1).y, a.col(1).z + b.col(1).z),
-        Vec3::new(a.col(2).x, a.col(2).y, a.col(2).z + b.col(2).z),
-    )
-}
-
-/// Subtracts two symmetric matrices (only upper triangle).
-fn sub_symmetric(a: Mat3, b: Mat3) -> Mat3 {
-    Mat3::from_cols(
-        Vec3::new(
-            a.col(0).x - b.col(0).x,
-            a.col(0).y - b.col(0).y,
-            a.col(0).z - b.col(0).z,
-        ),
-        Vec3::new(a.col(1).x, a.col(1).y - b.col(1).y, a.col(1).z - b.col(1).z),
-        Vec3::new(a.col(2).x, a.col(2).y, a.col(2).z - b.col(2).z),
-    )
+// glm::fvec3 svd_solve_ATA_ATb(const glm::mat3x3 &ATA, const glm::fvec3 &ATb) {
+//   glm::mat3x3 V;
+//   glm::fvec3 sigma;
+//   svd_solve_sym(ATA, sigma, V);
+//   glm::mat3x3 Vinv;
+//   svd_pseudoinverse(Vinv, sigma, V);
+//   glm::fvec3 x = Vinv * ATb;
+//   return x;
+// }
+fn svd_solve_ata_atb(ata: &Mat3x3, atb: Vec3) -> Vec3 {
+    let (sigma, v) = svd_solve_sym(*ata);
+    let vinv = svd_pseudoinverse(sigma, &v);
+    mat3_mul_vec3(&vinv, atb)
 }
 
 #[cfg(test)]
@@ -415,8 +612,6 @@ mod tests {
 
     #[test]
     fn single_plane_solve() {
-        // A single plane at z=1 with normal (0,0,1).
-        // The QEF minimum is at the plane point.
         let mut solver = QefSolver::new();
         solver.add(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0));
         let (pos, err) = solver.solve();
@@ -426,7 +621,6 @@ mod tests {
 
     #[test]
     fn three_orthogonal_planes() {
-        // Three orthogonal planes intersecting at (1, 2, 3)
         let mut solver = QefSolver::new();
         solver.add(Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
         solver.add(Vec3::new(0.0, 2.0, 0.0), Vec3::new(0.0, 1.0, 0.0));
@@ -451,7 +645,6 @@ mod tests {
         combined.combine(&b);
         combined.separate(&b);
 
-        // After combine+separate, should match original 'a'
         let (pos_a, _) = a.solve();
         let (pos_c, _) = combined.solve();
         assert!((pos_a - pos_c).length() < 1e-3);
@@ -466,5 +659,49 @@ mod tests {
         let (pos, _) = solver.solve();
         let err = solver.get_error_at(pos);
         assert!(err < 1e-2, "err = {err}");
+    }
+
+    /// Test with non-axis-aligned normals to exercise SVD off-diagonal elements.
+    /// This catches the previous bug where mat3_get used (row,col) instead of
+    /// matching GLM's [col][row], causing all Jacobi rotations to be skipped.
+    #[test]
+    fn diagonal_planes_solve() {
+        let mut solver = QefSolver::new();
+        // Three planes with non-axis-aligned normals meeting at (1, 1, 1)
+        let n1 = Vec3::new(1.0, 1.0, 0.0).normalize();
+        let n2 = Vec3::new(0.0, 1.0, 1.0).normalize();
+        let n3 = Vec3::new(1.0, 0.0, 1.0).normalize();
+        // Points on each plane that pass through (1, 1, 1):
+        // n1 . (p - (1,1,1)) = 0  → n1 . p = n1 . (1,1,1)
+        let target = Vec3::new(1.0, 1.0, 1.0);
+        solver.add(target, n1);
+        solver.add(target, n2);
+        solver.add(target, n3);
+        let (pos, err) = solver.solve();
+        assert!(
+            (pos - target).length() < 0.1,
+            "pos = {pos:?}, expected near {target:?}"
+        );
+        assert!(err < 0.1, "err = {err}");
+    }
+
+    /// Test with a cylinder-like arrangement: normals pointing radially.
+    #[test]
+    fn radial_normals_solve() {
+        let mut solver = QefSolver::new();
+        let radius = 3.0_f32;
+        // Four points on a circle in the XY plane with radial normals
+        for angle_deg in &[0.0_f32, 90.0, 180.0, 270.0] {
+            let angle = angle_deg.to_radians();
+            let p = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
+            let n = Vec3::new(angle.cos(), angle.sin(), 0.0);
+            solver.add(p, n);
+        }
+        let (pos, _err) = solver.solve();
+        // Should solve to near the center (0, 0, 0)
+        assert!(
+            pos.length() < 0.5,
+            "pos = {pos:?}, expected near origin"
+        );
     }
 }
