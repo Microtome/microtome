@@ -24,11 +24,7 @@ fn mat3_zero() -> Mat3x3 {
 
 /// Returns a 3x3 identity matrix.
 fn mat3_identity() -> Mat3x3 {
-    [
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ]
+    [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 }
 
 /// Matrix-vector multiply: `m * v` (matches GLM `mat3 * vec3`).
@@ -699,9 +695,6 @@ mod tests {
         }
         let (pos, _err) = solver.solve();
         // Should solve to near the center (0, 0, 0)
-        assert!(
-            pos.length() < 0.5,
-            "pos = {pos:?}, expected near origin"
-        );
+        assert!(pos.length() < 0.5, "pos = {pos:?}, expected near origin");
     }
 }
