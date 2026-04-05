@@ -269,17 +269,17 @@ impl QefSolver {
     //     assert(!isnan(hermiteP.x));
     //   }
     // }
-    pub fn solve(&mut self) -> (Vec3, f32) {
+    pub fn solve(&mut self, hermite_p: &mut Vec3, error: &mut f32) {
+        // C++: when pointCount==0, hermiteP and error are LEFT UNCHANGED.
         if self.point_count <= 0 {
-            return (Vec3::ZERO, 0.0);
+            return;
         }
         self.cal_roughness();
         let mass_point = self.mass_point_sum / self.point_count as f32;
         let shifted_atb = self.atb - svd_vmul_sym(&self.ata, mass_point);
-        let mut hermite_p = svd_solve_ata_atb(&self.ata, shifted_atb);
-        hermite_p += mass_point;
-        let error = qef_calc_error(&self.ata, hermite_p, self.atb, self.btb);
-        (hermite_p, error)
+        *hermite_p = svd_solve_ata_atb(&self.ata, shifted_atb);
+        *hermite_p += mass_point;
+        *error = qef_calc_error(&self.ata, *hermite_p, self.atb, self.btb);
     }
 
     // ========================================================================
@@ -599,18 +599,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_solver_returns_zero() {
+    fn empty_solver_leaves_unchanged() {
+        // C++: solve() does nothing when pointCount==0
         let mut solver = QefSolver::new();
-        let (pos, err) = solver.solve();
-        assert_eq!(pos, Vec3::ZERO);
-        assert_eq!(err, 0.0);
+        let mut pos = Vec3::new(99.0, 99.0, 99.0);
+        let mut err = -1.0_f32;
+        solver.solve(&mut pos, &mut err);
+        // pos and err should be LEFT UNCHANGED
+        assert_eq!(pos, Vec3::new(99.0, 99.0, 99.0));
+        assert_eq!(err, -1.0);
     }
 
     #[test]
     fn single_plane_solve() {
         let mut solver = QefSolver::new();
         solver.add(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0));
-        let (pos, err) = solver.solve();
+        let mut pos = Vec3::ZERO;
+        let mut err = -1.0_f32;
+        solver.solve(&mut pos, &mut err);
         assert!((pos.z - 1.0).abs() < 1e-3, "pos.z = {}", pos.z);
         assert!(err < 1e-3, "err = {err}");
     }
@@ -621,7 +627,9 @@ mod tests {
         solver.add(Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
         solver.add(Vec3::new(0.0, 2.0, 0.0), Vec3::new(0.0, 1.0, 0.0));
         solver.add(Vec3::new(0.0, 0.0, 3.0), Vec3::new(0.0, 0.0, 1.0));
-        let (pos, err) = solver.solve();
+        let mut pos = Vec3::ZERO;
+        let mut err = -1.0_f32;
+        solver.solve(&mut pos, &mut err);
         assert!((pos.x - 1.0).abs() < 1e-3, "pos.x = {}", pos.x);
         assert!((pos.y - 2.0).abs() < 1e-3, "pos.y = {}", pos.y);
         assert!((pos.z - 3.0).abs() < 1e-3, "pos.z = {}", pos.z);
@@ -641,8 +649,12 @@ mod tests {
         combined.combine(&b);
         combined.separate(&b);
 
-        let (pos_a, _) = a.solve();
-        let (pos_c, _) = combined.solve();
+        let mut pos_a = Vec3::ZERO;
+        let mut err_a = 0.0_f32;
+        a.solve(&mut pos_a, &mut err_a);
+        let mut pos_c = Vec3::ZERO;
+        let mut err_c = 0.0_f32;
+        combined.solve(&mut pos_c, &mut err_c);
         assert!((pos_a - pos_c).length() < 1e-3);
     }
 
@@ -652,28 +664,26 @@ mod tests {
         solver.add(Vec3::new(1.0, 0.0, 0.0), Vec3::X);
         solver.add(Vec3::new(0.0, 1.0, 0.0), Vec3::Y);
         solver.add(Vec3::new(0.0, 0.0, 1.0), Vec3::Z);
-        let (pos, _) = solver.solve();
+        let mut pos = Vec3::ZERO;
+        let mut err = 0.0_f32;
+        solver.solve(&mut pos, &mut err);
         let err = solver.get_error_at(pos);
         assert!(err < 1e-2, "err = {err}");
     }
 
-    /// Test with non-axis-aligned normals to exercise SVD off-diagonal elements.
-    /// This catches the previous bug where mat3_get used (row,col) instead of
-    /// matching GLM's [col][row], causing all Jacobi rotations to be skipped.
     #[test]
     fn diagonal_planes_solve() {
         let mut solver = QefSolver::new();
-        // Three planes with non-axis-aligned normals meeting at (1, 1, 1)
         let n1 = Vec3::new(1.0, 1.0, 0.0).normalize();
         let n2 = Vec3::new(0.0, 1.0, 1.0).normalize();
         let n3 = Vec3::new(1.0, 0.0, 1.0).normalize();
-        // Points on each plane that pass through (1, 1, 1):
-        // n1 . (p - (1,1,1)) = 0  → n1 . p = n1 . (1,1,1)
         let target = Vec3::new(1.0, 1.0, 1.0);
         solver.add(target, n1);
         solver.add(target, n2);
         solver.add(target, n3);
-        let (pos, err) = solver.solve();
+        let mut pos = Vec3::ZERO;
+        let mut err = -1.0_f32;
+        solver.solve(&mut pos, &mut err);
         assert!(
             (pos - target).length() < 0.1,
             "pos = {pos:?}, expected near {target:?}"
@@ -681,20 +691,19 @@ mod tests {
         assert!(err < 0.1, "err = {err}");
     }
 
-    /// Test with a cylinder-like arrangement: normals pointing radially.
     #[test]
     fn radial_normals_solve() {
         let mut solver = QefSolver::new();
         let radius = 3.0_f32;
-        // Four points on a circle in the XY plane with radial normals
         for angle_deg in &[0.0_f32, 90.0, 180.0, 270.0] {
             let angle = angle_deg.to_radians();
             let p = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
             let n = Vec3::new(angle.cos(), angle.sin(), 0.0);
             solver.add(p, n);
         }
-        let (pos, _err) = solver.solve();
-        // Should solve to near the center (0, 0, 0)
+        let mut pos = Vec3::ZERO;
+        let mut _err = 0.0_f32;
+        solver.solve(&mut pos, &mut _err);
         assert!(pos.length() < 0.5, "pos = {pos:?}, expected near origin");
     }
 }

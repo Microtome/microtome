@@ -161,7 +161,9 @@ impl RectilinearGrid {
         unit_size: f32,
     ) {
         // C++: qef.solve(p, v.error);
-        let (mut pos, error) = qef.solve();
+        let mut pos = vertex.hermite_p;
+        let mut error = vertex.error;
+        qef.solve(&mut pos, &mut error);
         // C++: auto extends = codeToPos(maxCode - minCode, ...) * 0.5f;
         let extends = code_to_pos(max_code - min_code, unit_size) * 0.5;
         // C++: const auto min = codeToPos(minCode, ...) - extends;

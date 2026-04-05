@@ -3,6 +3,7 @@
 // Ported line-by-line from KdtreeISO-master/src/KdtreeISO/lib/Kdtree.cpp
 // and KdtreeISO-master/src/KdtreeISO/include/Kdtree.h
 
+use glam::Vec3;
 use super::indicators::{PositionCode, opposite_quad_index};
 use super::mesh_output::IsoMesh;
 use super::octree::OctreeNode;
@@ -235,7 +236,10 @@ impl KdTreeNode {
     ) -> usize {
         let size = max_code - min_code;
 
-        let (approximate, _error) = qef.solve();
+        // C++: qef.solve(approximate, error);
+        let mut approximate = Vec3::ZERO;
+        let mut _error = 0.0_f32;
+        qef.solve(&mut approximate, &mut _error);
         let mut variance = qef.get_variance(approximate);
         variance.x *= size.x as f32;
         variance.y *= size.y as f32;
@@ -380,8 +384,12 @@ impl KdTreeNode {
             let mut right_sum = QefSolver::new();
             OctreeNode::get_sum(octree, right_min_code, max_code, &mut right_sum);
 
-            let (_left_approx, left_error) = left_sum.solve();
-            let (_right_approx, right_error) = right_sum.solve();
+            let mut _left_approx = Vec3::ZERO;
+            let mut left_error = 0.0_f32;
+            left_sum.solve(&mut _left_approx, &mut left_error);
+            let mut _right_approx = Vec3::ZERO;
+            let mut right_error = 0.0_f32;
+            right_sum.solve(&mut _right_approx, &mut right_error);
 
             let diff = (left_error - right_error).abs();
             if diff < min_error {
