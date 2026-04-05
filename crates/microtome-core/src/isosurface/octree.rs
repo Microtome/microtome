@@ -307,7 +307,7 @@ impl OctreeNode {
                 if let Some(rg) = r {
                     out.all_qef.combine(&rg.all_qef);
                 }
-                RectilinearGrid::combine_aa_grid(l, r, 2, &mut out, field, unit_size);
+                RectilinearGrid::combine_aa_grid(l, r, 2, &mut out);
                 y_grid_pool[pool_idx] = Some(out);
                 y_grids[y as usize] = Some(pool_idx);
             }
@@ -328,7 +328,7 @@ impl OctreeNode {
             if let Some(g) = yg1 {
                 out.all_qef.combine(&g.all_qef);
             }
-            RectilinearGrid::combine_aa_grid(yg0, yg1, 1, &mut out, field, unit_size);
+            RectilinearGrid::combine_aa_grid(yg0, yg1, 1, &mut out);
             x_grid_pool[x as usize] = Some(out);
         }
 
@@ -337,7 +337,7 @@ impl OctreeNode {
         // self.grid already has assignSign called (from build_with_scalar_field)
         let xg0 = x_grid_pool[0].as_ref();
         let xg1 = x_grid_pool[1].as_ref();
-        RectilinearGrid::combine_aa_grid(xg0, xg1, 0, &mut self.grid, field, unit_size);
+        RectilinearGrid::combine_aa_grid(xg0, xg1, 0, &mut self.grid);
 
         // C++ MC edge case: check if combined point counts match
         let mut count = 0;

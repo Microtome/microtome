@@ -117,7 +117,8 @@ impl KdTreeNode {
     //                                  planeDir,
     //                                  &grid);
     // }
-    fn combine_qef(&mut self, field: &dyn ScalarField, unit_size: f32) {
+    // void Kdtree::combineQef() {
+    fn combine_qef(&mut self) {
         if !self.clusterable || self.is_leaf() {
             return;
         }
@@ -127,13 +128,13 @@ impl KdTreeNode {
         let left = self.children[0].as_ref().map(|c| c.grid.clone());
         let right = self.children[1].as_ref().map(|c| c.grid.clone());
         let dir = self.plane_dir;
+        // C++: combineAAGrid does NOT call assignSign — grid already has
+        // corner_signs set from the earlier assignSign call in buildFromOctree.
         RectilinearGrid::combine_aa_grid(
             left.as_ref(),
             right.as_ref(),
             dir,
             &mut self.grid,
-            field,
-            unit_size,
         );
     }
 
@@ -426,7 +427,7 @@ impl KdTreeNode {
         } else {
             node.grid.assign_sign(field, unit_size);
             node.cal_clusterability(field, unit_size);
-            node.combine_qef(field, unit_size);
+            node.combine_qef();
         }
 
         if node.clusterable {

@@ -741,16 +741,18 @@ impl RectilinearGrid {
     ///
     /// Matches C++ `combineAAGrid` exactly (except parent tracking is skipped
     /// since it is not used in kd-tree contouring).
+    // void RectilinearGrid::combineAAGrid(RectilinearGrid *left,
+    //                                     RectilinearGrid *right,
+    //                                     int dir,
+    //                                     RectilinearGrid *out) {
+    //   out->calCornerComponents();
     pub fn combine_aa_grid(
         left: Option<&RectilinearGrid>,
         right: Option<&RectilinearGrid>,
         dir: usize,
         out: &mut RectilinearGrid,
-        field: &dyn ScalarField,
-        unit_size: f32,
     ) {
-        // C++ caller is expected to have called assign_sign already
-        out.assign_sign(field, unit_size);
+        // C++: caller must have called assignSign on out already.
         // C++: out->calCornerComponents();
         out.cal_corner_components();
 
