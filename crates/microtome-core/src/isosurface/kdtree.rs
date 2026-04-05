@@ -1,8 +1,7 @@
-//! K-d tree based dual contouring for isosurface extraction.
-//!
-//! Builds a binary space partition tree from an octree, producing fewer
-//! triangles than the octree alone for the same error threshold. This is a
-//! port of the KdtreeISO algorithm.
+// K-d tree based dual contouring for isosurface extraction.
+//
+// Ported line-by-line from KdtreeISO-master/src/KdtreeISO/lib/Kdtree.cpp
+// and KdtreeISO-master/src/KdtreeISO/include/Kdtree.h
 
 use super::indicators::{PositionCode, opposite_quad_index};
 use super::mesh_output::IsoMesh;
@@ -11,24 +10,35 @@ use super::qef::QefSolver;
 use super::rectilinear_grid::{HasGrid, RectilinearGrid, generate_quad};
 use super::scalar_field::ScalarField;
 
-/// A node in the k-d tree used for dual contouring.
-///
-/// Each node represents an axis-aligned cell that can be split along one axis
-/// (the `plane_dir`). Leaf nodes have no children; internal nodes have exactly
-/// two children split along the chosen axis.
+// ============================================================================
+// Kdtree.h — struct Kdtree
+// ============================================================================
+
+// struct Kdtree {
+//   typedef std::array<Kdtree *, 2> FaceKd;
+//   typedef std::array<Kdtree *, 4> EdgeKd;
+//   RectilinearGrid grid;
+//   int planeDir;
+//   int depth;
+//   bool clusterable{true};
+//   Kdtree *children[2]{nullptr, nullptr};
 #[derive(Debug, Clone)]
 pub struct KdTreeNode {
-    /// The rectilinear grid cell for this node (signs, QEF, vertices).
     pub grid: RectilinearGrid,
-    /// Split axis (0 = X, 1 = Y, 2 = Z).
     pub plane_dir: usize,
-    /// Depth of this node in the tree.
     pub depth: u32,
-    /// Whether this node and its descendants can be merged without artifacts.
     pub clusterable: bool,
-    /// Two children: `[0]` = lower half, `[1]` = upper half along `plane_dir`.
     pub children: [Option<Box<KdTreeNode>>; 2],
 }
+
+//   Kdtree(QefSolver sum,
+//          const PositionCode &minCode,
+//          const PositionCode &maxCode,
+//          int dir,
+//          int depth)
+//     : grid(minCode, maxCode, sum),
+//       planeDir(dir),
+//       depth(depth) {}
 
 impl HasGrid for KdTreeNode {
     fn grid(&self) -> &RectilinearGrid {
@@ -36,24 +46,37 @@ impl HasGrid for KdTreeNode {
     }
 }
 
-/// An axis-aligned line used during edge contouring.
+// AxisAlignedLine.h — struct AALine
+// struct AALine {
+//   PositionCode point;
+//   int dir;
+// };
 struct AALine {
     point: PositionCode,
     dir: usize,
 }
 
 impl KdTreeNode {
-    /// Returns `true` if this node has no children (is a leaf).
+    //   inline bool isLeaf() const {
+    //     return !children[0] && !children[1];
+    //   }
     pub fn is_leaf(&self) -> bool {
         self.children[0].is_none() && self.children[1].is_none()
     }
 
-    /// Returns `true` if this node should be treated as a contouring leaf.
-    ///
-    /// A node is a contouring leaf if it has no children, or if it is
-    /// clusterable and all vertex errors are at or below the threshold.
+    //   inline bool isContouringLeaf(float threshold) const {
+    //     if (!children[0] && !children[1]) {
+    //       return true;
+    //     }
+    //     for (auto &v : grid.vertices) {
+    //       if (v.error > threshold) {
+    //         return false;
+    //       }
+    //     }
+    //     return clusterable;
+    //   }
     pub fn is_contouring_leaf(&self, threshold: f32) -> bool {
-        if self.is_leaf() {
+        if self.children[0].is_none() && self.children[1].is_none() {
             return true;
         }
         for v in &self.grid.vertices {
@@ -64,7 +87,13 @@ impl KdTreeNode {
         self.clusterable
     }
 
-    /// Returns the split plane position along `plane_dir`.
+    //   inline int axis() {
+    //     assert(!isLeaf());
+    //     if (children[0]) {
+    //       return children[0]->grid.maxCode[planeDir];
+    //     }
+    //     return children[1]->grid.minCode[planeDir];
+    //   }
     fn axis(&self) -> i32 {
         if let Some(c) = &self.children[0] {
             c.grid.max_code[self.plane_dir]
@@ -75,11 +104,19 @@ impl KdTreeNode {
         }
     }
 
-    /// Combines QEF data from children into this node's grid.
-    ///
-    /// Matches C++ `combineQef`: calls `combineAAGrid` which populates
-    /// components/vertices/cornerSigns/componentIndices but does NOT
-    /// modify allQef or approximate (those come from the octree sum).
+    // ========================================================================
+    // Kdtree.cpp — void Kdtree::combineQef()
+    // ========================================================================
+
+    // void Kdtree::combineQef() {
+    //   if (!clusterable || isLeaf()) {
+    //     return;
+    //   }
+    //   RectilinearGrid::combineAAGrid(children[0] ? &children[0]->grid : nullptr,
+    //                                  children[1] ? &children[1]->grid : nullptr,
+    //                                  planeDir,
+    //                                  &grid);
+    // }
     fn combine_qef(&mut self, field: &dyn ScalarField, unit_size: f32) {
         if !self.clusterable || self.is_leaf() {
             return;
@@ -92,17 +129,38 @@ impl KdTreeNode {
         let qef = QefSolver::new();
         let mut out = RectilinearGrid::new(min_code, max_code, qef, unit_size);
         RectilinearGrid::combine_aa_grid(left, right, dir, &mut out, field, unit_size);
+        // C++ combineAAGrid operates on &grid directly, so allQef and approximate
+        // are preserved from the constructor (octree sum). Copy only the fields
+        // that combineAAGrid populates.
         self.grid.components = out.components;
         self.grid.vertices = out.vertices;
         self.grid.corner_signs = out.corner_signs;
         self.grid.component_indices = out.component_indices;
         self.grid.is_signed = out.is_signed;
-        // C++: combineAAGrid operates on &grid directly, so allQef and
-        // approximate are preserved from the constructor (octree sum).
-        // Do NOT overwrite them with the empty temporary's values.
     }
 
-    /// Checks whether this node can be clustered (merged with its children).
+    // ========================================================================
+    // Kdtree.cpp — void Kdtree::calClusterability(ScalarField *t)
+    // ========================================================================
+
+    // void Kdtree::calClusterability(ScalarField *t) {
+    //   bool selfClusterable = RectilinearGrid::calClusterability(
+    //     children[0] ? &children[0]->grid : nullptr,
+    //     children[1] ? &children[1]->grid : nullptr,
+    //     planeDir, grid.minCode, grid.maxCode, t);
+    //   if (!selfClusterable) {
+    //     clusterable = false;
+    //     return;
+    //   }
+    //   for (auto child : children) {
+    //     if (child && !child->clusterable) {
+    //       clusterable = false;
+    //       return;
+    //     }
+    //   }
+    //   clusterable = true;
+    //   return;
+    // }
     fn cal_clusterability(&mut self, field: &dyn ScalarField, unit_size: f32) {
         if self.is_leaf() {
             self.clusterable = true;
@@ -135,10 +193,42 @@ impl KdTreeNode {
         self.clusterable = true;
     }
 
-    /// Chooses the best split axis using variance-weighted selection.
-    ///
-    /// Selects the axis with the highest weighted variance from the QEF,
-    /// ensuring the cell is at least 2 units wide along that axis.
+    // ========================================================================
+    // Kdtree.cpp — int Kdtree::chooseAxisDir(...)
+    // ========================================================================
+
+    // int Kdtree::chooseAxisDir(QefSolver &qef, const PositionCode &minCode, const PositionCode &maxCode) {
+    //   int dir = 0;
+    //   int strategy = 1;
+    //   auto size = maxCode - minCode;
+    //   // strategy == 1: variance approach
+    //   glm::fvec3 approximate;
+    //   float error;
+    //   qef.solve(approximate, error);
+    //   auto variance = qef.getVariance(approximate);
+    //   variance[0] *= size[0];
+    //   variance[1] *= size[1];
+    //   variance[2] *= size[2];
+    //   int maxVarDir = 0, minVarDir = 1;
+    //   if (variance[1] > variance[0]) {
+    //     maxVarDir = 1;
+    //     minVarDir = 0;
+    //   }
+    //   if (variance[2] > variance[maxVarDir]) {
+    //     maxVarDir = 2;
+    //   }
+    //   if (variance[minVarDir] > variance[2]) {
+    //     minVarDir = 2;
+    //   }
+    //   dir = maxVarDir;
+    //   if (size[maxVarDir] < 2) {
+    //     dir = 3 - maxVarDir - minVarDir;
+    //     if (size[3 - maxVarDir - minVarDir] < 2) {
+    //       dir = minVarDir;
+    //     }
+    //   }
+    //   return dir;
+    // }
     fn choose_axis_dir(
         qef: &mut QefSolver,
         min_code: PositionCode,
@@ -146,14 +236,12 @@ impl KdTreeNode {
     ) -> usize {
         let size = max_code - min_code;
 
-        // Solve QEF to get the approximate position, then compute variance
         let (approximate, _error) = qef.solve();
         let mut variance = qef.get_variance(approximate);
         variance.x *= size.x as f32;
         variance.y *= size.y as f32;
         variance.z *= size.z as f32;
 
-        // Find max and min variance directions
         let mut max_var_dir: usize = 0;
         let mut min_var_dir: usize = 1;
         if variance[1] > variance[0] {
@@ -178,16 +266,104 @@ impl KdTreeNode {
         dir
     }
 
-    /// Finds the optimal split plane along an axis using binary search on QEF error.
-    fn find_split_plane(
+    // ========================================================================
+    // Kdtree.cpp — Kdtree *Kdtree::buildFromOctree(...)
+    // ========================================================================
+
+    // Kdtree *Kdtree::buildFromOctree(Octree *octree, const PositionCode &minCode,
+    //   const PositionCode &maxCode, ScalarField *t, int depth) {
+    //   if (glm::any(glm::greaterThanEqual(minCode, maxCode))) {
+    //     return nullptr;
+    //   }
+    //   QefSolver sum;
+    //   Octree::getSum(octree, minCode, maxCode, sum);
+    //   if (sum.pointCount == 0) {
+    //     return nullptr;
+    //   }
+    //   int strategy = 1;
+    //   PositionCode bestRightMinCode = maxCode, bestLeftMaxCode = minCode;
+    //   int dir = chooseAxisDir(sum, minCode, maxCode);
+    //   int minAxis = minCode[dir];
+    //   int maxAxis = maxCode[dir];
+    //   // strategy == 1: binary search split
+    //   QefSolver leftSum, rightSum;
+    //   float minError = std::numeric_limits<float>::max();
+    //   while (maxAxis - minAxis > 1) {
+    //     int mid = (maxAxis + minAxis) / 2;
+    //     PositionCode rightMinCode = minCode;
+    //     rightMinCode[dir] = mid;
+    //     PositionCode leftMaxCode = maxCode;
+    //     leftMaxCode[dir] = mid;
+    //     glm::fvec3 leftApproximate, rightApproximate;
+    //     leftSum.reset();
+    //     rightSum.reset();
+    //     Octree::getSum(octree, minCode, leftMaxCode, leftSum);
+    //     Octree::getSum(octree, rightMinCode, maxCode, rightSum);
+    //     float leftError = 0.f;
+    //     float rightError = 0.f;
+    //     leftSum.solve(leftApproximate, leftError);
+    //     rightSum.solve(rightApproximate, rightError);
+    //     if (abs(leftError - rightError) < minError) {
+    //       minError = abs(leftError - rightError);
+    //       bestLeftMaxCode = leftMaxCode;
+    //       bestRightMinCode = rightMinCode;
+    //     }
+    //     if (leftError > rightError) {
+    //       maxAxis = mid;
+    //     }
+    //     else if (leftError < rightError) {
+    //       minAxis = mid;
+    //     }
+    //     else {
+    //       break;
+    //     }
+    //   }
+    //   auto kd = new Kdtree(sum, minCode, maxCode, dir, depth);
+    //   kd->children[0] = buildFromOctree(octree, minCode, bestLeftMaxCode, t, depth + 1);
+    //   kd->children[1] = buildFromOctree(octree, bestRightMinCode, maxCode, t, depth + 1);
+    //   if (kd->isLeaf()) {
+    //     kd->grid.assignSign(t);
+    //     kd->grid.sampleQef(t, false);
+    //   }
+    //   else {
+    //     kd->grid.assignSign(t);
+    //     kd->calClusterability(t);
+    //     kd->combineQef();
+    //   }
+    //   if (kd->clusterable) {
+    //     for (int i = 0; i < kd->grid.components.size(); ++i) {
+    //       kd->grid.solveComponent(i);
+    //     }
+    //   }
+    //   return kd;
+    // }
+    pub fn build_from_octree(
         octree: &OctreeNode,
         min_code: PositionCode,
         max_code: PositionCode,
-        axis: usize,
-    ) -> (PositionCode, PositionCode) {
-        let mut min_axis = min_code[axis];
-        let mut max_axis = max_code[axis];
+        field: &dyn ScalarField,
+        depth: u32,
+        unit_size: f32,
+    ) -> Option<Box<KdTreeNode>> {
+        if min_code.x >= max_code.x || min_code.y >= max_code.y || min_code.z >= max_code.z {
+            return None;
+        }
+        if depth > 64 {
+            return None;
+        }
 
+        let mut qef = QefSolver::new();
+        OctreeNode::get_sum(octree, min_code, max_code, &mut qef);
+
+        if qef.point_count() <= 0 {
+            return None;
+        }
+
+        let dir = Self::choose_axis_dir(&mut qef, min_code, max_code);
+
+        // Binary search for split plane
+        let mut min_axis = min_code[dir];
+        let mut max_axis = max_code[dir];
         let mut best_left_max = min_code;
         let mut best_right_min = max_code;
         let mut min_error = f32::MAX;
@@ -196,9 +372,9 @@ impl KdTreeNode {
             let mid = (max_axis + min_axis) / 2;
 
             let mut right_min_code = min_code;
-            right_min_code[axis] = mid;
+            right_min_code[dir] = mid;
             let mut left_max_code = max_code;
-            left_max_code[axis] = mid;
+            left_max_code[dir] = mid;
 
             let mut left_sum = QefSolver::new();
             OctreeNode::get_sum(octree, min_code, left_max_code, &mut left_sum);
@@ -224,49 +400,6 @@ impl KdTreeNode {
             }
         }
 
-        (best_left_max, best_right_min)
-    }
-
-    /// Builds a k-d tree from an octree using binary search split planes.
-    ///
-    /// Recursively subdivides the region `[min_code, max_code]` by choosing
-    /// the best split axis and finding the optimal split plane via binary
-    /// search in the octree's QEF data.
-    ///
-    /// Returns `None` if the region contains no surface.
-    pub fn build_from_octree(
-        octree: &OctreeNode,
-        min_code: PositionCode,
-        max_code: PositionCode,
-        field: &dyn ScalarField,
-        depth: u32,
-        unit_size: f32,
-    ) -> Option<Box<KdTreeNode>> {
-        // C++: if (any(greaterThanEqual(minCode, maxCode))) return nullptr;
-        if min_code.x >= max_code.x || min_code.y >= max_code.y || min_code.z >= max_code.z {
-            return None;
-        }
-        if depth > 64 {
-            return None;
-        }
-
-        // Accumulate QEF from octree for this region
-        // C++: Octree::getSum(octree, minCode, maxCode, sum) uses integer codes
-        let mut qef = QefSolver::new();
-        OctreeNode::get_sum(octree, min_code, max_code, &mut qef);
-
-        if qef.point_count() <= 0 {
-            return None;
-        }
-
-        // Choose split axis
-        let dir = Self::choose_axis_dir(&mut qef, min_code, max_code);
-
-        // Find split plane via binary search
-        let (best_left_max, best_right_min) =
-            Self::find_split_plane(octree, min_code, max_code, dir);
-
-        // Create the node
         let grid = RectilinearGrid::new(min_code, max_code, qef, unit_size);
         let mut node = Box::new(KdTreeNode {
             grid,
@@ -276,7 +409,6 @@ impl KdTreeNode {
             children: [None, None],
         });
 
-        // Build children
         node.children[0] =
             Self::build_from_octree(octree, min_code, best_left_max, field, depth + 1, unit_size);
         node.children[1] = Self::build_from_octree(
@@ -289,16 +421,11 @@ impl KdTreeNode {
         );
 
         if node.is_leaf() {
-            // C++: kd->grid.assignSign(t); kd->grid.sampleQef(t, false);
-            // The `false` means do NOT accumulate into allQef — it already has
-            // the octree sum from the constructor. Only populate components.
             node.grid.assign_sign(field, unit_size);
             node.grid.cal_corner_components();
             let mut throwaway = QefSolver::new();
             node.grid.sample_qef(field, &mut throwaway, unit_size);
-            // Do NOT overwrite grid.all_qef — it already has the octree QEF sum
         } else {
-            // Internal: assign signs and check clusterability
             node.grid.assign_sign(field, unit_size);
             node.cal_clusterability(field, unit_size);
             node.combine_qef(field, unit_size);
@@ -313,10 +440,16 @@ impl KdTreeNode {
         Some(node)
     }
 
-    /// Extracts a triangle mesh from the k-d tree.
-    ///
-    /// Assigns vertex indices to all contouring leaves, then runs the
-    /// recursive contouring procedures (cell, face, edge) to generate quads.
+    // ========================================================================
+    // Kdtree.cpp — Mesh *Kdtree::extractMesh(...)
+    // ========================================================================
+
+    // Mesh *Kdtree::extractMesh(Kdtree *root, ScalarField *t, float threshold) {
+    //   Mesh *mesh = new Mesh;
+    //   generateVertexIndices(root, mesh, t, threshold);
+    //   contourCell(root, mesh, t, threshold);
+    //   return mesh;
+    // }
     pub fn extract_mesh(
         root: &mut KdTreeNode,
         field: &dyn ScalarField,
@@ -330,11 +463,21 @@ impl KdTreeNode {
     }
 }
 
-/// Recursively assigns mesh vertex indices to ALL node vertices.
-///
-/// Matches C++ exactly: adds vertices for the current node, then
-/// unconditionally recurses into children. Does NOT stop at contouring
-/// leaves — all vertices in the tree get indices assigned.
+// ============================================================================
+// Kdtree.cpp — free functions
+// ============================================================================
+
+// void Kdtree::generateVertexIndices(Kdtree *root, Mesh *mesh, ScalarField *t, float threshold) {
+//   if (!root) {
+//     return;
+//   }
+//   for (int i = 0; i < root->grid.vertices.size(); ++i) {
+//     auto &v = root->grid.vertices[i];
+//     mesh->addVertex(&v, t);
+//   }
+//   generateVertexIndices(root->children[0], mesh, t, threshold);
+//   generateVertexIndices(root->children[1], mesh, t, threshold);
+// }
 #[allow(clippy::only_used_in_recursion)]
 fn generate_vertex_indices(
     node: &mut KdTreeNode,
@@ -352,7 +495,15 @@ fn generate_vertex_indices(
     }
 }
 
-/// Cell procedure: contour the shared face, then recurse into children.
+// void Kdtree::contourCell(Kdtree *node, Mesh *mesh, ScalarField *t, float threshold) {
+//   if (!node || node->isContouringLeaf(threshold)) {
+//     return;
+//   }
+//   FaceKd faceNodes = {node->children[0], node->children[1]};
+//   contourFace(faceNodes, node->planeDir, node->axis(), mesh, t, threshold);
+//   contourCell(node->children[0], mesh, t, threshold);
+//   contourCell(node->children[1], mesh, t, threshold);
+// }
 fn contour_cell(
     node: &KdTreeNode,
     mesh: &mut IsoMesh,
@@ -364,7 +515,6 @@ fn contour_cell(
         return;
     }
 
-    // C++: face contouring happens BEFORE recursing into children
     if let (Some(left), Some(right)) = (&node.children[0], &node.children[1]) {
         let face_nodes: [&KdTreeNode; 2] = [left, right];
         contour_face(
@@ -383,9 +533,13 @@ fn contour_cell(
     }
 }
 
-/// Checks whether a face between two nodes has sufficient overlap.
-///
-/// Returns `Some((face_min, face_max))` if the face is valid, `None` otherwise.
+// bool checkMinialFace(const Kdtree::FaceKd &nodes, int dir,
+//                      PositionCode &faceMin, PositionCode &faceMax) {
+//   faceMax = min(nodes[0]->grid.maxCode, nodes[1]->grid.maxCode);
+//   faceMin = max(nodes[0]->grid.minCode, nodes[1]->grid.minCode);
+//   auto offset = faceMax - faceMin;
+//   return offset[(dir + 1) % 3] > 0 && offset[(dir + 2) % 3] > 0;
+// }
 fn check_minimal_face(nodes: [&KdTreeNode; 2], dir: usize) -> Option<(PositionCode, PositionCode)> {
     let face_max = nodes[0].grid.max_code.min(nodes[1].grid.max_code);
     let face_min = nodes[0].grid.min_code.max(nodes[1].grid.min_code);
@@ -397,7 +551,15 @@ fn check_minimal_face(nodes: [&KdTreeNode; 2], dir: usize) -> Option<(PositionCo
     }
 }
 
-/// Constructs an axis-aligned line at the intersection of a face and a split plane.
+// AALine constructLine(const Kdtree::FaceKd &faceNodes, int side,
+//                      int originFaceDir, int axis, float threshold) {
+//   AALine line;
+//   line.point[originFaceDir] = axis;
+//   assert(!faceNodes[side]->isContouringLeaf(threshold));
+//   line.dir = 3 - originFaceDir - faceNodes[side]->planeDir;
+//   line.point[faceNodes[side]->planeDir] = faceNodes[side]->axis();
+//   return line;
+// }
 fn construct_line(
     face_nodes: [&KdTreeNode; 2],
     side: usize,
@@ -411,9 +573,53 @@ fn construct_line(
     AALine { point, dir }
 }
 
-/// Face procedure: given two adjacent nodes sharing a face along `dir`.
-///
-/// Matches C++ `contourFace` (lines 241-285).
+// ============================================================================
+// Kdtree.cpp — void Kdtree::contourFace(...)
+// ============================================================================
+
+// void Kdtree::contourFace(FaceKd &nodes,
+//                          const int dir,
+//                          const int axis,
+//                          Mesh *mesh,
+//                          ScalarField *t,
+//                          float threshold) {
+//   if (!nodes[0] || !nodes[1]) {
+//     return;
+//   }
+//   if (nodes[0]->isContouringLeaf(threshold) && nodes[1]->isContouringLeaf(threshold)) {
+//     return;
+//   }
+//   PositionCode faceMin, faceMax;
+//   if (!checkMinialFace(nodes, dir, faceMin, faceMax)) {
+//     return;
+//   }
+//   for (int i = 0; i < 2; ++i) {
+//     while (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir == dir) {
+//       nodes[i] = nodes[i]->children[1 - i];
+//       if (!nodes[i]) {
+//         return;
+//       }
+//     }
+//   }
+//   for (int i = 0; i < 2; ++i) {
+//     if (!nodes[i]->isContouringLeaf(threshold)) {
+//       for (int j = 0; j < 2; ++j) {
+//         FaceKd nextFace = nodes;
+//         nextFace[i] = nodes[i]->children[j];
+//         contourFace(nextFace, dir, axis, mesh, t, threshold);
+//       }
+//       if (nodes[i]->axis() > faceMin[nodes[i]->planeDir] &&
+//           nodes[i]->axis() < faceMax[nodes[i]->planeDir]) {
+//         EdgeKd edgeNodes = {nodes[0], nodes[0], nodes[1], nodes[1]};
+//         edgeNodes[i * 2] = nodes[i]->children[0];
+//         edgeNodes[i * 2 + 1] = nodes[i]->children[1];
+//         AALine line = constructLine(nodes, i, dir, axis, threshold);
+//         contourEdge(edgeNodes, line, nodes[i]->planeDir, t, threshold, mesh);
+//       }
+//       return;
+//     }
+//   }
+// }
 #[allow(clippy::too_many_arguments)]
 fn contour_face(
     mut nodes: [&KdTreeNode; 2],
@@ -424,18 +630,23 @@ fn contour_face(
     threshold: f32,
     unit_size: f32,
 ) {
-    // Both are contouring leaves -> return
+    // if (nodes[0]->isContouringLeaf(threshold) && nodes[1]->isContouringLeaf(threshold)) return;
     if nodes[0].is_contouring_leaf(threshold) && nodes[1].is_contouring_leaf(threshold) {
         return;
     }
 
-    // Check face overlap
+    // if (!checkMinialFace(nodes, dir, faceMin, faceMax)) return;
     let (face_min, face_max) = match check_minimal_face(nodes, dir) {
         Some(v) => v,
         None => return,
     };
 
-    // Descend while planeDir == dir for each node
+    // for (int i = 0; i < 2; ++i) {
+    //   while (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir == dir) {
+    //     nodes[i] = nodes[i]->children[1 - i];
+    //     if (!nodes[i]) return;
+    //   }
+    // }
     #[allow(clippy::needless_range_loop)]
     for i in 0..2usize {
         while !nodes[i].is_contouring_leaf(threshold) && nodes[i].plane_dir == dir {
@@ -447,11 +658,26 @@ fn contour_face(
         }
     }
 
-    // For each non-leaf node (that doesn't split along dir)
+    // for (int i = 0; i < 2; ++i) {
+    //   if (!nodes[i]->isContouringLeaf(threshold)) {
+    //     for (int j = 0; j < 2; ++j) {
+    //       FaceKd nextFace = nodes;
+    //       nextFace[i] = nodes[i]->children[j];
+    //       contourFace(nextFace, dir, axis, mesh, t, threshold);
+    //     }
+    //     if (nodes[i]->axis() > faceMin[nodes[i]->planeDir] &&
+    //         nodes[i]->axis() < faceMax[nodes[i]->planeDir]) {
+    //       EdgeKd edgeNodes = {nodes[0], nodes[0], nodes[1], nodes[1]};
+    //       edgeNodes[i * 2] = nodes[i]->children[0];
+    //       edgeNodes[i * 2 + 1] = nodes[i]->children[1];
+    //       AALine line = constructLine(nodes, i, dir, axis, threshold);
+    //       contourEdge(edgeNodes, line, nodes[i]->planeDir, t, threshold, mesh);
+    //     }
+    //     return;
+    //   }
+    // }
     for i in 0..2 {
         if !nodes[i].is_contouring_leaf(threshold) {
-            // Recurse into both children
-            // C++: passes children directly (may be null), contourFace returns on null
             for j in 0..2 {
                 if let Some(child) = &nodes[i].children[j] {
                     let mut next_face = nodes;
@@ -459,11 +685,9 @@ fn contour_face(
                     contour_face(next_face, dir, axis, mesh, field, threshold, unit_size);
                 }
             }
-            // Generate edge contour where the split creates a new edge
             if nodes[i].axis() > face_min[nodes[i].plane_dir]
                 && nodes[i].axis() < face_max[nodes[i].plane_dir]
             {
-                // C++: edgeNodes[i*2] = children[0], edgeNodes[i*2+1] = children[1] (may be null)
                 let mut edge_nodes: [Option<&KdTreeNode>; 4] = [
                     Some(nodes[0]),
                     Some(nodes[0]),
@@ -488,7 +712,20 @@ fn contour_face(
     }
 }
 
-/// Checks whether an edge between four nodes has sufficient overlap.
+// ============================================================================
+// Kdtree.cpp — bool checkMinialEdge(...)
+// ============================================================================
+
+// bool checkMinialEdge(const Kdtree::EdgeKd &nodes, const AALine &line,
+//                      PositionCode &minEnd, PositionCode &maxEnd) {
+//   minEnd = maxEnd = line.point;
+//   int dir = line.dir;
+//   minEnd[dir] = max(max(nodes[0]->grid.minCode, nodes[1]->grid.minCode),
+//                     max(nodes[2]->grid.minCode, nodes[3]->grid.minCode))[dir];
+//   maxEnd[dir] = min(min(nodes[0]->grid.maxCode, nodes[1]->grid.maxCode),
+//                     min(nodes[2]->grid.maxCode, nodes[3]->grid.maxCode))[dir];
+//   return minEnd[dir] < maxEnd[dir];
+// }
 fn check_minimal_edge(
     nodes: [&KdTreeNode; 4],
     line: &AALine,
@@ -513,7 +750,12 @@ fn check_minimal_edge(
     }
 }
 
-/// Computes the child index for quad descent.
+// int nextQuadIndex(int dir1, int dir2, int planeDir, int i) {
+//   PositionCode pos;
+//   pos[dir1] = 1 - i % 2;
+//   pos[dir2] = 1 - i / 2;
+//   return pos[planeDir];
+// }
 fn next_quad_index(dir1: usize, dir2: usize, plane_dir: usize, i: usize) -> usize {
     let mut pos = PositionCode::ZERO;
     pos[dir1] = 1 - (i % 2) as i32;
@@ -521,13 +763,36 @@ fn next_quad_index(dir1: usize, dir2: usize, plane_dir: usize, i: usize) -> usiz
     pos[plane_dir] as usize
 }
 
-/// Descends paired nodes to the correct children for quad detection.
-///
-/// Matches C++ `detectQuad`: nodes can become None when a child is null.
+// ============================================================================
+// Kdtree.cpp — void Kdtree::detectQuad(...)
+// ============================================================================
+
+// void Kdtree::detectQuad(EdgeKd &nodes, AALine line, float threshold) {
+//   for (int i = 0; i < 2; ++i) {
+//     while (
+//       nodes[i * 2] && nodes[i * 2 + 1] &&
+//       !nodes[i * 2]->isContouringLeaf(threshold) &&
+//       nodes[2 * i] == nodes[2 * i + 1] &&
+//       nodes[i * 2]->planeDir != line.dir) {
+//       auto commonNode = nodes[i * 2];
+//       if (nodes[i * 2]->axis() == line.point[nodes[i * 2]->planeDir]) {
+//         nodes[i * 2] = commonNode->children[0];
+//         nodes[i * 2 + 1] = commonNode->children[1];
+//       }
+//       else if (nodes[i * 2]->axis() > line.point[nodes[i * 2]->planeDir]) {
+//         nodes[i * 2] = commonNode->children[0];
+//         nodes[i * 2 + 1] = commonNode->children[0];
+//       }
+//       else {
+//         nodes[i * 2] = commonNode->children[1];
+//         nodes[i * 2 + 1] = commonNode->children[1];
+//       }
+//     }
+//   }
+// }
 #[allow(clippy::while_let_loop)]
 fn detect_quad(nodes: &mut [Option<&KdTreeNode>; 4], line: &AALine, threshold: f32) {
     for i in 0..2 {
-        // C++: while (nodes[i*2] && nodes[i*2+1] && !leaf && same_ptr && planeDir != dir) { ... }
         loop {
             let a = match nodes[i * 2] {
                 Some(n) => n,
@@ -563,14 +828,18 @@ fn detect_quad(nodes: &mut [Option<&KdTreeNode>; 4], line: &AALine, threshold: f
     }
 }
 
-/// Sets a quad node, also updating the opposite node if they point to the same node.
+// void setQuadNode(Kdtree::EdgeKd &nodes, int i, Kdtree *p) {
+//   if (nodes[oppositeQuadIndex(i)] == nodes[i]) {
+//     nodes[oppositeQuadIndex(i)] = p;
+//   }
+//   nodes[i] = p;
+// }
 #[allow(clippy::needless_lifetimes)]
 fn set_quad_node<'a>(
     nodes: &mut [Option<&'a KdTreeNode>; 4],
     i: usize,
     new_node: Option<&'a KdTreeNode>,
 ) {
-    // C++: if (nodes[opposite] == nodes[i]) nodes[opposite] = p;
     let opp = opposite_quad_index(i);
     match (nodes[opp], nodes[i]) {
         (Some(a), Some(b)) if std::ptr::eq(a, b) => {
@@ -584,9 +853,56 @@ fn set_quad_node<'a>(
     nodes[i] = new_node;
 }
 
-/// Edge procedure: generates quads along an edge shared by 4 nodes.
-///
-/// Matches C++ `contourEdge`: nodes may be None (null in C++).
+// ============================================================================
+// Kdtree.cpp — void Kdtree::contourEdge(...)
+// ============================================================================
+
+// void Kdtree::contourEdge(EdgeKd &nodes,
+//                          const AALine &line,
+//                          const int quadDir1,
+//                          ScalarField *t,
+//                          float threshold,
+//                          Mesh *mesh) {
+//   detectQuad(nodes, line, threshold);
+//   for (auto n : nodes) {
+//     if (!n) {
+//       return;
+//     }
+//   }
+//   assert(quadDir1 >= 0 && quadDir1 < 3);
+//   const int quadDir2 = 3 - quadDir1 - line.dir;
+//   PositionCode minEndCode, maxEndCode;
+//   if (!checkMinialEdge(nodes, line, minEndCode, maxEndCode)) {
+//     return;
+//   }
+//   for (int i = 0; i < 4; ++i) {
+//     if (nodes[i] != nodes[oppositeQuadIndex(i)]) {
+//       while (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir != line.dir) {
+//         nodes[i] = nodes[i]->children[nextQuadIndex(quadDir1, quadDir2, nodes[i]->planeDir, i)];
+//         if (!nodes[i]) {
+//           return;
+//         }
+//       }
+//     }
+//   }
+//   if (nodes[0]->isContouringLeaf(threshold) && nodes[1]->isContouringLeaf(threshold) &&
+//       nodes[2]->isContouringLeaf(threshold) && nodes[3]->isContouringLeaf(threshold)) {
+//     // debug check elided
+//     generateQuad(nodes, quadDir1, quadDir2, mesh, t, threshold);
+//     return;
+//   }
+//   for (int i = 0; i < 4; ++i) {
+//     EdgeKd nextNodes = nodes;
+//     if (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir == line.dir) {
+//       setQuadNode(nextNodes, i, nodes[i]->children[0]);
+//       contourEdge(nextNodes, line, quadDir1, t, threshold, mesh);
+//       nextNodes = nodes;
+//       setQuadNode(nextNodes, i, nodes[i]->children[1]);
+//       contourEdge(nextNodes, line, quadDir1, t, threshold, mesh);
+//       return;
+//     }
+//   }
+// }
 #[allow(clippy::too_many_arguments)]
 fn contour_edge(
     mut nodes: [Option<&KdTreeNode>; 4],
@@ -599,7 +915,7 @@ fn contour_edge(
 ) {
     detect_quad(&mut nodes, line, threshold);
 
-    // C++: for (auto n : nodes) { if (!n) return; }
+    // for (auto n : nodes) { if (!n) return; }
     let n0 = match nodes[0] {
         Some(n) => n,
         None => return,
@@ -619,11 +935,19 @@ fn contour_edge(
 
     let quad_dir2 = 3 - quad_dir1 - line.dir;
 
+    // if (!checkMinialEdge(nodes, line, minEndCode, maxEndCode)) return;
     if check_minimal_edge([n0, n1, n2, n3], line).is_none() {
         return;
     }
 
-    // Descend non-leaf nodes that don't split along line.dir
+    // for (int i = 0; i < 4; ++i) {
+    //   if (nodes[i] != nodes[oppositeQuadIndex(i)]) {
+    //     while (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir != line.dir) {
+    //       nodes[i] = nodes[i]->children[nextQuadIndex(...)];
+    //       if (!nodes[i]) return;
+    //     }
+    //   }
+    // }
     let mut unwrapped: [&KdTreeNode; 4] = [n0, n1, n2, n3];
     for i in 0..4 {
         if !std::ptr::eq(unwrapped[i], unwrapped[opposite_quad_index(i)]) {
@@ -638,7 +962,7 @@ fn contour_edge(
         }
     }
 
-    // All 4 are contouring leaves: generate quad
+    // if all 4 are contouring leaves: generateQuad
     if unwrapped[0].is_contouring_leaf(threshold)
         && unwrapped[1].is_contouring_leaf(threshold)
         && unwrapped[2].is_contouring_leaf(threshold)
@@ -650,8 +974,17 @@ fn contour_edge(
         return;
     }
 
-    // Recurse: find a node splitting along line.dir
-    // Re-wrap into Options for recursion
+    // for (int i = 0; i < 4; ++i) {
+    //   EdgeKd nextNodes = nodes;
+    //   if (!nodes[i]->isContouringLeaf(threshold) && nodes[i]->planeDir == line.dir) {
+    //     setQuadNode(nextNodes, i, nodes[i]->children[0]);
+    //     contourEdge(nextNodes, line, quadDir1, t, threshold, mesh);
+    //     nextNodes = nodes;
+    //     setQuadNode(nextNodes, i, nodes[i]->children[1]);
+    //     contourEdge(nextNodes, line, quadDir1, t, threshold, mesh);
+    //     return;
+    //   }
+    // }
     let opt_nodes: [Option<&KdTreeNode>; 4] = [
         Some(unwrapped[0]),
         Some(unwrapped[1]),
@@ -679,9 +1012,18 @@ fn contour_edge(
     }
 }
 
-/// Generates a quad from 4 contouring leaf nodes.
-///
-/// Delegates to `RectilinearGrid::generate_quad`.
+// ============================================================================
+// Kdtree.cpp — void Kdtree::generateQuad(...)
+// ============================================================================
+
+// void Kdtree::generateQuad(EdgeKd &nodes,
+//                           int quadDir1,
+//                           int quadDir2,
+//                           Mesh *mesh,
+//                           ScalarField *t,
+//                           float threshold) {
+//   RectilinearGrid::generateQuad(nodes, quadDir1, quadDir2, mesh, t, threshold);
+// }
 #[allow(clippy::too_many_arguments)]
 fn kd_generate_quad(
     nodes: [&KdTreeNode; 4],
@@ -706,19 +1048,16 @@ mod tests {
 
     #[test]
     fn build_kdtree_from_octree_sphere() {
-        // Use a dedicated thread with a larger stack to avoid overflow
         let result = std::thread::Builder::new()
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
                 let sphere = Sphere::with_center(3.0, glam::Vec3::new(4.0, 4.0, 4.0));
                 let unit_size = 1.0;
                 let depth = 4;
-                // C++: sizeCode = 1 << (depth - 1) = 8
                 let size_code = PositionCode::splat(1 << (depth - 1));
                 let min_code = PositionCode::splat(0);
                 let max_code = size_code;
 
-                // Build octree first
                 let octree = OctreeNode::build_with_scalar_field(
                     min_code, depth, &sphere, true, unit_size,
                 );
@@ -728,7 +1067,6 @@ mod tests {
                     None => return,
                 };
 
-                // Build k-d tree from octree
                 let kdtree = KdTreeNode::build_from_octree(
                     &octree, min_code, max_code, &sphere, 0, unit_size,
                 );
@@ -738,7 +1076,6 @@ mod tests {
                     None => return,
                 };
 
-                // Extract mesh from k-d tree
                 let kd_mesh = KdTreeNode::extract_mesh(&mut kdtree, &sphere, 0.0, unit_size);
 
                 assert!(
@@ -756,7 +1093,6 @@ mod tests {
                     "KdTree mesh should have triangles, got 0"
                 );
 
-                // Also extract from octree for comparison
                 let mut octree_for_mesh = OctreeNode::build_with_scalar_field(
                     min_code, depth, &sphere, false, unit_size,
                 );
@@ -764,7 +1100,6 @@ mod tests {
                     let oct_mesh = OctreeNode::extract_mesh(oct_root, &sphere, unit_size);
                     let oct_triangles = oct_mesh.triangle_count();
 
-                    // K-d tree should produce a reasonable number of triangles
                     assert!(
                         kd_triangles <= oct_triangles * 2,
                         "KdTree triangles ({kd_triangles}) should be reasonable compared to octree ({oct_triangles})"
@@ -822,7 +1157,6 @@ mod tests {
                 let min_code = -size_code / 2;
                 let threshold = 1e-2_f32;
 
-                // Build octree (as_mipmap) for kd-tree
                 let oct_for_kd = OctreeNode::build_with_scalar_field(
                     min_code,
                     depth,
@@ -832,7 +1166,6 @@ mod tests {
                 )
                 .expect("octree for kd should exist");
 
-                // Build kd-tree
                 let mut kdtree = KdTreeNode::build_from_octree(
                     &oct_for_kd,
                     min_code,

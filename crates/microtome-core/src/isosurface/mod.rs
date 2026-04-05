@@ -3,6 +3,7 @@
 //! Port of the KdtreeISO library: discrete k-d tree hierarchy for isosurface extraction.
 
 pub mod indicators;
+#[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod kdtree;
 pub mod mesh_output;
 pub mod octree;
