@@ -4,6 +4,7 @@
 pub mod config;
 pub mod error;
 pub mod gpu;
+pub mod isosurface;
 pub mod job;
 pub mod mesh;
 pub mod scene;

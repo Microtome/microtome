@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/microtome-core", "crates/microtome-app"]
+members = ["crates/microtome-core", "crates/microtome-app", "crates/isosurface-viewer"]
 
 [workspace.dependencies]
 wgpu = "29"
