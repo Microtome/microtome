@@ -486,9 +486,13 @@ fn givens_coeffs_sym(a_pp: f32, a_pq: f32, a_qq: f32) -> (f32, f32) {
         return (1.0, 0.0);
     }
     let tau = (a_qq - a_pp) / (2.0 * a_pq);
-    let stt = (1.0 + tau * tau).sqrt();
+    // C++ calls sqrt() (double precision) on float args — the float
+    // promotes to f64, sqrt is computed in f64, then truncated back
+    // to f32. We replicate this to match the reference exactly.
+    let stt = ((1.0_f64 + (tau as f64) * (tau as f64)).sqrt()) as f32;
     let tan = 1.0 / if tau >= 0.0 { tau + stt } else { tau - stt };
-    let c = 1.0 / (1.0 + tan * tan).sqrt();
+    let c = ((1.0_f64 + (tan as f64) * (tan as f64)).sqrt()) as f32;
+    let c = 1.0 / c;
     let s = tan * c;
     (c, s)
 }
