@@ -439,24 +439,30 @@ impl ViewportRenderer {
                 ..Default::default()
             });
 
-            // Draw mesh.
             if let Some(mesh_buf) = mesh {
-                let offset = UNIFORM_ALIGN as u32;
-                pass.set_pipeline(&self.phong_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
-                pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
-                pass.set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
-            }
-
-            // Draw wireframe overlay using PolygonMode::Line on the same mesh.
-            if show_wireframe && let Some(mesh_buf) = mesh {
-                let offset = UNIFORM_ALIGN as u32;
-                pass.set_pipeline(&self.wireframe_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
-                pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
-                pass.set_index_buffer(mesh_buf.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+                if show_wireframe {
+                    // Wireframe only — no solid faces.
+                    let offset = UNIFORM_ALIGN as u32;
+                    pass.set_pipeline(&self.wireframe_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
+                    pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
+                    pass.set_index_buffer(
+                        mesh_buf.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+                } else {
+                    // Solid shaded mesh.
+                    let offset = UNIFORM_ALIGN as u32;
+                    pass.set_pipeline(&self.phong_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
+                    pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
+                    pass.set_index_buffer(
+                        mesh_buf.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+                }
             }
         }
     }

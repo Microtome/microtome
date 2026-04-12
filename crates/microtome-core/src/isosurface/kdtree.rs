@@ -3,13 +3,13 @@
 // Ported line-by-line from KdtreeISO-master/src/KdtreeISO/lib/Kdtree.cpp
 // and KdtreeISO-master/src/KdtreeISO/include/Kdtree.h
 
-use glam::Vec3;
 use super::indicators::{PositionCode, opposite_quad_index};
 use super::mesh_output::IsoMesh;
 use super::octree::OctreeNode;
 use super::qef::QefSolver;
 use super::rectilinear_grid::{HasGrid, RectilinearGrid, generate_quad};
 use super::scalar_field::ScalarField;
+use glam::Vec3;
 
 // ============================================================================
 // Kdtree.h — struct Kdtree
@@ -131,12 +131,7 @@ impl KdTreeNode {
         let dir = self.plane_dir;
         // C++: combineAAGrid does NOT call assignSign — grid already has
         // corner_signs set from the earlier assignSign call in buildFromOctree.
-        RectilinearGrid::combine_aa_grid(
-            left.as_ref(),
-            right.as_ref(),
-            dir,
-            &mut self.grid,
-        );
+        RectilinearGrid::combine_aa_grid(left.as_ref(), right.as_ref(), dir, &mut self.grid);
     }
 
     // ========================================================================
@@ -1419,5 +1414,4 @@ mod tests {
             Err(e) => panic!("Failed to spawn test thread: {e}"),
         }
     }
-
 }

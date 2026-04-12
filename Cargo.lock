@@ -1665,6 +1665,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "isosurface-viewer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "eframe",
+ "egui",
+ "egui-wgpu",
+ "env_logger",
+ "glam 0.29.3",
+ "log",
+ "microtome-core",
+ "rfd",
+ "wgpu",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
