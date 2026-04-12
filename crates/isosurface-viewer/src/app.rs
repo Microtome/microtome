@@ -9,7 +9,8 @@ use glam::{IVec3, Vec3};
 use wgpu::util::DeviceExt;
 
 use microtome_core::isosurface::{
-    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, ScalarField,
+    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, PositionCode,
+    ScalarField, ScannedMeshField,
 };
 use microtome_core::{MeshData, MicrotomeError};
 
@@ -42,6 +43,9 @@ impl std::fmt::Display for Structure {
 struct BuildResult {
     mesh: IsoMesh,
     build_time_ms: f64,
+    /// `true` if the rebuild was triggered for a user-loaded mesh (so the
+    /// UI can distinguish original vs. remeshed state).
+    source_was_loaded: bool,
 }
 
 /// GPU-ready mesh data stored on the application side.
@@ -50,12 +54,24 @@ struct GpuMesh {
     buffers: Arc<MeshBuffers>,
 }
 
-/// Origin of the mesh currently displayed in the viewport.
-enum MeshSource {
-    /// Isosurface extracted from the scalar field scene.
-    Isosurface,
-    /// Loaded from an external OBJ or STL file.
-    Loaded { name: String },
+/// Scalar-field source that drives rebuilds.
+enum FieldSource {
+    /// The hardcoded "cube with cylindrical hole" default SDF scene.
+    DefaultScene,
+    /// A user-loaded OBJ/STL file. Kept behind an `Arc` so rebuilds can
+    /// snapshot it cheaply into the background thread.
+    LoadedMesh {
+        /// Display name (file basename).
+        name: String,
+        /// Original mesh geometry, also displayed before the first remesh.
+        mesh: Arc<MeshData>,
+    },
+}
+
+/// Source snapshot moved into the rebuild background thread.
+enum FieldSourceSnapshot {
+    DefaultScene,
+    LoadedMesh(Arc<MeshData>),
 }
 
 /// Isosurface viewer application.
@@ -77,8 +93,11 @@ pub struct IsosurfaceApp {
     building: bool,
     /// When the current build started (for elapsed time display).
     build_start: Option<Instant>,
-    /// What the viewport is currently displaying.
-    mesh_source: MeshSource,
+    /// Scalar-field source used by `Rebuild`.
+    field_source: FieldSource,
+    /// `false` = showing the loaded file's original geometry (or the default
+    /// scene); `true` = showing the result of remeshing the loaded file.
+    displaying_remesh: bool,
     /// Last mesh-loading error, shown in the side panel.
     load_error: Option<String>,
     /// Deferred flag: open the file dialog on the next frame (handled outside
@@ -113,7 +132,8 @@ impl IsosurfaceApp {
             build_rx: None,
             building: false,
             build_start: None,
-            mesh_source: MeshSource::Isosurface,
+            field_source: FieldSource::DefaultScene,
+            displaying_remesh: false,
             load_error: None,
             want_load_dialog: false,
         }
@@ -190,11 +210,18 @@ impl IsosurfaceApp {
         self.triangle_count = mesh_data.indices.len() / 3;
         self.build_time_ms = 0.0;
         self.load_error = None;
-        self.mesh_source = MeshSource::Loaded {
-            name: display_name(path),
-        };
         self.camera
             .frame_bbox(mesh_data.bbox.min, mesh_data.bbox.max);
+
+        let name = display_name(path);
+        self.field_source = FieldSource::LoadedMesh {
+            name,
+            mesh: Arc::new(mesh_data),
+        };
+        self.displaying_remesh = false;
+        // User will see the original mesh; they click Rebuild to remesh.
+        // Flag `stale` so the Rebuild button is highlighted as actionable.
+        self.stale = true;
     }
 
     /// Builds the default SDF scene: cube with a cylindrical hole through it.
@@ -205,18 +232,40 @@ impl IsosurfaceApp {
         ))
     }
 
-    /// Builds an isosurface mesh from the scalar field.
+    /// Bounds for the default scene (`[-16, 16]³` world-space).
+    fn default_scene_bounds(depth: u32) -> (PositionCode, f32) {
+        let size_code = 1_i32 << (depth - 1);
+        let unit_size = 32.0 / size_code as f32;
+        let min_code = PositionCode::splat(-size_code / 2);
+        (min_code, unit_size)
+    }
+
+    /// Bounds for a loaded mesh: fits the bbox with 10% padding on all sides.
+    fn loaded_mesh_bounds(bbox_min: Vec3, bbox_max: Vec3, depth: u32) -> (PositionCode, f32) {
+        let size_code = 1_i32 << (depth - 1);
+        let raw_extent = (bbox_max - bbox_min).max_element().max(1e-6);
+        let extent = raw_extent * 1.1;
+        let unit_size = extent / size_code as f32;
+        let center = (bbox_min + bbox_max) * 0.5;
+        let world_min = center - Vec3::splat(extent * 0.5);
+        let min_code = PositionCode::new(
+            (world_min.x / unit_size).floor() as i32,
+            (world_min.y / unit_size).floor() as i32,
+            (world_min.z / unit_size).floor() as i32,
+        );
+        (min_code, unit_size)
+    }
+
+    /// Builds an isosurface mesh from the scalar field over the given grid.
     fn build_mesh(
         field: &dyn ScalarField,
+        min_code: PositionCode,
         depth: u32,
         structure: Structure,
         threshold: f32,
+        unit_size: f32,
     ) -> Option<IsoMesh> {
-        // Keep a constant world volume of [-16, 16]³ regardless of depth.
-        // The C++ uses octSize=16, octDepth=8 giving unitSize=0.25, extent=32.
         let size_code = IVec3::splat(1 << (depth - 1));
-        let unit_size = 32.0 / size_code.x as f32;
-        let min_code = -size_code / 2;
 
         let as_mipmap = matches!(structure, Structure::KdTree | Structure::KdTreeV2);
         let mut octree =
@@ -268,6 +317,14 @@ impl IsosurfaceApp {
         let structure = self.structure;
         let threshold = self.error_threshold;
 
+        let snapshot = match &self.field_source {
+            FieldSource::DefaultScene => FieldSourceSnapshot::DefaultScene,
+            FieldSource::LoadedMesh { mesh, .. } => {
+                FieldSourceSnapshot::LoadedMesh(Arc::clone(mesh))
+            }
+        };
+        let source_was_loaded = matches!(snapshot, FieldSourceSnapshot::LoadedMesh(_));
+
         let (tx, rx) = mpsc::channel();
         self.build_rx = Some(rx);
         self.building = true;
@@ -278,8 +335,34 @@ impl IsosurfaceApp {
             .stack_size(16 * 1024 * 1024)
             .spawn(move || {
                 let start = Instant::now();
-                let field = Self::build_default_scene();
-                let mesh_opt = Self::build_mesh(field.as_ref(), depth, structure, threshold);
+
+                let mesh_opt = match snapshot {
+                    FieldSourceSnapshot::DefaultScene => {
+                        let (min_code, unit_size) = Self::default_scene_bounds(depth);
+                        let field = Self::build_default_scene();
+                        Self::build_mesh(
+                            field.as_ref(),
+                            min_code,
+                            depth,
+                            structure,
+                            threshold,
+                            unit_size,
+                        )
+                    }
+                    FieldSourceSnapshot::LoadedMesh(mesh) => {
+                        let (min_code, unit_size) =
+                            Self::loaded_mesh_bounds(mesh.bbox.min, mesh.bbox.max, depth);
+                        let size_code = 1_i32 << (depth - 1);
+                        let field = ScannedMeshField::from_mesh(
+                            mesh.as_ref(),
+                            min_code,
+                            size_code,
+                            unit_size,
+                        );
+                        Self::build_mesh(&field, min_code, depth, structure, threshold, unit_size)
+                    }
+                };
+
                 let build_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
                 if let Some(mut mesh) = mesh_opt {
@@ -287,6 +370,7 @@ impl IsosurfaceApp {
                     let _ = tx.send(BuildResult {
                         mesh,
                         build_time_ms,
+                        source_was_loaded,
                     });
                 }
                 // If mesh_opt is None, the channel drops and recv will fail gracefully
@@ -304,6 +388,7 @@ impl IsosurfaceApp {
             Ok(result) => {
                 self.build_time_ms = result.build_time_ms;
                 self.triangle_count = result.mesh.triangle_count();
+                self.displaying_remesh = result.source_was_loaded;
 
                 let mesh_data = result.mesh.to_mesh_data();
 
@@ -443,13 +528,6 @@ impl eframe::App for IsosurfaceApp {
                     if ui.add_enabled(!self.building, rebuild_btn).clicked() {
                         self.stale = false;
                         self.needs_rebuild = true;
-                        // If we were showing a loaded file, switch back to the
-                        // isosurface scene and refocus the camera there.
-                        if matches!(self.mesh_source, MeshSource::Loaded { .. }) {
-                            self.mesh_source = MeshSource::Isosurface;
-                            self.load_error = None;
-                            self.camera.frame_bbox(Vec3::splat(-8.0), Vec3::splat(8.0));
-                        }
                     }
                 });
 
@@ -463,6 +541,23 @@ impl eframe::App for IsosurfaceApp {
                 {
                     self.want_load_dialog = true;
                 }
+
+                let loaded = matches!(self.field_source, FieldSource::LoadedMesh { .. });
+                if ui
+                    .add_enabled(
+                        loaded && !self.building,
+                        egui::Button::new("Use Default Scene"),
+                    )
+                    .clicked()
+                {
+                    self.field_source = FieldSource::DefaultScene;
+                    self.displaying_remesh = false;
+                    self.load_error = None;
+                    self.camera.frame_bbox(Vec3::splat(-8.0), Vec3::splat(8.0));
+                    self.stale = false;
+                    self.needs_rebuild = true;
+                }
+
                 if let Some(err) = &self.load_error {
                     ui.colored_label(egui::Color32::from_rgb(220, 80, 80), err);
                 }
@@ -480,15 +575,23 @@ impl eframe::App for IsosurfaceApp {
                         ui.label(format!("Building... {elapsed:.0} ms"));
                     });
                 } else {
-                    match &self.mesh_source {
-                        MeshSource::Isosurface => {
-                            ui.label("Source: Isosurface");
+                    match &self.field_source {
+                        FieldSource::DefaultScene => {
+                            ui.label("Source: Default scene");
                             ui.label(format!("Triangles: {}", self.triangle_count));
                             ui.label(format!("Build time: {:.1} ms", self.build_time_ms));
                         }
-                        MeshSource::Loaded { name } => {
-                            ui.label(format!("Source: {name}"));
+                        FieldSource::LoadedMesh { name, .. } => {
+                            let suffix = if self.displaying_remesh {
+                                "(remeshed)"
+                            } else {
+                                "(original)"
+                            };
+                            ui.label(format!("Source: {name} {suffix}"));
                             ui.label(format!("Triangles: {}", self.triangle_count));
+                            if self.displaying_remesh {
+                                ui.label(format!("Build time: {:.1} ms", self.build_time_ms));
+                            }
                         }
                     }
                 }

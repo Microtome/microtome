@@ -7,6 +7,7 @@ pub mod indicators;
 pub mod kdtree;
 pub mod kdtree_v2;
 pub mod mesh_output;
+pub mod mesh_scan;
 pub mod octree;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod qef;
@@ -20,6 +21,7 @@ pub use indicators::PositionCode;
 pub use kdtree::KdTreeNode;
 pub use kdtree_v2::KdTreeV2Node;
 pub use mesh_output::IsoMesh;
+pub use mesh_scan::ScannedMeshField;
 pub use octree::OctreeNode;
 pub use qef::QefSolver;
 pub use rectilinear_grid::RectilinearGrid;
