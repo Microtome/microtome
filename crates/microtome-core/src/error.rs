@@ -11,6 +11,10 @@ pub enum MicrotomeError {
     #[error("STL parsing failed: {0}")]
     StlParse(String),
 
+    /// Wavefront OBJ file parsing failed.
+    #[error("OBJ parsing failed: {0}")]
+    ObjParse(String),
+
     /// Error during the GPU slicing pipeline.
     #[error("Slicing error: {0}")]
     Slicing(String),

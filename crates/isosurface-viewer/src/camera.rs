@@ -13,10 +13,16 @@ const PHI_MIN: f32 = 0.01;
 const PHI_MAX: f32 = std::f32::consts::PI - 0.01;
 
 /// Minimum zoom distance.
-const RADIUS_MIN: f32 = 1.0;
+const RADIUS_MIN: f32 = 0.1;
 
 /// Maximum zoom distance.
-const RADIUS_MAX: f32 = 500.0;
+const RADIUS_MAX: f32 = 5000.0;
+
+/// Near-plane distance for the projection matrix.
+const NEAR_PLANE: f32 = 0.01;
+
+/// Far-plane distance for the projection matrix.
+const FAR_PLANE: f32 = 20_000.0;
 
 /// Field of view in degrees.
 #[allow(dead_code)]
@@ -89,13 +95,36 @@ impl OrbitCamera {
     /// Computes the projection matrix (perspective or orthographic).
     pub fn projection_matrix(&self, aspect: f32) -> Mat4 {
         if self.use_perspective {
-            Mat4::perspective_rh(FOV_DEGREES.to_radians(), aspect, 0.1, 2000.0)
+            Mat4::perspective_rh(FOV_DEGREES.to_radians(), aspect, NEAR_PLANE, FAR_PLANE)
         } else {
             // Orthographic: size based on radius so zoom still works
             let half_h = self.radius * (FOV_DEGREES.to_radians() / 2.0).tan();
             let half_w = half_h * aspect;
-            Mat4::orthographic_rh(-half_w, half_w, -half_h, half_h, 0.1, 2000.0)
+            Mat4::orthographic_rh(-half_w, half_w, -half_h, half_h, NEAR_PLANE, FAR_PLANE)
         }
+    }
+
+    /// Frames the camera so the given axis-aligned bounding box fills the view.
+    ///
+    /// The orbit target is set to the bbox center and the radius is chosen
+    /// to fit the bbox diagonal within the current field of view, with a
+    /// small padding margin.
+    pub fn frame_bbox(&mut self, min: Vec3, max: Vec3) {
+        let center = (min + max) * 0.5;
+        let diag = (max - min).length();
+        if !diag.is_finite() || diag <= 0.0 {
+            self.target = center;
+            return;
+        }
+
+        // Distance that fits a sphere of radius `diag / 2` at the current FOV.
+        let half_fov = (FOV_DEGREES * 0.5).to_radians();
+        let fit = (diag * 0.5) / half_fov.tan();
+        // 1.4× padding so the mesh has breathing room at the edges.
+        let radius = (fit * 1.4).clamp(RADIUS_MIN, RADIUS_MAX);
+
+        self.target = center;
+        self.radius = radius;
     }
 
     /// Sets the camera to a front view (looking along -Y).
@@ -234,15 +263,40 @@ mod tests {
     #[test]
     fn radius_clamping() {
         let mut cam = OrbitCamera::new();
-        // Test minimum radius clamping
-        cam.radius = 1.0;
+        // Test minimum radius clamping: a value below RADIUS_MIN clamps up.
+        cam.radius = RADIUS_MIN * 0.1;
         cam.radius = cam.radius.clamp(RADIUS_MIN, RADIUS_MAX);
         assert!((cam.radius - RADIUS_MIN).abs() < 1e-6);
 
-        // Test maximum radius clamping
-        cam.radius = 2000.0;
+        // Test maximum radius clamping: a value above RADIUS_MAX clamps down.
+        cam.radius = RADIUS_MAX * 2.0;
         cam.radius = cam.radius.clamp(RADIUS_MIN, RADIUS_MAX);
         assert!((cam.radius - RADIUS_MAX).abs() < 1e-6);
+    }
+
+    #[test]
+    fn frame_bbox_fits_and_centers() {
+        let mut cam = OrbitCamera::new();
+        let min = Vec3::new(-4.0, -2.0, -6.0);
+        let max = Vec3::new(4.0, 2.0, 6.0);
+        cam.frame_bbox(min, max);
+
+        let expected_center = (min + max) * 0.5;
+        assert!((cam.target - expected_center).length() < 1e-4);
+
+        // Radius must be within configured bounds and non-zero.
+        assert!(cam.radius >= RADIUS_MIN && cam.radius <= RADIUS_MAX);
+        assert!(cam.radius > (max - min).length() * 0.25);
+    }
+
+    #[test]
+    fn frame_bbox_degenerate_bbox_only_sets_target() {
+        let mut cam = OrbitCamera::new();
+        let initial_radius = cam.radius;
+        let p = Vec3::new(3.0, 3.0, 3.0);
+        cam.frame_bbox(p, p);
+        assert!((cam.target - p).length() < 1e-6);
+        assert!((cam.radius - initial_radius).abs() < 1e-6);
     }
 
     #[test]

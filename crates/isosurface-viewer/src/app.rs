@@ -1,5 +1,6 @@
 //! Isosurface viewer application state and eframe integration.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
@@ -10,6 +11,7 @@ use wgpu::util::DeviceExt;
 use microtome_core::isosurface::{
     Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, ScalarField,
 };
+use microtome_core::{MeshData, MicrotomeError};
 
 use crate::camera::OrbitCamera;
 use crate::renderer::{MeshBuffers, ViewportRenderer};
@@ -48,6 +50,14 @@ struct GpuMesh {
     buffers: Arc<MeshBuffers>,
 }
 
+/// Origin of the mesh currently displayed in the viewport.
+enum MeshSource {
+    /// Isosurface extracted from the scalar field scene.
+    Isosurface,
+    /// Loaded from an external OBJ or STL file.
+    Loaded { name: String },
+}
+
 /// Isosurface viewer application.
 pub struct IsosurfaceApp {
     camera: OrbitCamera,
@@ -67,6 +77,13 @@ pub struct IsosurfaceApp {
     building: bool,
     /// When the current build started (for elapsed time display).
     build_start: Option<Instant>,
+    /// What the viewport is currently displaying.
+    mesh_source: MeshSource,
+    /// Last mesh-loading error, shown in the side panel.
+    load_error: Option<String>,
+    /// Deferred flag: open the file dialog on the next frame (handled outside
+    /// the side-panel closure so it can borrow the wgpu device).
+    want_load_dialog: bool,
 }
 
 impl IsosurfaceApp {
@@ -96,7 +113,88 @@ impl IsosurfaceApp {
             build_rx: None,
             building: false,
             build_start: None,
+            mesh_source: MeshSource::Isosurface,
+            load_error: None,
+            want_load_dialog: false,
         }
+    }
+
+    /// Opens a file picker and loads an OBJ or STL mesh synchronously.
+    fn load_mesh_from_dialog(&mut self, device: &wgpu::Device) {
+        let picked = rfd::FileDialog::new()
+            .add_filter("Mesh files", &["obj", "stl"])
+            .add_filter("Wavefront OBJ", &["obj"])
+            .add_filter("STL", &["stl"])
+            .pick_file();
+        if let Some(path) = picked {
+            self.load_mesh_from_path(device, &path);
+        }
+    }
+
+    /// Loads a mesh file from the given path, uploads it to the GPU, and
+    /// frames the camera around its bounding box.
+    fn load_mesh_from_path(&mut self, device: &wgpu::Device, path: &Path) {
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+
+        let result: Result<MeshData, MicrotomeError> = match ext.as_str() {
+            "obj" => MeshData::from_obj(path),
+            "stl" => match std::fs::File::open(path) {
+                Ok(file) => {
+                    let mut reader = std::io::BufReader::new(file);
+                    MeshData::from_stl(&mut reader)
+                }
+                Err(e) => Err(MicrotomeError::Io(e)),
+            },
+            other => {
+                self.load_error = Some(format!("Unsupported file extension: .{other}"));
+                return;
+            }
+        };
+
+        let mesh_data = match result {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("Mesh load failed for {}: {e}", path.display());
+                self.load_error = Some(format!("Failed to load {}: {e}", display_name(path)));
+                return;
+            }
+        };
+
+        if mesh_data.indices.is_empty() || mesh_data.vertices.is_empty() {
+            self.load_error = Some("Loaded mesh has no geometry".to_string());
+            return;
+        }
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("loaded_vertex_buffer"),
+            contents: bytemuck::cast_slice(&mesh_data.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("loaded_index_buffer"),
+            contents: bytemuck::cast_slice(&mesh_data.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        self.gpu_mesh = Some(GpuMesh {
+            buffers: Arc::new(MeshBuffers {
+                vertex_buffer,
+                index_buffer,
+                index_count: mesh_data.indices.len() as u32,
+            }),
+        });
+        self.triangle_count = mesh_data.indices.len() / 3;
+        self.build_time_ms = 0.0;
+        self.load_error = None;
+        self.mesh_source = MeshSource::Loaded {
+            name: display_name(path),
+        };
+        self.camera
+            .frame_bbox(mesh_data.bbox.min, mesh_data.bbox.max);
     }
 
     /// Builds the default SDF scene: cube with a cylindrical hole through it.
@@ -121,9 +219,8 @@ impl IsosurfaceApp {
         let min_code = -size_code / 2;
 
         let as_mipmap = matches!(structure, Structure::KdTree | Structure::KdTreeV2);
-        let mut octree = OctreeNode::build_with_scalar_field(
-            min_code, depth, field, as_mipmap, unit_size,
-        )?;
+        let mut octree =
+            OctreeNode::build_with_scalar_field(min_code, depth, field, as_mipmap, unit_size)?;
 
         match structure {
             Structure::Octree => {
@@ -132,15 +229,35 @@ impl IsosurfaceApp {
             }
             Structure::KdTree => {
                 let mut kdtree = KdTreeNode::build_from_octree(
-                    &octree, min_code, size_code / 2, field, 0, unit_size,
+                    &octree,
+                    min_code,
+                    size_code / 2,
+                    field,
+                    0,
+                    unit_size,
                 )?;
-                Some(KdTreeNode::extract_mesh(&mut kdtree, field, threshold, unit_size))
+                Some(KdTreeNode::extract_mesh(
+                    &mut kdtree,
+                    field,
+                    threshold,
+                    unit_size,
+                ))
             }
             Structure::KdTreeV2 => {
                 let mut kdtree = KdTreeV2Node::build_from_octree(
-                    &octree, min_code, size_code / 2, field, 0, unit_size,
+                    &octree,
+                    min_code,
+                    size_code / 2,
+                    field,
+                    0,
+                    unit_size,
                 )?;
-                Some(KdTreeV2Node::extract_mesh(&mut kdtree, field, threshold, unit_size))
+                Some(KdTreeV2Node::extract_mesh(
+                    &mut kdtree,
+                    field,
+                    threshold,
+                    unit_size,
+                ))
             }
         }
     }
@@ -326,12 +443,33 @@ impl eframe::App for IsosurfaceApp {
                     if ui.add_enabled(!self.building, rebuild_btn).clicked() {
                         self.stale = false;
                         self.needs_rebuild = true;
+                        // If we were showing a loaded file, switch back to the
+                        // isosurface scene and refocus the camera there.
+                        if matches!(self.mesh_source, MeshSource::Loaded { .. }) {
+                            self.mesh_source = MeshSource::Isosurface;
+                            self.load_error = None;
+                            self.camera.frame_bbox(Vec3::splat(-8.0), Vec3::splat(8.0));
+                        }
                     }
                 });
 
                 ui.separator();
 
-                // Build status / results.
+                // File loading controls.
+                ui.label("Load mesh from file:");
+                if ui
+                    .add_enabled(!self.building, egui::Button::new("Load OBJ / STL…"))
+                    .clicked()
+                {
+                    self.want_load_dialog = true;
+                }
+                if let Some(err) = &self.load_error {
+                    ui.colored_label(egui::Color32::from_rgb(220, 80, 80), err);
+                }
+
+                ui.separator();
+
+                // Build / mesh status.
                 if self.building {
                     let elapsed = self
                         .build_start
@@ -342,8 +480,17 @@ impl eframe::App for IsosurfaceApp {
                         ui.label(format!("Building... {elapsed:.0} ms"));
                     });
                 } else {
-                    ui.label(format!("Triangles: {}", self.triangle_count));
-                    ui.label(format!("Build time: {:.1} ms", self.build_time_ms));
+                    match &self.mesh_source {
+                        MeshSource::Isosurface => {
+                            ui.label("Source: Isosurface");
+                            ui.label(format!("Triangles: {}", self.triangle_count));
+                            ui.label(format!("Build time: {:.1} ms", self.build_time_ms));
+                        }
+                        MeshSource::Loaded { name } => {
+                            ui.label(format!("Source: {name}"));
+                            ui.label(format!("Triangles: {}", self.triangle_count));
+                        }
+                    }
                 }
 
                 ui.separator();
@@ -377,6 +524,15 @@ impl eframe::App for IsosurfaceApp {
                     self.camera.use_perspective = !self.camera.use_perspective;
                 }
             });
+
+        // Handle deferred file-dialog request now that the panel closure has
+        // released the mutable borrow of `self`.
+        if self.want_load_dialog {
+            self.want_load_dialog = false;
+            if let Some(render_state) = frame.wgpu_render_state() {
+                self.load_mesh_from_dialog(&render_state.device);
+            }
+        }
 
         // Central viewport area — use allocate_painter for correct layer scoping.
         let (response, painter) =
@@ -412,4 +568,12 @@ impl eframe::App for IsosurfaceApp {
             ui.ctx().request_repaint();
         }
     }
+}
+
+/// Returns the file name for display, falling back to the full path.
+fn display_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| path.display().to_string())
 }
