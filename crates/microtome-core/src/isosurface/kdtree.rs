@@ -3,13 +3,13 @@
 // Ported line-by-line from KdtreeISO-master/src/KdtreeISO/lib/Kdtree.cpp
 // and KdtreeISO-master/src/KdtreeISO/include/Kdtree.h
 
-use glam::Vec3;
 use super::indicators::{PositionCode, opposite_quad_index};
 use super::mesh_output::IsoMesh;
 use super::octree::OctreeNode;
 use super::qef::QefSolver;
 use super::rectilinear_grid::{HasGrid, RectilinearGrid, generate_quad};
 use super::scalar_field::ScalarField;
+use glam::Vec3;
 
 // ============================================================================
 // Kdtree.h — struct Kdtree
@@ -131,12 +131,7 @@ impl KdTreeNode {
         let dir = self.plane_dir;
         // C++: combineAAGrid does NOT call assignSign — grid already has
         // corner_signs set from the earlier assignSign call in buildFromOctree.
-        RectilinearGrid::combine_aa_grid(
-            left.as_ref(),
-            right.as_ref(),
-            dir,
-            &mut self.grid,
-        );
+        RectilinearGrid::combine_aa_grid(left.as_ref(), right.as_ref(), dir, &mut self.grid);
     }
 
     // ========================================================================
@@ -391,7 +386,12 @@ impl KdTreeNode {
             let mut right_error = 0.0_f32;
             right_sum.solve(&mut _right_approx, &mut right_error);
 
-            let diff = (left_error - right_error).abs();
+            // C++ uses integer abs() on a float, which truncates to i32
+            // first — so any difference < 1.0 becomes 0. This means the
+            // best split is always set on the first iteration only (since
+            // min_error becomes 0 and 0 < 0 is false thereafter). We
+            // replicate this behaviour for parity with the reference.
+            let diff = ((left_error - right_error) as i32).unsigned_abs() as f32;
             if diff < min_error {
                 min_error = diff;
                 best_left_max = left_max_code;
@@ -1165,25 +1165,47 @@ mod tests {
 
                 // Build octree mesh (reference) at threshold=0
                 let mut oct_normal = OctreeNode::build_with_scalar_field(
-                    min_code, depth, field.as_ref(), false, unit_size,
-                ).expect("octree should exist");
-                let oct_mesh = OctreeNode::extract_mesh(&mut oct_normal, field.as_ref(), unit_size);
+                    min_code,
+                    depth,
+                    field.as_ref(),
+                    false,
+                    unit_size,
+                )
+                .expect("octree should exist");
+                let oct_mesh =
+                    OctreeNode::extract_mesh(&mut oct_normal, field.as_ref(), unit_size);
 
                 // Build kd-tree mesh at threshold=0
                 let oct_for_kd = OctreeNode::build_with_scalar_field(
-                    min_code, depth, field.as_ref(), true, unit_size,
-                ).expect("octree for kd should exist");
+                    min_code,
+                    depth,
+                    field.as_ref(),
+                    true,
+                    unit_size,
+                )
+                .expect("octree for kd should exist");
                 let mut kdtree = KdTreeNode::build_from_octree(
-                    &oct_for_kd, min_code, size_code / 2, field.as_ref(), 0, unit_size,
-                ).expect("kdtree should exist");
-                let kd_mesh = KdTreeNode::extract_mesh(
-                    &mut kdtree, field.as_ref(), 0.0, unit_size,
-                );
+                    &oct_for_kd,
+                    min_code,
+                    size_code / 2,
+                    field.as_ref(),
+                    0,
+                    unit_size,
+                )
+                .expect("kdtree should exist");
+                let kd_mesh =
+                    KdTreeNode::extract_mesh(&mut kdtree, field.as_ref(), 0.0, unit_size);
 
                 let oct_tris = oct_mesh.triangle_count();
                 let kd_tris = kd_mesh.triangle_count();
-                eprintln!("Octree: {oct_tris} triangles, {} vertices", oct_mesh.positions.len());
-                eprintln!("KdTree: {kd_tris} triangles, {} vertices", kd_mesh.positions.len());
+                eprintln!(
+                    "Octree: {oct_tris} triangles, {} vertices",
+                    oct_mesh.positions.len()
+                );
+                eprintln!(
+                    "KdTree: {kd_tris} triangles, {} vertices",
+                    kd_mesh.positions.len()
+                );
 
                 // Count triangles with max edge > 2.0 (long-range connections)
                 let count_long = |mesh: &IsoMesh| -> usize {
@@ -1195,8 +1217,13 @@ mod tests {
                         let p0 = mesh.positions[i0];
                         let p1 = mesh.positions[i1];
                         let p2 = mesh.positions[i2];
-                        let max_edge = (p1-p0).length().max((p2-p1).length()).max((p0-p2).length());
-                        if max_edge > 2.0 { n += 1; }
+                        let max_edge = (p1 - p0)
+                            .length()
+                            .max((p2 - p1).length())
+                            .max((p0 - p2).length());
+                        if max_edge > 2.0 {
+                            n += 1;
+                        }
                     }
                     n
                 };
@@ -1206,8 +1233,173 @@ mod tests {
                 eprintln!("Octree long-edge tris: {oct_long}");
                 eprintln!("KdTree long-edge tris: {kd_long}");
 
+                // Detect non-manifold edges: count how many triangles share
+                // each directed edge. In a manifold mesh, each undirected edge
+                // is shared by exactly 2 triangles.
+                let count_nonmanifold =
+                    |mesh: &IsoMesh| -> (usize, usize) {
+                        use std::collections::HashMap;
+                        let mut edge_counts: HashMap<(u32, u32), usize> =
+                            HashMap::new();
+                        for t in 0..mesh.triangle_count() {
+                            let idx = [
+                                mesh.indices[t * 3],
+                                mesh.indices[t * 3 + 1],
+                                mesh.indices[t * 3 + 2],
+                            ];
+                            for e in 0..3 {
+                                let a = idx[e];
+                                let b = idx[(e + 1) % 3];
+                                let key = (a.min(b), a.max(b));
+                                *edge_counts.entry(key).or_insert(0) += 1;
+                            }
+                        }
+                        let nm = edge_counts
+                            .values()
+                            .filter(|&&c| c > 2)
+                            .count();
+                        let boundary = edge_counts
+                            .values()
+                            .filter(|&&c| c == 1)
+                            .count();
+                        (nm, boundary)
+                    };
+
+                let (oct_nm, oct_bnd) = count_nonmanifold(&oct_mesh);
+                let (kd_nm, kd_bnd) = count_nonmanifold(&kd_mesh);
+                eprintln!(
+                    "Octree non-manifold edges: {oct_nm}, boundary edges: {oct_bnd}"
+                );
+                eprintln!(
+                    "KdTree non-manifold edges: {kd_nm}, boundary edges: {kd_bnd}"
+                );
+
+                // Diagnose vertex positions in long-edge triangles
+                let mut zero_verts = 0usize;
+                let mut used_verts: std::collections::HashSet<u32> =
+                    std::collections::HashSet::new();
+                for idx in &kd_mesh.indices {
+                    used_verts.insert(*idx);
+                }
+                for &vi in &used_verts {
+                    let p = kd_mesh.positions[vi as usize];
+                    if p.x.abs() < 1e-9
+                        && p.y.abs() < 1e-9
+                        && p.z.abs() < 1e-9
+                    {
+                        zero_verts += 1;
+                    }
+                }
+                eprintln!(
+                    "KdTree: {} unique verts used in tris, {} at origin",
+                    used_verts.len(),
+                    zero_verts
+                );
+
+                // Check how many long-edge triangles involve a vertex at origin
+                let mut long_at_origin = 0usize;
+                for t in 0..kd_mesh.triangle_count() {
+                    let i0 = kd_mesh.indices[t * 3] as usize;
+                    let i1 = kd_mesh.indices[t * 3 + 1] as usize;
+                    let i2 = kd_mesh.indices[t * 3 + 2] as usize;
+                    let p0 = kd_mesh.positions[i0];
+                    let p1 = kd_mesh.positions[i1];
+                    let p2 = kd_mesh.positions[i2];
+                    let max_edge = (p1 - p0)
+                        .length()
+                        .max((p2 - p1).length())
+                        .max((p0 - p2).length());
+                    if max_edge > 2.0 {
+                        let any_origin = [p0, p1, p2]
+                            .iter()
+                            .any(|p| {
+                                p.x.abs() < 1e-9
+                                    && p.y.abs() < 1e-9
+                                    && p.z.abs() < 1e-9
+                            });
+                        if any_origin {
+                            long_at_origin += 1;
+                        }
+                    }
+                }
+                eprintln!(
+                    "KdTree long-edge tris involving origin vertex: {long_at_origin}"
+                );
+
+                // Also test at threshold=0.01 (same as C++ reference screenshot)
+                let kd_mesh_01 =
+                    KdTreeNode::extract_mesh(&mut kdtree, field.as_ref(), 0.01, unit_size);
+                let kd_tris_01 = kd_mesh_01.triangle_count();
+                let kd_long_01 = count_long(&kd_mesh_01);
+
+                // Count contouring-leaf stats at threshold=0.01
+                fn count_contouring_stats(
+                    node: &KdTreeNode,
+                    threshold: f32,
+                ) -> (usize, usize, usize, f32) {
+                    // (total_internal, contouring_leaves, non_clust, max_vertex_error)
+                    if node.is_leaf() {
+                        let max_err = node
+                            .grid
+                            .vertices
+                            .iter()
+                            .map(|v| v.error)
+                            .fold(f32::NEG_INFINITY, f32::max);
+                        return (0, 0, 0, max_err);
+                    }
+                    let is_cl = node.is_contouring_leaf(threshold);
+                    let max_err = node
+                        .grid
+                        .vertices
+                        .iter()
+                        .map(|v| v.error)
+                        .fold(f32::NEG_INFINITY, f32::max);
+                    let nc = if !node.clusterable { 1 } else { 0 };
+                    let cl = if is_cl { 1 } else { 0 };
+                    let (mut ti, mut tc, mut tnc, mut te) = (1, cl, nc, max_err);
+                    for child in node.children.iter().flatten() {
+                        let (ci, cc, cnc, ce) = count_contouring_stats(child, threshold);
+                        ti += ci;
+                        tc += cc;
+                        tnc += cnc;
+                        te = te.max(ce);
+                    }
+                    (ti, tc, tnc, te)
+                }
+                let (total_int, cont_leaves, non_clust, _) =
+                    count_contouring_stats(&kdtree, 0.01);
+                eprintln!(
+                    "At threshold=0.01: {total_int} internal, {cont_leaves} contouring-leaves, {non_clust} non-clusterable"
+                );
+                eprintln!(
+                    "At threshold=0.01: {kd_tris_01} tris, {kd_long_01} long-edge"
+                );
+
+                // Count how many internal clusterable nodes have component count = 0
+                fn count_empty_components(node: &KdTreeNode) -> (usize, usize) {
+                    if node.is_leaf() {
+                        return (0, 0);
+                    }
+                    let empty = if node.clusterable && node.grid.components.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    let total = if node.clusterable { 1 } else { 0 };
+                    let (mut t, mut e) = (total, empty);
+                    for child in node.children.iter().flatten() {
+                        let (ct, ce) = count_empty_components(child);
+                        t += ct;
+                        e += ce;
+                    }
+                    (t, e)
+                }
+                let (total_clust, empty_comp) = count_empty_components(&kdtree);
+                eprintln!(
+                    "Clusterable nodes: {total_clust}, with empty components: {empty_comp}"
+                );
+
                 assert!(kd_tris > 0, "KdTree should produce triangles");
-                // KdTree should not have massively more triangles than octree
                 assert!(
                     kd_tris < oct_tris * 2,
                     "KdTree has {kd_tris} tris vs octree's {oct_tris} — too many extra"
@@ -1222,5 +1414,4 @@ mod tests {
             Err(e) => panic!("Failed to spawn test thread: {e}"),
         }
     }
-
 }

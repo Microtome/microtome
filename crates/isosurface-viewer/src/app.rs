@@ -8,7 +8,7 @@ use glam::{IVec3, Vec3};
 use wgpu::util::DeviceExt;
 
 use microtome_core::isosurface::{
-    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, OctreeNode, ScalarField,
+    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, ScalarField,
 };
 
 use crate::camera::OrbitCamera;
@@ -20,8 +20,10 @@ use crate::viewport::ViewportPaintCallback;
 pub enum Structure {
     /// Octree-based dual contouring.
     Octree,
-    /// K-d tree based dual contouring.
+    /// K-d tree based dual contouring (C++ port with bug-compatible abs).
     KdTree,
+    /// K-d tree v2 with corrected binary search (paper algorithm).
+    KdTreeV2,
 }
 
 impl std::fmt::Display for Structure {
@@ -29,6 +31,7 @@ impl std::fmt::Display for Structure {
         match self {
             Self::Octree => write!(f, "Octree"),
             Self::KdTree => write!(f, "KdTree"),
+            Self::KdTreeV2 => write!(f, "KdTree v2"),
         }
     }
 }
@@ -117,12 +120,9 @@ impl IsosurfaceApp {
         let unit_size = 32.0 / size_code.x as f32;
         let min_code = -size_code / 2;
 
+        let as_mipmap = matches!(structure, Structure::KdTree | Structure::KdTreeV2);
         let mut octree = OctreeNode::build_with_scalar_field(
-            min_code,
-            depth,
-            field,
-            matches!(structure, Structure::KdTree),
-            unit_size,
+            min_code, depth, field, as_mipmap, unit_size,
         )?;
 
         match structure {
@@ -132,19 +132,15 @@ impl IsosurfaceApp {
             }
             Structure::KdTree => {
                 let mut kdtree = KdTreeNode::build_from_octree(
-                    &octree,
-                    min_code,
-                    size_code / 2,
-                    field,
-                    0,
-                    unit_size,
+                    &octree, min_code, size_code / 2, field, 0, unit_size,
                 )?;
-                Some(KdTreeNode::extract_mesh(
-                    &mut kdtree,
-                    field,
-                    threshold,
-                    unit_size,
-                ))
+                Some(KdTreeNode::extract_mesh(&mut kdtree, field, threshold, unit_size))
+            }
+            Structure::KdTreeV2 => {
+                let mut kdtree = KdTreeV2Node::build_from_octree(
+                    &octree, min_code, size_code / 2, field, 0, unit_size,
+                )?;
+                Some(KdTreeV2Node::extract_mesh(&mut kdtree, field, threshold, unit_size))
             }
         }
     }
@@ -278,6 +274,16 @@ impl eframe::App for IsosurfaceApp {
                             }
                             if ui
                                 .selectable_value(&mut self.structure, Structure::KdTree, "KdTree")
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                            if ui
+                                .selectable_value(
+                                    &mut self.structure,
+                                    Structure::KdTreeV2,
+                                    "KdTree v2",
+                                )
                                 .changed()
                             {
                                 changed = true;

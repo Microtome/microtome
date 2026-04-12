@@ -5,6 +5,7 @@
 pub mod indicators;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod kdtree;
+pub mod kdtree_v2;
 pub mod mesh_output;
 pub mod octree;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
@@ -17,6 +18,7 @@ pub mod volume_data;
 
 pub use indicators::PositionCode;
 pub use kdtree::KdTreeNode;
+pub use kdtree_v2::KdTreeV2Node;
 pub use mesh_output::IsoMesh;
 pub use octree::OctreeNode;
 pub use qef::QefSolver;

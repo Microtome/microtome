@@ -202,7 +202,7 @@ impl OctreeNode {
             Self::simplify(c, threshold);
         }
 
-        if root.clusterable && root.grid.approximate.error <= threshold {
+        if root.clusterable && root.grid.approximate.error < threshold {
             // Collapse: remove all children, become a leaf
             for child in &mut root.children {
                 *child = None;
