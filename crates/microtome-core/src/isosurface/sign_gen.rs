@@ -30,6 +30,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use glam::IVec3;
+
 use super::indicators::PositionCode;
 use super::mesh_scan::EdgeKey;
 
@@ -233,6 +235,67 @@ pub(super) struct SplittingPlane {
     /// The two dual edges (primal faces in `b`) that lie on the plane.
     pub(super) e1: FaceKey,
     pub(super) e2: FaceKey,
+}
+
+/// Builds the band of primal edges `Q` connecting `e1` and `e2` on the
+/// splitting plane. Q's dual quads form a 2D strip in the plane from
+/// the face-center of `e1` to the face-center of `e2`.
+///
+/// Paper §5.3: "Q as the quads dual to the cell edges on the primal
+/// grid that cross `h`." We interpret this as primal edges along the
+/// plane's normal axis, at integer (b1, b2) positions visited by a
+/// 4-connected path between the two face centers.
+///
+/// For the initial implementation the path is L-shaped (run along b1
+/// first, then b2). This is a valid 4-connected path between integer
+/// endpoints; a straight line tracer can replace it without changing
+/// the rest of the pipeline.
+#[allow(dead_code)]
+pub(super) fn build_band(plane: SplittingPlane) -> Vec<EdgeKey> {
+    let a_s = plane.axis as usize;
+    let b1 = (a_s + 1) % 3;
+    let b2 = (a_s + 2) % 3;
+
+    let start = (plane.e1.lower[b1], plane.e1.lower[b2]);
+    let end = (plane.e2.lower[b1], plane.e2.lower[b2]);
+    let cells_2d = l_shape_path(start, end);
+
+    let mut q = Vec::with_capacity(cells_2d.len());
+    for (i, j) in cells_2d {
+        let mut lower = IVec3::ZERO;
+        // Sit the band one cell "below" the plane (c[a_S] = L - 1). This
+        // is arbitrary — either side is a valid placement; picking one
+        // consistently matters for the symmetric-difference cycle math
+        // that composes patches in the caller.
+        lower[a_s] = plane.position - 1;
+        lower[b1] = i;
+        lower[b2] = j;
+        q.push(EdgeKey {
+            lower,
+            axis: plane.axis,
+        });
+    }
+    q
+}
+
+/// 4-connected L-shaped path between integer 2D points: walks along the
+/// b1 axis first, then b2. Visits every grid cell along the way,
+/// including endpoints.
+fn l_shape_path(start: (i32, i32), end: (i32, i32)) -> Vec<(i32, i32)> {
+    let mut cells = vec![start];
+    let mut current = start;
+
+    let sx = (end.0 - current.0).signum();
+    while current.0 != end.0 {
+        current.0 += sx;
+        cells.push(current);
+    }
+    let sy = (end.1 - current.1).signum();
+    while current.1 != end.1 {
+        current.1 += sy;
+        cells.push(current);
+    }
+    cells
 }
 
 /// Finds a splitting plane that intersects cycle `b` at exactly two
@@ -527,6 +590,88 @@ mod tests {
         // Faces have axis 0 or 1, at position 5. Plane must match.
         assert!(plane.axis == 0 || plane.axis == 1);
         assert_eq!(plane.position, 5);
+    }
+
+    // -----------------------------------------------------------------
+    // Band construction tests
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn band_along_b1_has_one_edge_per_cell() {
+        // Splitting plane at X=5. e1 at (5, 0, 0), e2 at (5, 3, 0) —
+        // both axis=0, separated by 3 along Y. The band walks Y from
+        // 0 to 3, so 4 cells → 4 edges.
+        let plane = SplittingPlane {
+            axis: 0,
+            position: 5,
+            e1: FaceKey {
+                lower: IVec3::new(5, 0, 0),
+                axis: 0,
+            },
+            e2: FaceKey {
+                lower: IVec3::new(5, 3, 0),
+                axis: 0,
+            },
+        };
+        let q = build_band(plane);
+        assert_eq!(q.len(), 4);
+        for (idx, edge) in q.iter().enumerate() {
+            assert_eq!(edge.axis, 0);
+            assert_eq!(edge.lower[0], 4, "edge {idx} lower.x");
+            assert_eq!(edge.lower[1], idx as i32, "edge {idx} lower.y");
+            assert_eq!(edge.lower[2], 0, "edge {idx} lower.z");
+        }
+    }
+
+    #[test]
+    fn band_diagonal_traces_l_shape() {
+        // e1 at (2, 0, 0), e2 at (2, 3, 3). Diagonal in Y-Z. L-shape
+        // walks Y first (0→3) then Z (0→3): 7 cells total.
+        let plane = SplittingPlane {
+            axis: 0,
+            position: 2,
+            e1: FaceKey {
+                lower: IVec3::new(2, 0, 0),
+                axis: 0,
+            },
+            e2: FaceKey {
+                lower: IVec3::new(2, 3, 3),
+                axis: 0,
+            },
+        };
+        let q = build_band(plane);
+        assert_eq!(q.len(), 7);
+        // Every edge along the same axis and at c.x = 1.
+        for edge in &q {
+            assert_eq!(edge.axis, 0);
+            assert_eq!(edge.lower[0], 1);
+        }
+    }
+
+    #[test]
+    fn band_for_different_plane_axis() {
+        // Splitting plane at Y=5; the band lies along the X-Z plane.
+        // With axis=1, b1=2=Z, b2=0=X. So e1.lower[b1]=e1.lower[2]=0,
+        // e1.lower[b2]=e1.lower[0]=0; e2.lower[b1]=2, e2.lower[b2]=0.
+        // Walk is along Z from 0 to 2: 3 cells.
+        let plane = SplittingPlane {
+            axis: 1,
+            position: 5,
+            e1: FaceKey {
+                lower: IVec3::new(0, 5, 0),
+                axis: 1,
+            },
+            e2: FaceKey {
+                lower: IVec3::new(0, 5, 2),
+                axis: 1,
+            },
+        };
+        let q = build_band(plane);
+        assert_eq!(q.len(), 3);
+        for edge in &q {
+            assert_eq!(edge.axis, 1);
+            assert_eq!(edge.lower[1], 4, "band below the plane in Y");
+        }
     }
 
     #[test]
