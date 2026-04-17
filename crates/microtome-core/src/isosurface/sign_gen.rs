@@ -219,6 +219,55 @@ fn next_unused_edge(
         .copied()
 }
 
+/// A splitting plane for the recursive patch construction (paper §5.3):
+/// a primal axis-aligned plane that cuts through cycle `b` at exactly
+/// two faces `e1`, `e2` whose perpendicular axes equal the plane's
+/// normal — the "orthogonal edges" in figure 7 of the paper.
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub(super) struct SplittingPlane {
+    /// Normal axis of the plane (0 = X, 1 = Y, 2 = Z).
+    pub(super) axis: u8,
+    /// Integer position of the plane along its normal axis.
+    pub(super) position: i32,
+    /// The two dual edges (primal faces in `b`) that lie on the plane.
+    pub(super) e1: FaceKey,
+    pub(super) e2: FaceKey,
+}
+
+/// Finds a splitting plane that intersects cycle `b` at exactly two
+/// orthogonal dual edges. Returns `None` if no such plane exists — for
+/// simple non-empty cycles the paper guarantees one does.
+///
+/// The search iterates axes and positions and returns the first hit.
+/// Cycles with multi-wind behavior (more than 2 faces of the same axis
+/// at the same position) still produce valid planes elsewhere.
+#[allow(dead_code)]
+pub(super) fn pick_splitting_plane(b: &[FaceKey]) -> Option<SplittingPlane> {
+    for axis in 0u8..3 {
+        let mut by_position: HashMap<i32, Vec<FaceKey>> = HashMap::new();
+        for &face in b {
+            if face.axis == axis {
+                by_position
+                    .entry(face.lower[axis as usize])
+                    .or_default()
+                    .push(face);
+            }
+        }
+        for (position, faces) in by_position {
+            if faces.len() == 2 {
+                return Some(SplittingPlane {
+                    axis,
+                    position,
+                    e1: faces[0],
+                    e2: faces[1],
+                });
+            }
+        }
+    }
+    None
+}
+
 /// Returns the 4 primal edges that bound the given primal face.
 ///
 /// Used by later stages (cycle extraction, patching) to navigate between
@@ -415,6 +464,69 @@ mod tests {
         // All faces accounted for with no overlap.
         let used: HashSet<FaceKey> = cycles.iter().flat_map(|c| c.iter().copied()).collect();
         assert_eq!(used, faces);
+    }
+
+    // -----------------------------------------------------------------
+    // Splitting plane tests
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn splitting_plane_exists_for_square_cycle() {
+        // The 4 faces around a single X-axis edge form a cycle. Both
+        // axis=1 (Y) and axis=2 (Z) have 2 faces at position 0, so a
+        // valid splitting plane exists.
+        let edge = EdgeKey {
+            lower: IVec3::ZERO,
+            axis: 0,
+        };
+        let faces: HashSet<FaceKey> = faces_containing_edge(edge).iter().copied().collect();
+        let cycles = extract_boundary_cycles(&faces);
+        assert_eq!(cycles.len(), 1);
+
+        let plane = pick_splitting_plane(&cycles[0]).expect("splitting plane must exist");
+
+        // axis X (0) has no faces in this cycle; only Y (1) and Z (2) are valid.
+        assert!(plane.axis == 1 || plane.axis == 2);
+        assert_eq!(plane.position, 0);
+        assert_ne!(plane.e1, plane.e2);
+        assert_eq!(plane.e1.axis, plane.axis);
+        assert_eq!(plane.e2.axis, plane.axis);
+        assert_eq!(plane.e1.lower[plane.axis as usize], plane.position);
+        assert_eq!(plane.e2.lower[plane.axis as usize], plane.position);
+    }
+
+    #[test]
+    fn splitting_plane_none_for_empty_cycle() {
+        assert!(pick_splitting_plane(&[]).is_none());
+    }
+
+    #[test]
+    fn splitting_plane_picks_correct_axis_for_planar_cycle() {
+        // Build a larger rectangular cycle lying in the Z=5 plane.
+        // Outline: 4 cells on the Z=5 plane forming a 2x2 block.
+        //
+        // Cells at Z=5: (0,0,5), (1,0,5), (0,1,5), (1,1,5)
+        // Faces between them on the Z=5 plane: X-perp at x=1 between
+        // (0,*,5)-(1,*,5), and Y-perp at y=1 between (*,0,5)-(*,1,5).
+        //
+        // ∂S faces for a cycle around the 2x2 block: 8 exterior faces
+        // (4 axis=0 at x=0 and x=2, 4 axis=1 at y=0 and y=2 — wait let
+        // me think again).
+        //
+        // Actually, easiest: use the 4 faces around a single Z-axis
+        // edge at (5, 5, 5) axis=2. Those faces all have axis=0 or 1.
+        let edge = EdgeKey {
+            lower: IVec3::new(5, 5, 5),
+            axis: 2,
+        };
+        let faces: HashSet<FaceKey> = faces_containing_edge(edge).iter().copied().collect();
+        let cycles = extract_boundary_cycles(&faces);
+        assert_eq!(cycles.len(), 1);
+
+        let plane = pick_splitting_plane(&cycles[0]).expect("splitting plane must exist");
+        // Faces have axis 0 or 1, at position 5. Plane must match.
+        assert!(plane.axis == 0 || plane.axis == 1);
+        assert_eq!(plane.position, 5);
     }
 
     #[test]
