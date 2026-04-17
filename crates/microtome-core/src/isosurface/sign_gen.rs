@@ -293,6 +293,93 @@ pub(super) fn build_band(plane: SplittingPlane) -> Vec<EdgeKey> {
     q
 }
 
+/// Computes the parity-odd bounding faces of a set of primal edges.
+/// This is ∂Q (the boundary of Q as a 2-chain in the dual surface),
+/// expressed in primal face coordinates.
+#[allow(dead_code)]
+pub(super) fn boundary_of_edges(q: &[EdgeKey]) -> HashSet<FaceKey> {
+    let mut counts: HashMap<FaceKey, u32> = HashMap::new();
+    for &edge in q {
+        for face in faces_containing_edge(edge) {
+            *counts.entry(face).or_insert(0) += 1;
+        }
+    }
+    counts
+        .into_iter()
+        .filter_map(|(f, c)| if c % 2 == 1 { Some(f) } else { None })
+        .collect()
+}
+
+/// Recursively computes a patch `P` for boundary cycle `b` using the
+/// paper's §5.3 divide-and-conquer: pick a splitting plane, build the
+/// band Q across it, split b into sub-cycles, recurse, and combine
+/// patches via symmetric difference.
+///
+/// Returns the primal edges forming `P`. The invariant is
+/// `∂(P) = b` (as sets of primal faces), so adding these edges to the
+/// original intersection-edge set makes the dual surface closed — the
+/// precondition for consistent flood-fill sign propagation.
+///
+/// Safety: caps recursion depth to prevent runaway on degenerate
+/// inputs that violate the Manhattan-path length bound.
+#[allow(dead_code)]
+pub(super) fn patch_cycle(b: &[FaceKey]) -> Vec<EdgeKey> {
+    patch_cycle_inner(b, 0)
+}
+
+/// Maximum recursion depth for patch_cycle. The paper's Manhattan-path
+/// argument guarantees sub-cycles are strictly shorter, so depth is
+/// bounded by the cycle's length in principle. 128 is a generous cap
+/// that we expect to never hit on real meshes.
+const MAX_PATCH_DEPTH: u32 = 128;
+
+fn patch_cycle_inner(b: &[FaceKey], depth: u32) -> Vec<EdgeKey> {
+    if b.is_empty() {
+        return Vec::new();
+    }
+    if depth >= MAX_PATCH_DEPTH {
+        log::warn!(
+            "patch_cycle: exceeded recursion depth {MAX_PATCH_DEPTH}; \
+             returning partial patch. Cycle length: {}",
+            b.len()
+        );
+        return Vec::new();
+    }
+
+    let plane = match pick_splitting_plane(b) {
+        Some(p) => p,
+        None => {
+            log::warn!(
+                "patch_cycle: no splitting plane for cycle of length {}; \
+                 returning empty patch (degenerate cycle)",
+                b.len()
+            );
+            return Vec::new();
+        }
+    };
+
+    let q = build_band(plane);
+    let boundary_q = boundary_of_edges(&q);
+
+    // b ⊖ ∂Q: paper's formula `b = ∂Q ⊖ b1 ⊖ b2` rearranges to
+    // `b1 ⊖ b2 = ∂Q ⊖ b`, so this is the union of the sub-cycles.
+    let b_set: HashSet<FaceKey> = b.iter().copied().collect();
+    let remaining: HashSet<FaceKey> = b_set.symmetric_difference(&boundary_q).copied().collect();
+
+    // Decompose into sub-cycles.
+    let sub_cycles = extract_boundary_cycles(&remaining);
+
+    // Recurse on each sub-cycle; combine via symmetric difference.
+    let mut patch: HashSet<EdgeKey> = q.into_iter().collect();
+    for sub in sub_cycles {
+        let sub_patch = patch_cycle_inner(&sub, depth + 1);
+        let sub_set: HashSet<EdgeKey> = sub_patch.into_iter().collect();
+        patch = patch.symmetric_difference(&sub_set).copied().collect();
+    }
+
+    patch.into_iter().collect()
+}
+
 /// Returns integer values strictly between `from` and `to` (in either
 /// direction). For half-integer endpoints (our typical case) this
 /// yields every grid line between them, exclusive on both ends.
@@ -338,7 +425,11 @@ pub(super) fn pick_splitting_plane(b: &[FaceKey]) -> Option<SplittingPlane> {
                     .push(face);
             }
         }
-        for (position, faces) in by_position {
+        // Iterate positions in sorted order for determinism.
+        let mut positions: Vec<i32> = by_position.keys().copied().collect();
+        positions.sort_unstable();
+        for position in positions {
+            let faces = &by_position[&position];
             if faces.len() == 2 {
                 return Some(SplittingPlane {
                     axis,
@@ -726,6 +817,89 @@ mod tests {
         let boundary = plane_side_boundary(&q, 0, 2);
         assert!(boundary.contains(&plane.e1));
         assert!(boundary.contains(&plane.e2));
+    }
+
+    // -----------------------------------------------------------------
+    // Patch cycle (recursive D&C) tests
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn patch_empty_cycle_returns_empty() {
+        let patch = patch_cycle(&[]);
+        assert!(patch.is_empty());
+    }
+
+    #[test]
+    fn patch_single_square_cycle_is_one_edge() {
+        // The 4 faces around a single X-edge form a cycle. The splitting
+        // plane picks axis=1 (first with ≥2 faces); band h crosses one
+        // grid line on the plane, yielding one primal edge whose 4
+        // bounding faces are exactly the cycle. ∂Q = b, no sub-cycles.
+        let edge = EdgeKey {
+            lower: IVec3::ZERO,
+            axis: 0,
+        };
+        let faces: HashSet<FaceKey> = faces_containing_edge(edge).iter().copied().collect();
+        let cycles = extract_boundary_cycles(&faces);
+        let cycle = &cycles[0];
+
+        let patch = patch_cycle(cycle);
+        assert_eq!(patch.len(), 1);
+
+        let boundary = boundary_of_edges(&patch);
+        let cycle_set: HashSet<FaceKey> = cycle.iter().copied().collect();
+        assert_eq!(boundary, cycle_set, "∂(P) must equal b");
+    }
+
+    #[test]
+    fn patch_closes_cycle_boundary_matches() {
+        // Build a non-trivial cycle by XOR-ing the odd-face sets of two
+        // nearby intersection edges. Confirm the patch's ∂(P) matches
+        // the cycle exactly (invariant ∂(P) = b).
+        let e_a = EdgeKey {
+            lower: IVec3::new(0, 0, 0),
+            axis: 0,
+        };
+        let e_b = EdgeKey {
+            lower: IVec3::new(0, 0, 1),
+            axis: 0,
+        };
+        // Both edges share 2 faces; XOR of their 4-face ring sets leaves
+        // 4 faces forming a longer cycle.
+        let set_a: HashSet<FaceKey> = faces_containing_edge(e_a).iter().copied().collect();
+        let set_b: HashSet<FaceKey> = faces_containing_edge(e_b).iter().copied().collect();
+        let xor: HashSet<FaceKey> = set_a.symmetric_difference(&set_b).copied().collect();
+        // (We don't actually need this to be a valid ∂(S) for testing
+        //  patch; any Eulerian cycle works.)
+
+        let cycles = extract_boundary_cycles(&xor);
+        assert!(!cycles.is_empty());
+
+        for cycle in &cycles {
+            let patch = patch_cycle(cycle);
+            let boundary = boundary_of_edges(&patch);
+            let cycle_set: HashSet<FaceKey> = cycle.iter().copied().collect();
+            assert_eq!(boundary, cycle_set, "∂(P) must equal b for cycle {cycle:?}");
+        }
+    }
+
+    #[test]
+    fn patch_empty_boundary_q_short_circuits() {
+        // `boundary_of_edges` on empty input is empty.
+        assert!(boundary_of_edges(&[]).is_empty());
+    }
+
+    #[test]
+    fn boundary_of_single_edge_has_four_faces() {
+        let edge = EdgeKey {
+            lower: IVec3::ZERO,
+            axis: 0,
+        };
+        let b = boundary_of_edges(&[edge]);
+        assert_eq!(b.len(), 4);
+        // Should match exactly faces_containing_edge.
+        let expected: HashSet<FaceKey> = faces_containing_edge(edge).iter().copied().collect();
+        assert_eq!(b, expected);
     }
 
     #[test]
