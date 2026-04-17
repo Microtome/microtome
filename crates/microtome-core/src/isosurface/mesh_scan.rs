@@ -23,7 +23,7 @@
 //! and the BFS produces incorrect signs through those holes. Phase 2 (the
 //! paper's `detectProc` / `patchProc` / `signProc`) addresses this.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use glam::{IVec3, Vec3};
 
@@ -237,46 +237,62 @@ impl ScalarField for ScannedMeshField {
 /// children that the triangle cannot touch; at the leaf level (cell size
 /// 1 grid unit) we test the 12 cell edges and record any intersection in
 /// `edges`.
-/// Augments `edges` with patch primal edges that close every boundary
-/// cycle of the dual surface `S`. After this, the face-parity of every
-/// primal face in the scan-converted region is even — so the subsequent
-/// flood-fill yields consistent signs (paper §5).
+/// Mutates `edges` so the extended set `Ê = E ⊖ (⊖ᵢ Pᵢ)` has empty
+/// boundary on the dual surface. Paper §5: detect odd faces → extract
+/// cycles → patch each cycle → combine via symmetric difference.
 ///
-/// Patch edges carry synthesized Hermite data: position at the edge
-/// midpoint (world coords) and normal blended from the nearest real
-/// intersection edges. `is_patch` is set to `true` so callers that
-/// prefer real Hermite can filter accordingly.
+/// Crucially this is a *symmetric* difference, not a union: two
+/// per-cycle patches that share a primal edge cancel that edge. Using
+/// union here would leave residual odd faces when boundary cycles are
+/// close enough that their patches overlap (common on dirty meshes
+/// with multiple holes).
+///
+/// Patch edges that don't collide with a real intersection edge get
+/// synthesized Hermite data: position at the edge midpoint, normal
+/// from the nearest real intersection edge at construction time.
 fn patch_dual_surface(edges: &mut HashMap<EdgeKey, EdgeHit>, unit_size: f32) {
     let odd_faces = super::sign_gen::detect_odd_faces(edges);
     if odd_faces.is_empty() {
         return;
     }
     let cycles = super::sign_gen::extract_boundary_cycles(&odd_faces);
+
+    // Combined patch set via per-edge parity (symmetric difference).
+    let mut combined_patch: HashSet<EdgeKey> = HashSet::new();
     for cycle in cycles {
-        let patch = super::sign_gen::patch_cycle(&cycle);
-        for patch_edge in patch {
-            if edges.contains_key(&patch_edge) {
-                // Edge already in E (real intersection edge). Patch
-                // wants to XOR it out — but since E was our starting
-                // baseline, "XOR-out" conceptually removes it from Ê.
-                // For the flood-fill we keep the real edge (it has real
-                // Hermite); the effect of the would-be removal would be
-                // to undo a sign flip. We don't support that here yet;
-                // in practice this branch is rare for closed boundary
-                // cycles on a scan-converted mesh.
-                continue;
+        let patch_edges = super::sign_gen::patch_cycle(&cycle);
+        for pe in patch_edges {
+            if !combined_patch.insert(pe) {
+                combined_patch.remove(&pe);
             }
-            let midpoint = edge_midpoint(patch_edge, unit_size);
-            let normal = nearest_real_normal(edges, midpoint);
-            edges.insert(
-                patch_edge,
-                EdgeHit {
-                    position: midpoint,
-                    normal,
-                    is_patch: true,
-                },
-            );
         }
+    }
+
+    // Snapshot real edges so nearest-normal lookup isn't polluted by
+    // in-progress patch insertions (nor by upcoming removals).
+    let real_snapshot: Vec<(Vec3, Vec3)> = edges
+        .values()
+        .filter(|h| !h.is_patch)
+        .map(|h| (h.position, h.normal))
+        .collect();
+
+    // Apply Ê = E ⊖ combined_patch.
+    for patch_edge in combined_patch {
+        if edges.remove(&patch_edge).is_some() {
+            // Was already in E (or a previous patch, which shouldn't
+            // happen post-dedup); XOR removes it.
+            continue;
+        }
+        let midpoint = edge_midpoint(patch_edge, unit_size);
+        let normal = nearest_normal(&real_snapshot, midpoint);
+        edges.insert(
+            patch_edge,
+            EdgeHit {
+                position: midpoint,
+                normal,
+                is_patch: true,
+            },
+        );
     }
 }
 
@@ -288,19 +304,16 @@ fn edge_midpoint(edge: EdgeKey, unit_size: f32) -> Vec3 {
     lower_world + offset
 }
 
-/// Brute-force nearest-neighbor search over real (non-patch) edges.
-/// Falls back to +Z if no real edges exist (pathological input).
-fn nearest_real_normal(edges: &HashMap<EdgeKey, EdgeHit>, point: Vec3) -> Vec3 {
+/// Brute-force nearest-neighbor search over a (position, normal)
+/// snapshot. Falls back to +Z if the snapshot is empty.
+fn nearest_normal(candidates: &[(Vec3, Vec3)], point: Vec3) -> Vec3 {
     let mut best_d2 = f32::INFINITY;
     let mut best_n = Vec3::Z;
-    for hit in edges.values() {
-        if hit.is_patch {
-            continue;
-        }
-        let d2 = (hit.position - point).length_squared();
+    for &(pos, n) in candidates {
+        let d2 = (pos - point).length_squared();
         if d2 < best_d2 {
             best_d2 = d2;
-            best_n = hit.normal;
+            best_n = n;
         }
     }
     if best_n.length_squared() > 1e-12 {
