@@ -758,6 +758,51 @@ mod tests {
     }
 
     #[test]
+    fn open_top_cube_round_trip_through_dc_yields_repaired_mesh() {
+        // End-to-end: scan-convert a five-sided box, let Phase 2 close
+        // the boundary cycle, run the full DC pipeline, and verify the
+        // extracted mesh is non-empty and covers the input bbox.
+        // With Phase 1 alone the DC would produce an empty (or inverted)
+        // mesh because the sign field through the hole is wrong.
+        let mesh = build_cube_mesh(0.15, 0.85, false);
+        let depth = 5;
+        let size_code = 1_i32 << (depth - 1);
+        let unit_size = 1.0 / size_code as f32;
+        let min_code = IVec3::ZERO;
+
+        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+
+        let octree = OctreeNode::build_with_scalar_field(min_code, depth, &field, false, unit_size);
+        let mut octree = octree.expect("Phase 2 patched box should produce a non-empty octree");
+        OctreeNode::simplify(&mut octree, 0.0);
+        let result = OctreeNode::extract_mesh(&mut octree, &field, unit_size);
+
+        assert!(
+            result.triangle_count() > 0,
+            "repaired five-sided box should produce triangles"
+        );
+
+        // Bbox of the reconstruction should roughly match the input cube
+        // (approximate because the patched top face is synthesized near
+        // the original opening).
+        let mut bb_min = Vec3::splat(f32::MAX);
+        let mut bb_max = Vec3::splat(f32::MIN);
+        for p in &result.positions {
+            bb_min = bb_min.min(*p);
+            bb_max = bb_max.max(*p);
+        }
+        let tol = unit_size * 3.0;
+        assert!(
+            (bb_min.x - 0.15).abs() < tol && (bb_min.y - 0.15).abs() < tol,
+            "bbox min.xy close to 0.15, got {bb_min:?}"
+        );
+        assert!(
+            (bb_max.x - 0.85).abs() < tol && (bb_max.y - 0.85).abs() < tol,
+            "bbox max.xy close to 0.85, got {bb_max:?}"
+        );
+    }
+
+    #[test]
     fn scan_cube_round_trip_through_dc() {
         let mesh = make_cube_mesh(0.123, 0.877);
         let depth = 5;
