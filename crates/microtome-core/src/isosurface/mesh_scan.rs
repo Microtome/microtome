@@ -53,11 +53,11 @@ pub struct ScannedMeshField {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
-struct EdgeKey {
+pub(super) struct EdgeKey {
     /// Grid coordinate of the edge's lower endpoint.
-    lower: PositionCode,
+    pub(super) lower: PositionCode,
     /// Axis of the edge: 0 = +X, 1 = +Y, 2 = +Z.
-    axis: u8,
+    pub(super) axis: u8,
 }
 
 #[derive(Debug, Clone, Copy)]

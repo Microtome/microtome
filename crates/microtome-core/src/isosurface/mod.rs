@@ -14,6 +14,7 @@ pub mod qef;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod rectilinear_grid;
 pub mod scalar_field;
+mod sign_gen;
 pub mod vertex;
 pub mod volume_data;
 
