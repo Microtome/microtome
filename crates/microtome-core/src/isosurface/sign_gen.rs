@@ -33,6 +33,13 @@ use std::collections::{HashMap, HashSet};
 use super::indicators::PositionCode;
 use super::mesh_scan::EdgeKey;
 
+/// Ordered sequence of `FaceKey` edges forming a closed walk on the
+/// boundary graph. A cycle has at least one face. The walk returns to its
+/// starting cell: following each face to the other side traces out the
+/// loop back to the origin.
+#[allow(dead_code)]
+pub(super) type BoundaryCycle = Vec<FaceKey>;
+
 /// Identifies a primal cell face by its lower-corner grid code and the
 /// axis perpendicular to it (0 = X, 1 = Y, 2 = Z).
 ///
@@ -103,6 +110,113 @@ pub(super) fn detect_odd_faces<V>(edges: &HashMap<EdgeKey, V>) -> HashSet<FaceKe
         .into_iter()
         .filter_map(|(face, count)| if count % 2 == 1 { Some(face) } else { None })
         .collect()
+}
+
+/// Returns the two primal cells that share the given face. The face's
+/// `lower` corner is on the upper cell's side; the lower cell sits one
+/// unit back along the face's perpendicular axis.
+#[allow(dead_code)]
+fn cells_adjacent_to_face(face: FaceKey) -> [PositionCode; 2] {
+    let mut lower = face.lower;
+    lower[face.axis as usize] -= 1;
+    [lower, face.lower]
+}
+
+/// Decomposes the odd-face set into disjoint simple closed cycles.
+///
+/// Nodes of ∂(S) are primal cells; edges are the odd faces. Every cell
+/// has even valence in ∂(S) (paper §5, Euler argument), so we can always
+/// partition the edges into simple cycles.
+///
+/// Algorithm: Hierholzer-style walk that emits a simple cycle each time
+/// the walk revisits a node in its current path. Per the paper this
+/// yields edge-disjoint cycles `b_i` — the inputs to [patch computation].
+#[allow(dead_code)]
+pub(super) fn extract_boundary_cycles(odd_faces: &HashSet<FaceKey>) -> Vec<BoundaryCycle> {
+    let mut adjacency: HashMap<PositionCode, Vec<FaceKey>> = HashMap::new();
+    for &face in odd_faces {
+        let [c0, c1] = cells_adjacent_to_face(face);
+        adjacency.entry(c0).or_default().push(face);
+        adjacency.entry(c1).or_default().push(face);
+    }
+
+    let mut used: HashSet<FaceKey> = HashSet::with_capacity(odd_faces.len());
+    let mut cycles: Vec<BoundaryCycle> = Vec::new();
+
+    while let Some(start) = find_unstarted(&adjacency, &used) {
+        walk_from(&adjacency, &mut used, start, &mut cycles);
+    }
+
+    cycles
+}
+
+/// Returns any cell that still has an unused incident odd face.
+fn find_unstarted(
+    adjacency: &HashMap<PositionCode, Vec<FaceKey>>,
+    used: &HashSet<FaceKey>,
+) -> Option<PositionCode> {
+    adjacency.iter().find_map(|(cell, faces)| {
+        if faces.iter().any(|f| !used.contains(f)) {
+            Some(*cell)
+        } else {
+            None
+        }
+    })
+}
+
+/// Walks from `start` along unused odd faces, emitting a simple cycle
+/// every time the walk returns to a node it already visited. Continues
+/// until no unused edges are reachable from the current walk tip.
+fn walk_from(
+    adjacency: &HashMap<PositionCode, Vec<FaceKey>>,
+    used: &mut HashSet<FaceKey>,
+    start: PositionCode,
+    cycles: &mut Vec<BoundaryCycle>,
+) {
+    let mut path_nodes: Vec<PositionCode> = vec![start];
+    let mut path_edges: Vec<FaceKey> = Vec::new();
+    let mut in_path: HashMap<PositionCode, usize> = HashMap::new();
+    in_path.insert(start, 0);
+
+    let mut current = start;
+    loop {
+        let Some(face) = next_unused_edge(adjacency, used, current) else {
+            break;
+        };
+        used.insert(face);
+        path_edges.push(face);
+
+        let [c0, c1] = cells_adjacent_to_face(face);
+        let next = if c0 == current { c1 } else { c0 };
+
+        if let Some(&idx) = in_path.get(&next) {
+            // Closing a simple cycle: everything from position `idx` onward
+            // forms a loop (node at idx → ... → current → face → node at idx).
+            let cycle: Vec<FaceKey> = path_edges.drain(idx..).collect();
+            cycles.push(cycle);
+            for popped in path_nodes.drain(idx + 1..) {
+                in_path.remove(&popped);
+            }
+            current = next;
+        } else {
+            in_path.insert(next, path_nodes.len());
+            path_nodes.push(next);
+            current = next;
+        }
+    }
+}
+
+/// Returns any unused face incident to `cell` in the adjacency graph.
+fn next_unused_edge(
+    adjacency: &HashMap<PositionCode, Vec<FaceKey>>,
+    used: &HashSet<FaceKey>,
+    cell: PositionCode,
+) -> Option<FaceKey> {
+    adjacency
+        .get(&cell)?
+        .iter()
+        .find(|f| !used.contains(f))
+        .copied()
 }
 
 /// Returns the 4 primal edges that bound the given primal face.
@@ -216,6 +330,125 @@ mod tests {
         let faces = faces_containing_edge(e);
         let unique: HashSet<_> = faces.iter().copied().collect();
         assert_eq!(unique.len(), 4);
+    }
+
+    // -----------------------------------------------------------------
+    // Cycle extraction tests
+    // -----------------------------------------------------------------
+
+    /// Attempts to walk `cycle` starting at `start`. Returns `true` iff
+    /// every face in the walk is adjacent to the current cell and the
+    /// walk returns to `start`.
+    fn cycle_walks_back_to(cycle: &[FaceKey], start: PositionCode) -> bool {
+        let mut current = start;
+        for &face in cycle {
+            let [a, b] = cells_adjacent_to_face(face);
+            if a == current {
+                current = b;
+            } else if b == current {
+                current = a;
+            } else {
+                return false;
+            }
+        }
+        current == start
+    }
+
+    /// Asserts that `cycle` closes starting at either cell of its first face.
+    fn assert_is_closed_cycle(cycle: &[FaceKey]) {
+        assert!(!cycle.is_empty());
+        let [c0, c1] = cells_adjacent_to_face(cycle[0]);
+        assert!(
+            cycle_walks_back_to(cycle, c0) || cycle_walks_back_to(cycle, c1),
+            "cycle does not close from either cell of its first face: {cycle:?}"
+        );
+    }
+
+    #[test]
+    fn empty_odd_faces_yields_no_cycles() {
+        let cycles = extract_boundary_cycles(&HashSet::new());
+        assert!(cycles.is_empty());
+    }
+
+    #[test]
+    fn single_square_cycle() {
+        // 4 faces around a single primal edge form a cycle in ∂(S).
+        // Take edge (origin, axis=X): the 4 faces containing it all share
+        // axis ≠ X and tile the yz-ring around the edge.
+        let edge = EdgeKey {
+            lower: IVec3::ZERO,
+            axis: 0,
+        };
+        let faces: HashSet<FaceKey> = faces_containing_edge(edge).iter().copied().collect();
+        assert_eq!(faces.len(), 4);
+
+        let cycles = extract_boundary_cycles(&faces);
+        assert_eq!(cycles.len(), 1, "expected one cycle, got {cycles:?}");
+        assert_eq!(cycles[0].len(), 4);
+        assert_is_closed_cycle(&cycles[0]);
+
+        // Every face is used exactly once.
+        let used: HashSet<FaceKey> = cycles[0].iter().copied().collect();
+        assert_eq!(used, faces);
+    }
+
+    #[test]
+    fn two_disjoint_cycles() {
+        let e1 = EdgeKey {
+            lower: IVec3::new(0, 0, 0),
+            axis: 0,
+        };
+        let e2 = EdgeKey {
+            lower: IVec3::new(10, 10, 10),
+            axis: 0,
+        };
+        let mut faces: HashSet<FaceKey> = HashSet::new();
+        faces.extend(faces_containing_edge(e1));
+        faces.extend(faces_containing_edge(e2));
+
+        let cycles = extract_boundary_cycles(&faces);
+        assert_eq!(cycles.len(), 2);
+        for cycle in &cycles {
+            assert_eq!(cycle.len(), 4);
+            assert_is_closed_cycle(cycle);
+        }
+        // All faces accounted for with no overlap.
+        let used: HashSet<FaceKey> = cycles.iter().flat_map(|c| c.iter().copied()).collect();
+        assert_eq!(used, faces);
+    }
+
+    #[test]
+    fn every_face_used_exactly_once() {
+        // Three disjoint ring-cycles around three parallel X-edges.
+        let edges = [
+            EdgeKey {
+                lower: IVec3::new(0, 0, 0),
+                axis: 0,
+            },
+            EdgeKey {
+                lower: IVec3::new(20, 0, 0),
+                axis: 0,
+            },
+            EdgeKey {
+                lower: IVec3::new(0, 20, 0),
+                axis: 0,
+            },
+        ];
+        let mut faces: HashSet<FaceKey> = HashSet::new();
+        for &e in &edges {
+            faces.extend(faces_containing_edge(e));
+        }
+
+        let cycles = extract_boundary_cycles(&faces);
+        assert_eq!(cycles.len(), 3);
+        let mut used = Vec::new();
+        for cycle in &cycles {
+            assert_is_closed_cycle(cycle);
+            used.extend(cycle.iter().copied());
+        }
+        let used_set: HashSet<FaceKey> = used.iter().copied().collect();
+        assert_eq!(used_set.len(), used.len(), "same face appears twice");
+        assert_eq!(used_set, faces);
     }
 
     #[test]
