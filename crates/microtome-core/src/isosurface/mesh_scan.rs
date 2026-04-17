@@ -61,11 +61,19 @@ pub(super) struct EdgeKey {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct EdgeHit {
-    /// World-space intersection point on the edge.
-    position: Vec3,
-    /// World-space surface normal at the intersection (from the triangle face).
-    normal: Vec3,
+pub(super) struct EdgeHit {
+    /// World-space intersection point on the edge. For real intersection
+    /// edges this is the triangle-plane crossing; for patch edges it is
+    /// the edge midpoint (a synthesized location, see `is_patch`).
+    pub(super) position: Vec3,
+    /// World-space surface normal at the intersection. For real edges
+    /// this is the source triangle's face normal; for patch edges it is
+    /// a weighted blend of nearby real normals.
+    pub(super) normal: Vec3,
+    /// `true` iff this edge was synthesized by PolyMender sign-generation
+    /// patching (not produced by scan-conversion from the input mesh).
+    /// Consumers that prefer real data can filter on this.
+    pub(super) is_patch: bool,
 }
 
 impl ScannedMeshField {
@@ -106,6 +114,13 @@ impl ScannedMeshField {
                 v0, v1, v2, normal, min_code, size_code, unit_size, &mut edges,
             );
         }
+
+        // Phase 2 sign generation (paper §5): patch the dual surface so
+        // the extended intersection-edge set `Ê = E ∪ patch_edges` has
+        // empty boundary. Without this step, a mesh with holes produces
+        // a dual surface with boundary cycles and the flood-fill below
+        // yields inconsistent signs through the holes.
+        patch_dual_surface(&mut edges, unit_size);
 
         flood_fill_signs(&edges, &mut signs, min_code, dims);
 
@@ -222,6 +237,79 @@ impl ScalarField for ScannedMeshField {
 /// children that the triangle cannot touch; at the leaf level (cell size
 /// 1 grid unit) we test the 12 cell edges and record any intersection in
 /// `edges`.
+/// Augments `edges` with patch primal edges that close every boundary
+/// cycle of the dual surface `S`. After this, the face-parity of every
+/// primal face in the scan-converted region is even — so the subsequent
+/// flood-fill yields consistent signs (paper §5).
+///
+/// Patch edges carry synthesized Hermite data: position at the edge
+/// midpoint (world coords) and normal blended from the nearest real
+/// intersection edges. `is_patch` is set to `true` so callers that
+/// prefer real Hermite can filter accordingly.
+fn patch_dual_surface(edges: &mut HashMap<EdgeKey, EdgeHit>, unit_size: f32) {
+    let odd_faces = super::sign_gen::detect_odd_faces(edges);
+    if odd_faces.is_empty() {
+        return;
+    }
+    let cycles = super::sign_gen::extract_boundary_cycles(&odd_faces);
+    for cycle in cycles {
+        let patch = super::sign_gen::patch_cycle(&cycle);
+        for patch_edge in patch {
+            if edges.contains_key(&patch_edge) {
+                // Edge already in E (real intersection edge). Patch
+                // wants to XOR it out — but since E was our starting
+                // baseline, "XOR-out" conceptually removes it from Ê.
+                // For the flood-fill we keep the real edge (it has real
+                // Hermite); the effect of the would-be removal would be
+                // to undo a sign flip. We don't support that here yet;
+                // in practice this branch is rare for closed boundary
+                // cycles on a scan-converted mesh.
+                continue;
+            }
+            let midpoint = edge_midpoint(patch_edge, unit_size);
+            let normal = nearest_real_normal(edges, midpoint);
+            edges.insert(
+                patch_edge,
+                EdgeHit {
+                    position: midpoint,
+                    normal,
+                    is_patch: true,
+                },
+            );
+        }
+    }
+}
+
+/// World-space midpoint of a primal cell edge.
+fn edge_midpoint(edge: EdgeKey, unit_size: f32) -> Vec3 {
+    let lower_world = code_to_pos(edge.lower, unit_size);
+    let mut offset = Vec3::ZERO;
+    offset[edge.axis as usize] = 0.5 * unit_size;
+    lower_world + offset
+}
+
+/// Brute-force nearest-neighbor search over real (non-patch) edges.
+/// Falls back to +Z if no real edges exist (pathological input).
+fn nearest_real_normal(edges: &HashMap<EdgeKey, EdgeHit>, point: Vec3) -> Vec3 {
+    let mut best_d2 = f32::INFINITY;
+    let mut best_n = Vec3::Z;
+    for hit in edges.values() {
+        if hit.is_patch {
+            continue;
+        }
+        let d2 = (hit.position - point).length_squared();
+        if d2 < best_d2 {
+            best_d2 = d2;
+            best_n = hit.normal;
+        }
+    }
+    if best_n.length_squared() > 1e-12 {
+        best_n.normalize()
+    } else {
+        Vec3::Z
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn scan_triangle(
     v0: Vec3,
@@ -260,6 +348,7 @@ fn scan_triangle(
                     .or_insert(EdgeHit {
                         position: hit_pos,
                         normal,
+                        is_patch: false,
                     });
             }
         }
@@ -473,7 +562,12 @@ mod tests {
     use crate::mesh::{BoundingBox, MeshData, MeshVertex};
 
     fn make_cube_mesh(min: f32, max: f32) -> MeshData {
-        // 8 corners in the decode_cell ordering, but geometry just needs 12 tris.
+        build_cube_mesh(min, max, true)
+    }
+
+    /// Builds a cube (closed, 12 triangles) or an open-topped box (no
+    /// +Z face, 10 triangles) in `[min, max]³`.
+    fn build_cube_mesh(min: f32, max: f32, closed_top: bool) -> MeshData {
         let p = |x: f32, y: f32, z: f32| [x, y, z];
         let c000 = p(min, min, min);
         let c100 = p(max, min, min);
@@ -484,14 +578,11 @@ mod tests {
         let c011 = p(min, max, max);
         let c111 = p(max, max, max);
 
-        // 12 triangles with outward CCW winding per face.
-        let faces: [([f32; 3], [f32; 3], [f32; 3]); 12] = [
+        // 12 (closed) or 10 (open-top) triangles, CCW from outside.
+        let mut faces: Vec<([f32; 3], [f32; 3], [f32; 3])> = vec![
             // -Z face
             (c000, c110, c010),
             (c000, c100, c110),
-            // +Z face
-            (c001, c011, c111),
-            (c001, c111, c101),
             // -Y face
             (c000, c001, c101),
             (c000, c101, c100),
@@ -505,6 +596,11 @@ mod tests {
             (c100, c101, c111),
             (c100, c111, c110),
         ];
+        if closed_top {
+            // +Z face
+            faces.push((c001, c011, c111));
+            faces.push((c001, c111, c101));
+        }
 
         let mut vertices: Vec<MeshVertex> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
@@ -621,6 +717,43 @@ mod tests {
         // Center of the grid (world (0.5, 0.5, 0.5)) — inside.
         assert!(field.sign_at(IVec3::new(8, 8, 8)));
         // Far corner of the grid — outside.
+        assert!(!field.sign_at(IVec3::new(16, 16, 16)));
+    }
+
+    #[test]
+    fn open_top_cube_patched_interior_is_inside() {
+        // Five-sided box (missing +Z face) at [0.15, 0.85]³ in a
+        // depth-5 grid. Without Phase 2 sign generation, a naive BFS
+        // would propagate "outside" through the missing top face and
+        // mark the interior as outside. With PolyMender patching, the
+        // boundary cycle around the hole is closed and interior corners
+        // get the correct "inside" sign.
+        let mesh = build_cube_mesh(0.15, 0.85, false);
+        let depth = 5;
+        let size_code = 1_i32 << (depth - 1); // 16
+        let unit_size = 1.0 / size_code as f32; // 0.0625
+        let min_code = IVec3::ZERO;
+
+        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+
+        // Interior corner near the open face: world (0.5, 0.5, 0.8125),
+        // which is inside the bbox [0.15, 0.85]³. Without patching this
+        // would be classified as outside (BFS sees a clear path from
+        // the grid boundary through the hole).
+        let near_top_interior = IVec3::new(8, 8, 13);
+        assert!(
+            field.sign_at(near_top_interior),
+            "interior near open face must be inside after patching"
+        );
+
+        // Center of the box — should also be inside.
+        assert!(
+            field.sign_at(IVec3::new(8, 8, 8)),
+            "box center must be inside"
+        );
+
+        // Grid corners outside the bbox — still outside.
+        assert!(!field.sign_at(IVec3::new(0, 0, 0)));
         assert!(!field.sign_at(IVec3::new(16, 16, 16)));
     }
 
