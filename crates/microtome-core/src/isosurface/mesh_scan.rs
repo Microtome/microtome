@@ -110,9 +110,37 @@ impl ScannedMeshField {
             }
             let normal = normal_raw.normalize();
 
+            // Collect this triangle's unique edge hits first, then XOR
+            // them into the global edge map. The octree recursion visits
+            // multiple leaf cells around a shared primal edge, so the
+            // same edge key can be produced up to 4 times by a single
+            // triangle; dedup *within* the triangle, XOR *across*
+            // triangles (so two distinct surface sheets crossing the
+            // same cell edge cancel to zero crossings, which is the
+            // correct topology for overlapping volumes).
+            let mut triangle_hits: HashMap<EdgeKey, (Vec3, Vec3)> = HashMap::new();
             scan_triangle(
-                v0, v1, v2, normal, min_code, size_code, unit_size, &mut edges,
+                v0,
+                v1,
+                v2,
+                normal,
+                min_code,
+                size_code,
+                unit_size,
+                &mut triangle_hits,
             );
+            for (key, (pos, n)) in triangle_hits {
+                if edges.remove(&key).is_none() {
+                    edges.insert(
+                        key,
+                        EdgeHit {
+                            position: pos,
+                            normal: n,
+                            is_patch: false,
+                        },
+                    );
+                }
+            }
         }
 
         // Phase 2 sign generation (paper §5): patch the dual surface so
@@ -332,7 +360,7 @@ fn scan_triangle(
     cell_min: PositionCode,
     cell_size: i32,
     unit_size: f32,
-    edges: &mut HashMap<EdgeKey, EdgeHit>,
+    triangle_hits: &mut HashMap<EdgeKey, (Vec3, Vec3)>,
 ) {
     let world_min = code_to_pos(cell_min, unit_size);
     let world_max = code_to_pos(cell_min + PositionCode::splat(cell_size), unit_size);
@@ -348,21 +376,21 @@ fn scan_triangle(
             let ci_hi = corner_pair[1];
             let a = corners[ci_lo];
             let b = corners[ci_hi];
-            if let Some(t) = segment_triangle_intersection(a, b, v0, v1, v2) {
+            let axis = (edge_idx / 4) as u8;
+            let offset_lo = decode_cell(ci_lo);
+            let key = EdgeKey {
+                lower: cell_min + offset_lo,
+                axis,
+            };
+            // Dedup: neighboring leaf cells share this edge key, so the
+            // same triangle can try to record it up to 4 times. Only the
+            // first (deterministic) hit matters.
+            if triangle_hits.contains_key(&key) {
+                continue;
+            }
+            if let Some(t) = segment_triangle_intersection(a, b, axis, v0, v1, v2) {
                 let hit_pos = a + (b - a) * t;
-                let offset_lo = decode_cell(ci_lo);
-                let lower_code = cell_min + offset_lo;
-                let axis = (edge_idx / 4) as u8;
-                edges
-                    .entry(EdgeKey {
-                        lower: lower_code,
-                        axis,
-                    })
-                    .or_insert(EdgeHit {
-                        position: hit_pos,
-                        normal,
-                        is_patch: false,
-                    });
+                triangle_hits.insert(key, (hit_pos, normal));
             }
         }
         return;
@@ -372,7 +400,16 @@ fn scan_triangle(
     for i in 0..8 {
         let offset = decode_cell(i);
         let child_min = cell_min + offset * half;
-        scan_triangle(v0, v1, v2, normal, child_min, half, unit_size, edges);
+        scan_triangle(
+            v0,
+            v1,
+            v2,
+            normal,
+            child_min,
+            half,
+            unit_size,
+            triangle_hits,
+        );
     }
 }
 
@@ -452,36 +489,122 @@ fn triangle_overlaps_box(v0: Vec3, v1: Vec3, v2: Vec3, box_min: Vec3, box_max: V
     true
 }
 
-/// Möller–Trumbore ray-triangle intersection, parameterised on a finite
-/// segment `[a, b]`. Returns `Some(t)` where `t ∈ [0, 1]` is the segment
-/// parameter of the hit, or `None` if they don't intersect.
-fn segment_triangle_intersection(a: Vec3, b: Vec3, v0: Vec3, v1: Vec3, v2: Vec3) -> Option<f32> {
-    const EPS: f32 = 1e-7;
-    let dir = b - a;
-    let edge1 = v1 - v0;
-    let edge2 = v2 - v0;
-    let h = dir.cross(edge2);
-    let det = edge1.dot(h);
-    if det.abs() < EPS {
+/// Watertight segment-triangle intersection for axis-aligned rays
+/// (Woop 2013, "Watertight Ray/Triangle Intersection"; specialised for
+/// an axis-aligned `+axis` direction so no shear is required).
+///
+/// The segment runs from `a` to `b` along the positive direction of
+/// `axis` (0=X, 1=Y, 2=Z). Returns `Some(t)` where `t ∈ [0, 1]` is the
+/// segment parameter of the hit, or `None` if they don't intersect.
+///
+/// Watertight guarantees:
+/// - Two triangles sharing an edge, ray on that edge → **exactly one**
+///   triangle reports a hit.
+/// - Multiple triangles meeting at a vertex, ray on that vertex →
+///   **exactly one** triangle reports a hit.
+///
+/// These guarantees make parity-based crossing counts (XOR tracking)
+/// robust on face-diagonal seams and other shared-primitive cases.
+fn segment_triangle_intersection(
+    a: Vec3,
+    b: Vec3,
+    axis: u8,
+    v0: Vec3,
+    v1: Vec3,
+    v2: Vec3,
+) -> Option<f32> {
+    // Woop's cyclic (kx, ky, kz) convention: with direction along +kz and
+    // a *positive* dominant component, no kx/ky swap is needed. Our edges
+    // always run lo→hi along +axis (see `EDGE_MAP` ordering), so skip.
+    let (kx, ky, kz) = match axis {
+        0 => (1usize, 2usize, 0usize),
+        1 => (2usize, 0usize, 1usize),
+        2 => (0usize, 1usize, 2usize),
+        _ => return None,
+    };
+
+    let seg_len = b[kz] - a[kz];
+    if seg_len <= 0.0 {
         return None;
     }
-    let inv_det = 1.0 / det;
-    let s = a - v0;
-    let u = inv_det * s.dot(h);
-    if !(-EPS..=1.0 + EPS).contains(&u) {
+
+    // Project relative to the segment origin. No shear: the ray is
+    // already aligned with +kz, so the shear coefficients are (0, 0).
+    let ax = v0[kx] - a[kx];
+    let ay = v0[ky] - a[ky];
+    let bx = v1[kx] - a[kx];
+    let by = v1[ky] - a[ky];
+    let cx = v2[kx] - a[kx];
+    let cy = v2[ky] - a[ky];
+
+    // Scaled 2D edge functions — twice the signed area of each sub-triangle
+    // formed with the (projected) ray origin.
+    let mut u = cx * by - cy * bx;
+    let mut v = ax * cy - ay * cx;
+    let mut w = bx * ay - by * ax;
+
+    // f64 fallback when any coefficient is exactly zero — avoids
+    // catastrophic cancellation rounding a near-zero value to the
+    // wrong sign.
+    if u == 0.0 || v == 0.0 || w == 0.0 {
+        let u64 = (cx as f64) * (by as f64) - (cy as f64) * (bx as f64);
+        let v64 = (ax as f64) * (cy as f64) - (ay as f64) * (cx as f64);
+        let w64 = (bx as f64) * (ay as f64) - (by as f64) * (ax as f64);
+        u = u64 as f32;
+        v = v64 as f32;
+        w = w64 as f32;
+
+        // Still exactly zero ⇒ ray lies on that edge (in 2D). Apply a
+        // canonical orientation rule: a 2D edge direction `dx>0` (or
+        // `dx==0 && dy>0`) grants ownership to this triangle. An
+        // adjacent triangle sees the shared edge with reversed vertex
+        // order, giving the opposite dx/dy and failing the rule — so
+        // exactly one side accepts.
+        if u == 0.0 && !owns_edge_2d(bx, by, cx, cy) {
+            return None;
+        }
+        if v == 0.0 && !owns_edge_2d(cx, cy, ax, ay) {
+            return None;
+        }
+        if w == 0.0 && !owns_edge_2d(ax, ay, bx, by) {
+            return None;
+        }
+    }
+
+    // Consistent signs required (all ≥0 or all ≤0). Zero coefficients
+    // that survived the tie-break are benign here.
+    if (u < 0.0 || v < 0.0 || w < 0.0) && (u > 0.0 || v > 0.0 || w > 0.0) {
         return None;
     }
-    let q = s.cross(edge1);
-    let v = inv_det * dir.dot(q);
-    if v < -EPS || u + v > 1.0 + EPS {
+
+    let det = u + v + w;
+    if det == 0.0 {
         return None;
     }
-    let t = inv_det * edge2.dot(q);
-    if (-EPS..=1.0 + EPS).contains(&t) {
-        Some(t.clamp(0.0, 1.0))
-    } else {
-        None
+
+    // Interpolate the kz coordinate of the hit from the unnormalised
+    // barycentrics (U, V, W). Dividing by the segment length yields a
+    // parameter in [0, 1] when the hit is within the segment.
+    let az = v0[kz] - a[kz];
+    let bz = v1[kz] - a[kz];
+    let cz = v2[kz] - a[kz];
+    let t_raw = u * az + v * bz + w * cz;
+    let t = t_raw / (det * seg_len);
+
+    if !(0.0..=1.0).contains(&t) {
+        return None;
     }
+
+    Some(t)
+}
+
+/// Canonical edge-ownership tie-break for the on-edge (U/V/W == 0) case.
+/// Two triangles sharing an edge see opposite 2D projected directions,
+/// so exactly one satisfies `dx > 0 || (dx == 0 && dy > 0)`.
+fn owns_edge_2d(ex: f32, ey: f32, fx: f32, fy: f32) -> bool {
+    let dx = fx - ex;
+    let dy = fy - ey;
+    dx > 0.0 || (dx == 0.0 && dy > 0.0)
 }
 
 /// Propagates inside/outside signs across the full leaf-grid via BFS,
@@ -692,12 +815,14 @@ mod tests {
         let t = segment_triangle_intersection(
             Vec3::new(0.25, 0.25, -1.0),
             Vec3::new(0.25, 0.25, 1.0),
+            2,
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(1.0, 0.0, 0.0),
             Vec3::new(0.0, 1.0, 0.0),
         );
-        assert!(t.is_some());
-        let tv = t.unwrap();
+        let Some(tv) = t else {
+            panic!("interior hit should register");
+        };
         assert!((tv - 0.5).abs() < 1e-5);
     }
 
@@ -706,11 +831,90 @@ mod tests {
         let t = segment_triangle_intersection(
             Vec3::new(2.0, 2.0, -1.0),
             Vec3::new(2.0, 2.0, 1.0),
+            2,
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(1.0, 0.0, 0.0),
             Vec3::new(0.0, 1.0, 0.0),
         );
         assert!(t.is_none());
+    }
+
+    #[test]
+    fn watertight_shared_diagonal_exactly_one_hit() {
+        // Unit quad in the z=0 plane, split by the diagonal
+        // (0,0,0)–(1,1,0). Ray along +Z through (0.5, 0.5) hits the
+        // shared diagonal. Exactly one of the two triangles must
+        // register — otherwise scan-conversion double-counts.
+        let a = Vec3::new(0.5, 0.5, -1.0);
+        let b = Vec3::new(0.5, 0.5, 1.0);
+        let t1 = segment_triangle_intersection(
+            a,
+            b,
+            2,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+        );
+        let t2 = segment_triangle_intersection(
+            a,
+            b,
+            2,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+        );
+        assert_ne!(
+            t1.is_some(),
+            t2.is_some(),
+            "exactly one of the two triangles must own the shared diagonal; got t1={t1:?}, t2={t2:?}"
+        );
+    }
+
+    #[test]
+    fn watertight_shared_vertex_exactly_one_hit() {
+        // Four triangles fanning around the center vertex (0.5, 0.5, 0).
+        // A +Z ray through the center hits the shared vertex; the
+        // watertight rule must pick exactly one of the four.
+        let a = Vec3::new(0.5, 0.5, -1.0);
+        let b = Vec3::new(0.5, 0.5, 1.0);
+        let center = Vec3::new(0.5, 0.5, 0.0);
+        let tris = [
+            (Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0), center),
+            (Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 0.0), center),
+            (Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0), center),
+            (Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 0.0), center),
+        ];
+        let hit_count = tris
+            .iter()
+            .filter(|(v0, v1, v2)| segment_triangle_intersection(a, b, 2, *v0, *v1, *v2).is_some())
+            .count();
+        assert_eq!(
+            hit_count, 1,
+            "exactly one of the four fan triangles must own the shared vertex"
+        );
+    }
+
+    #[test]
+    fn watertight_ray_across_axis_misses_edge_on_plane() {
+        // Ray travels along +X, not +Z, but the triangle lies in the
+        // z=0 plane. The ray origin is on the triangle plane at (0.1, 0.5, 0),
+        // heading to (0.9, 0.5, 0). The segment stays inside the triangle;
+        // since it lies in the plane the watertight test should reject
+        // (det==0, ray parallel to triangle).
+        let a = Vec3::new(0.1, 0.5, 0.0);
+        let b = Vec3::new(0.9, 0.5, 0.0);
+        let t = segment_triangle_intersection(
+            a,
+            b,
+            0,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.5, 1.0, 0.0),
+        );
+        assert!(
+            t.is_none(),
+            "coplanar ray must not count as a crossing; got {t:?}"
+        );
     }
 
     #[test]
