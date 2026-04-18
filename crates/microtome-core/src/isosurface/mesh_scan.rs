@@ -1,35 +1,44 @@
 //! Scan-conversion of triangle meshes into a [`ScalarField`] for remeshing.
 //!
-//! Implements Phase 1 of the PolyMender pipeline [Ju 2004]: each input
-//! triangle is recursively tested against octree cells (SAT triangle-cube
-//! culling), and at the leaf level segment-triangle intersections produce
-//! Hermite data (surface point + face normal) on every cell edge the
-//! triangle crosses. After all triangles are processed, a BFS flood-fill
-//! propagates inside/outside signs from the grid boundary (seeded as
-//! outside) through the unit-length cell edges: edges marked as
-//! intersections flip the sign, others keep it.
+//! Two parallel passes over the grid:
+//!
+//! 1. **Edge-crossings pass.** Each input triangle is recursively tested
+//!    against octree cells (SAT triangle-cube culling); at the leaf level
+//!    a watertight Möller–Trumbore test (Woop 2013, axis-aligned
+//!    specialisation) records the first triangle crossing per cell edge.
+//!    These produce Hermite data (surface point + face normal) used by
+//!    the DC vertex solver.
+//!
+//! 2. **Corner-signs pass.** Each grid corner's inside/outside flag
+//!    comes from the **generalized winding number** (Jacobson 2013): for
+//!    a consistently-oriented mesh, `w(P)` counts how many components
+//!    contain `P`; `w ≥ 0.5` gives the **set union** of components,
+//!    which is the correct inside test for dirty meshes with multiple
+//!    intersecting/overlapping solids. Robust to self-intersections and
+//!    small holes — unlike the edge-parity + flood-fill approach used
+//!    by PolyMender and kin, no propagation can "leak" through a hole
+//!    to flip the entire interior.
+//!
+//! 3. **Missing-crossing synthesis.** For any grid edge whose two
+//!    corners differ in sign but no real triangle crossed it (a hole,
+//!    or a vertex/edge hit that the watertight tie-break gave to a
+//!    neighbouring cell edge), a midpoint position with nearest-normal
+//!    is synthesised so DC can still place a vertex.
 //!
 //! The resulting [`ScannedMeshField`] implements [`ScalarField`] and plugs
 //! directly into the existing dual-contouring pipeline via
 //! `OctreeNode::build_with_scalar_field` — `index` answers corner signs,
 //! `solve` answers leaf-edge hermite points, and `normal` returns the
 //! face normal of the nearest stored intersection.
-//!
-//! # Limitations (Phase 1)
-//!
-//! Flood-fill sign propagation is only correct for watertight, consistently
-//! oriented meshes. When the input has holes, gaps, or non-manifold
-//! features, the "dual surface" of intersection edges has boundary cycles,
-//! and the BFS produces incorrect signs through those holes. Phase 2 (the
-//! paper's `detectProc` / `patchProc` / `signProc`) addresses this.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 
 use glam::{IVec3, Vec3};
 
 use crate::mesh::MeshData;
 
 use super::indicators::{EDGE_MAP, PositionCode, code_to_pos, decode_cell};
+use super::mesh_bvh::MeshBvh;
 use super::scalar_field::ScalarField;
 
 /// Scalar field derived from a triangle mesh via PolyMender-style scan
@@ -110,47 +119,44 @@ impl ScannedMeshField {
             }
             let normal = normal_raw.normalize();
 
-            // Collect this triangle's unique edge hits first, then XOR
-            // them into the global edge map. The octree recursion visits
-            // multiple leaf cells around a shared primal edge, so the
-            // same edge key can be produced up to 4 times by a single
-            // triangle; dedup *within* the triangle, XOR *across*
-            // triangles (so two distinct surface sheets crossing the
-            // same cell edge cancel to zero crossings, which is the
-            // correct topology for overlapping volumes).
-            let mut triangle_hits: HashMap<EdgeKey, (Vec3, Vec3)> = HashMap::new();
+            // First triangle to hit any given cell edge wins; subsequent
+            // hits on the same edge (from this triangle via shared leaf
+            // cells, or from other triangles at the same intersection
+            // curve) are ignored. The crossing is used only for DC vertex
+            // placement — corner *signs* come from GWN below, not from
+            // edge-parity counting, so double-hits don't corrupt the
+            // sign field the way they do for flood-fill pipelines.
             scan_triangle(
-                v0,
-                v1,
-                v2,
-                normal,
-                min_code,
-                size_code,
-                unit_size,
-                &mut triangle_hits,
+                v0, v1, v2, normal, min_code, size_code, unit_size, &mut edges,
             );
-            for (key, (pos, n)) in triangle_hits {
-                if edges.remove(&key).is_none() {
-                    edges.insert(
-                        key,
-                        EdgeHit {
-                            position: pos,
-                            normal: n,
-                            is_patch: false,
-                        },
-                    );
+        }
+
+        // Corner signs via generalized winding number (Jacobson 2013),
+        // BVH-accelerated (Barill 2018). For a consistently-oriented
+        // mesh, `w(P)` is the integer count of components containing
+        // `P`; `w >= 0.5` is the **union** of components — the semantic
+        // we want for dirty meshes with multiple intersecting solids.
+        // Robust to self-intersections and small holes (near-integer
+        // values degrade gracefully rather than flipping the flood-fill
+        // propagation the way edge-parity does).
+        let bvh = MeshBvh::build(mesh);
+        for z in 0..dims.z {
+            for y in 0..dims.y {
+                for x in 0..dims.x {
+                    let rel = IVec3::new(x, y, z);
+                    let corner_code = min_code + rel;
+                    let world_pos = code_to_pos(corner_code, unit_size);
+                    let w = bvh.winding_number(world_pos);
+                    let idx = (rel.z * dims.x * dims.y + rel.y * dims.x + rel.x) as usize;
+                    signs[idx] = w >= 0.5;
                 }
             }
         }
 
-        // Phase 2 sign generation (paper §5): patch the dual surface so
-        // the extended intersection-edge set `Ê = E ∪ patch_edges` has
-        // empty boundary. Without this step, a mesh with holes produces
-        // a dual surface with boundary cycles and the flood-fill below
-        // yields inconsistent signs through the holes.
-        patch_dual_surface(&mut edges, unit_size);
-
-        flood_fill_signs(&edges, &mut signs, min_code, dims);
+        // For any sign-change edge without a real triangle crossing (hole
+        // / non-watertight region), synthesize a midpoint hit so DC has
+        // something to place a vertex at.
+        synthesize_missing_crossings(&mut edges, &signs, min_code, dims, unit_size);
 
         Self {
             unit_size,
@@ -261,69 +267,6 @@ impl ScalarField for ScannedMeshField {
 // Scan-conversion internals
 // ---------------------------------------------------------------------------
 
-/// Recursive octree descent for one triangle. At each level we SAT-cull
-/// children that the triangle cannot touch; at the leaf level (cell size
-/// 1 grid unit) we test the 12 cell edges and record any intersection in
-/// `edges`.
-/// Mutates `edges` so the extended set `Ê = E ⊖ (⊖ᵢ Pᵢ)` has empty
-/// boundary on the dual surface. Paper §5: detect odd faces → extract
-/// cycles → patch each cycle → combine via symmetric difference.
-///
-/// Crucially this is a *symmetric* difference, not a union: two
-/// per-cycle patches that share a primal edge cancel that edge. Using
-/// union here would leave residual odd faces when boundary cycles are
-/// close enough that their patches overlap (common on dirty meshes
-/// with multiple holes).
-///
-/// Patch edges that don't collide with a real intersection edge get
-/// synthesized Hermite data: position at the edge midpoint, normal
-/// from the nearest real intersection edge at construction time.
-fn patch_dual_surface(edges: &mut HashMap<EdgeKey, EdgeHit>, unit_size: f32) {
-    let odd_faces = super::sign_gen::detect_odd_faces(edges);
-    if odd_faces.is_empty() {
-        return;
-    }
-    let cycles = super::sign_gen::extract_boundary_cycles(&odd_faces);
-
-    // Combined patch set via per-edge parity (symmetric difference).
-    let mut combined_patch: HashSet<EdgeKey> = HashSet::new();
-    for cycle in cycles {
-        let patch_edges = super::sign_gen::patch_cycle(&cycle);
-        for pe in patch_edges {
-            if !combined_patch.insert(pe) {
-                combined_patch.remove(&pe);
-            }
-        }
-    }
-
-    // Snapshot real edges so nearest-normal lookup isn't polluted by
-    // in-progress patch insertions (nor by upcoming removals).
-    let real_snapshot: Vec<(Vec3, Vec3)> = edges
-        .values()
-        .filter(|h| !h.is_patch)
-        .map(|h| (h.position, h.normal))
-        .collect();
-
-    // Apply Ê = E ⊖ combined_patch.
-    for patch_edge in combined_patch {
-        if edges.remove(&patch_edge).is_some() {
-            // Was already in E (or a previous patch, which shouldn't
-            // happen post-dedup); XOR removes it.
-            continue;
-        }
-        let midpoint = edge_midpoint(patch_edge, unit_size);
-        let normal = nearest_normal(&real_snapshot, midpoint);
-        edges.insert(
-            patch_edge,
-            EdgeHit {
-                position: midpoint,
-                normal,
-                is_patch: true,
-            },
-        );
-    }
-}
-
 /// World-space midpoint of a primal cell edge.
 fn edge_midpoint(edge: EdgeKey, unit_size: f32) -> Vec3 {
     let lower_world = code_to_pos(edge.lower, unit_size);
@@ -360,7 +303,7 @@ fn scan_triangle(
     cell_min: PositionCode,
     cell_size: i32,
     unit_size: f32,
-    triangle_hits: &mut HashMap<EdgeKey, (Vec3, Vec3)>,
+    edges: &mut HashMap<EdgeKey, EdgeHit>,
 ) {
     let world_min = code_to_pos(cell_min, unit_size);
     let world_max = code_to_pos(cell_min + PositionCode::splat(cell_size), unit_size);
@@ -382,15 +325,26 @@ fn scan_triangle(
                 lower: cell_min + offset_lo,
                 axis,
             };
-            // Dedup: neighboring leaf cells share this edge key, so the
-            // same triangle can try to record it up to 4 times. Only the
-            // first (deterministic) hit matters.
-            if triangle_hits.contains_key(&key) {
+            // First hit wins. Neighboring leaf cells share this primal
+            // edge (up to 4×), and at mesh-intersection curves multiple
+            // triangles may cross the same cell edge; either way we keep
+            // one deterministic crossing for DC vertex placement. (With
+            // GWN-based corner signs, duplicate crossings are not a
+            // correctness problem — they were only an issue for the
+            // earlier edge-parity + flood-fill pipeline.)
+            if edges.contains_key(&key) {
                 continue;
             }
             if let Some(t) = segment_triangle_intersection(a, b, axis, v0, v1, v2) {
                 let hit_pos = a + (b - a) * t;
-                triangle_hits.insert(key, (hit_pos, normal));
+                edges.insert(
+                    key,
+                    EdgeHit {
+                        position: hit_pos,
+                        normal,
+                        is_patch: false,
+                    },
+                );
             }
         }
         return;
@@ -400,16 +354,104 @@ fn scan_triangle(
     for i in 0..8 {
         let offset = decode_cell(i);
         let child_min = cell_min + offset * half;
-        scan_triangle(
-            v0,
-            v1,
-            v2,
-            normal,
-            child_min,
-            half,
-            unit_size,
-            triangle_hits,
-        );
+        scan_triangle(v0, v1, v2, normal, child_min, half, unit_size, edges);
+    }
+}
+
+/// Brute-force generalized winding number (Jacobson 2013). Kept as
+/// ground truth for the GWN unit tests; the production scan uses
+/// [`super::mesh_bvh::MeshBvh`] for a dramatic speedup on non-trivial
+/// meshes.
+#[cfg(test)]
+fn generalized_winding_number(point: Vec3, mesh: &MeshData) -> f32 {
+    let mut accum = 0.0f32;
+    let tri_count = mesh.indices.len() / 3;
+    for t in 0..tri_count {
+        let i0 = mesh.indices[t * 3] as usize;
+        let i1 = mesh.indices[t * 3 + 1] as usize;
+        let i2 = mesh.indices[t * 3 + 2] as usize;
+        let a = Vec3::from(mesh.vertices[i0].position) - point;
+        let b = Vec3::from(mesh.vertices[i1].position) - point;
+        let c = Vec3::from(mesh.vertices[i2].position) - point;
+        let la = a.length();
+        let lb = b.length();
+        let lc = c.length();
+        // Point coincident with a mesh vertex — skip this triangle.
+        // (Total winding stays well-defined via neighboring triangles;
+        // the surface itself is not a well-posed place to query anyway.)
+        if la < 1e-20 || lb < 1e-20 || lc < 1e-20 {
+            continue;
+        }
+        let num = a.dot(b.cross(c));
+        let denom = la * lb * lc + a.dot(b) * lc + b.dot(c) * la + c.dot(a) * lb;
+        // 2 * atan2(num, denom) = signed solid angle [−2π, 2π]. Summed and
+        // divided by 4π gives the winding number.
+        accum += num.atan2(denom);
+    }
+    accum / std::f32::consts::TAU
+}
+
+/// For each grid edge whose endpoints have differing signs, ensure a
+/// surface crossing exists. Missing crossings arise when GWN says the
+/// sign changes across the edge but no triangle physically crossed it —
+/// either because the mesh has a hole there, or because the surface
+/// passes through a vertex/edge and the watertight tie-break assigned
+/// the hit to a different cell edge. DC needs *something* to place a
+/// vertex at, so we synthesize a midpoint position with a normal
+/// interpolated from the nearest real hit.
+fn synthesize_missing_crossings(
+    edges: &mut HashMap<EdgeKey, EdgeHit>,
+    signs: &[bool],
+    min_code: PositionCode,
+    dims: IVec3,
+    unit_size: f32,
+) {
+    let real_snapshot: Vec<(Vec3, Vec3)> = edges
+        .values()
+        .filter(|h| !h.is_patch)
+        .map(|h| (h.position, h.normal))
+        .collect();
+
+    for z in 0..dims.z {
+        for y in 0..dims.y {
+            for x in 0..dims.x {
+                let lower_rel = IVec3::new(x, y, z);
+                let idx_lo =
+                    (lower_rel.z * dims.x * dims.y + lower_rel.y * dims.x + lower_rel.x) as usize;
+                let sign_lo = signs[idx_lo];
+                for axis in 0..3u8 {
+                    let mut delta = IVec3::ZERO;
+                    delta[axis as usize] = 1;
+                    let upper_rel = lower_rel + delta;
+                    if upper_rel.x >= dims.x || upper_rel.y >= dims.y || upper_rel.z >= dims.z {
+                        continue;
+                    }
+                    let idx_hi = (upper_rel.z * dims.x * dims.y
+                        + upper_rel.y * dims.x
+                        + upper_rel.x) as usize;
+                    if sign_lo == signs[idx_hi] {
+                        continue;
+                    }
+                    let key = EdgeKey {
+                        lower: min_code + lower_rel,
+                        axis,
+                    };
+                    if edges.contains_key(&key) {
+                        continue;
+                    }
+                    let midpoint = edge_midpoint(key, unit_size);
+                    let normal = nearest_normal(&real_snapshot, midpoint);
+                    edges.insert(
+                        key,
+                        EdgeHit {
+                            position: midpoint,
+                            normal,
+                            is_patch: true,
+                        },
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -607,85 +649,6 @@ fn owns_edge_2d(ex: f32, ey: f32, fx: f32, fy: f32) -> bool {
     dx > 0.0 || (dx == 0.0 && dy > 0.0)
 }
 
-/// Propagates inside/outside signs across the full leaf-grid via BFS,
-/// starting from the 8 root-cell corners (seeded as outside).
-///
-/// An edge key present in `edges` flips the sign when traversed; all other
-/// unit edges keep the sign the same. For a watertight, consistently
-/// oriented mesh the resulting sign field has a sign change exactly on
-/// each intersection edge, which is what DC needs to extract the surface.
-fn flood_fill_signs(
-    edges: &HashMap<EdgeKey, EdgeHit>,
-    signs: &mut [bool],
-    min_code: PositionCode,
-    dims: IVec3,
-) {
-    let total = (dims.x * dims.y * dims.z) as usize;
-    let mut visited = vec![false; total];
-    let mut queue: VecDeque<PositionCode> = VecDeque::new();
-
-    let max_code = min_code + PositionCode::new(dims.x - 1, dims.y - 1, dims.z - 1);
-
-    let root_corners = [
-        PositionCode::new(min_code.x, min_code.y, min_code.z),
-        PositionCode::new(min_code.x, min_code.y, max_code.z),
-        PositionCode::new(min_code.x, max_code.y, min_code.z),
-        PositionCode::new(min_code.x, max_code.y, max_code.z),
-        PositionCode::new(max_code.x, min_code.y, min_code.z),
-        PositionCode::new(max_code.x, min_code.y, max_code.z),
-        PositionCode::new(max_code.x, max_code.y, min_code.z),
-        PositionCode::new(max_code.x, max_code.y, max_code.z),
-    ];
-
-    for c in root_corners {
-        let idx = linear_index(c, min_code, dims);
-        signs[idx] = false;
-        visited[idx] = true;
-        queue.push_back(c);
-    }
-
-    while let Some(c) = queue.pop_front() {
-        let idx_c = linear_index(c, min_code, dims);
-        let sign_c = signs[idx_c];
-        for axis in 0..3usize {
-            for dir in [-1i32, 1] {
-                let mut delta = IVec3::ZERO;
-                delta[axis] = dir;
-                let neighbor = c + delta;
-                let rel = neighbor - min_code;
-                if rel.x < 0
-                    || rel.y < 0
-                    || rel.z < 0
-                    || rel.x >= dims.x
-                    || rel.y >= dims.y
-                    || rel.z >= dims.z
-                {
-                    continue;
-                }
-                let n_idx = linear_index(neighbor, min_code, dims);
-                if visited[n_idx] {
-                    continue;
-                }
-                let lower = if dir > 0 { c } else { neighbor };
-                let edge_key = EdgeKey {
-                    lower,
-                    axis: axis as u8,
-                };
-                let crosses = edges.contains_key(&edge_key);
-                let sign_n = if crosses { !sign_c } else { sign_c };
-                signs[n_idx] = sign_n;
-                visited[n_idx] = true;
-                queue.push_back(neighbor);
-            }
-        }
-    }
-}
-
-fn linear_index(code: PositionCode, min_code: PositionCode, dims: IVec3) -> usize {
-    let rel = code - min_code;
-    (rel.z * dims.x * dims.y + rel.y * dims.x + rel.x) as usize
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -714,28 +677,29 @@ mod tests {
         let c011 = p(min, max, max);
         let c111 = p(max, max, max);
 
-        // 12 (closed) or 10 (open-top) triangles, CCW from outside.
+        // 12 (closed) or 10 (open-top) triangles, CCW from outside —
+        // outward-facing normals, matching the STL / OBJ convention.
         let mut faces: Vec<([f32; 3], [f32; 3], [f32; 3])> = vec![
-            // -Z face
-            (c000, c110, c010),
-            (c000, c100, c110),
-            // -Y face
-            (c000, c001, c101),
-            (c000, c101, c100),
-            // +Y face
-            (c010, c110, c111),
-            (c010, c111, c011),
-            // -X face
-            (c000, c011, c001),
-            (c000, c010, c011),
-            // +X face
-            (c100, c101, c111),
-            (c100, c111, c110),
+            // -Z face (outward −Z)
+            (c000, c010, c110),
+            (c000, c110, c100),
+            // -Y face (outward −Y)
+            (c000, c101, c001),
+            (c000, c100, c101),
+            // +Y face (outward +Y)
+            (c010, c111, c110),
+            (c010, c011, c111),
+            // -X face (outward −X)
+            (c000, c001, c011),
+            (c000, c011, c010),
+            // +X face (outward +X)
+            (c100, c111, c101),
+            (c100, c110, c111),
         ];
         if closed_top {
-            // +Z face
-            faces.push((c001, c011, c111));
-            faces.push((c001, c111, c101));
+            // +Z face (outward +Z)
+            faces.push((c001, c111, c011));
+            faces.push((c001, c101, c111));
         }
 
         let mut vertices: Vec<MeshVertex> = Vec::new();
@@ -775,6 +739,117 @@ mod tests {
             bbox,
             volume,
         }
+    }
+
+    /// Merges two mesh parts (vertex+index) into a single soup. Useful
+    /// for building dirty test fixtures: intersecting solids, nested
+    /// boxes, etc.
+    fn merge_meshes(mut a: MeshData, b: MeshData) -> MeshData {
+        let offset = a.vertices.len() as u32;
+        a.vertices.extend(b.vertices);
+        a.indices.extend(b.indices.into_iter().map(|i| i + offset));
+        a.bbox = BoundingBox {
+            min: a.bbox.min.min(b.bbox.min),
+            max: a.bbox.max.max(b.bbox.max),
+        };
+        a.volume += b.volume;
+        a
+    }
+
+    #[test]
+    fn gwn_inside_closed_cube_is_one() {
+        // A closed consistently-oriented cube — GWN at the center should
+        // be ≈ 1 (inside), at a far corner ≈ 0 (outside).
+        let mesh = make_cube_mesh(0.1, 0.9);
+        let w_inside = generalized_winding_number(Vec3::new(0.5, 0.5, 0.5), &mesh);
+        let w_outside = generalized_winding_number(Vec3::new(2.0, 2.0, 2.0), &mesh);
+        assert!(
+            (w_inside - 1.0).abs() < 1e-3,
+            "GWN inside cube ≈ 1; got {w_inside}"
+        );
+        assert!(
+            w_outside.abs() < 1e-3,
+            "GWN outside cube ≈ 0; got {w_outside}"
+        );
+    }
+
+    #[test]
+    fn gwn_overlap_region_is_two() {
+        // Two overlapping cubes. At a point inside BOTH, winding ≈ 2.
+        // At a point inside only one, winding ≈ 1. Outside both, ≈ 0.
+        // The 0.5 threshold correctly classifies all "in at least one"
+        // points as inside — the semantic needed for dirty meshes with
+        // intersecting components.
+        let a = make_cube_mesh(0.0, 0.6);
+        let b = make_cube_mesh(0.4, 1.0);
+        let mesh = merge_meshes(a, b);
+        let w_overlap = generalized_winding_number(Vec3::new(0.5, 0.5, 0.5), &mesh);
+        let w_only_a = generalized_winding_number(Vec3::new(0.2, 0.2, 0.2), &mesh);
+        let w_only_b = generalized_winding_number(Vec3::new(0.8, 0.8, 0.8), &mesh);
+        let w_outside = generalized_winding_number(Vec3::new(-1.0, -1.0, -1.0), &mesh);
+        assert!(
+            (w_overlap - 2.0).abs() < 1e-2,
+            "overlap GWN ≈ 2; got {w_overlap}"
+        );
+        assert!(
+            (w_only_a - 1.0).abs() < 1e-2,
+            "only-A GWN ≈ 1; got {w_only_a}"
+        );
+        assert!(
+            (w_only_b - 1.0).abs() < 1e-2,
+            "only-B GWN ≈ 1; got {w_only_b}"
+        );
+        assert!(w_outside.abs() < 1e-2, "outside GWN ≈ 0; got {w_outside}");
+    }
+
+    #[test]
+    fn overlapping_cubes_union_through_dc() {
+        // Scan two overlapping cubes into a ScalarField and run DC. With
+        // the old edge-parity pipeline the overlap region would come out
+        // as "outside" (XOR) or the double-counted front faces would
+        // produce extra geometry (or_insert). GWN makes the overlap
+        // region inside, so the DC output is the clean union surface.
+        let a = make_cube_mesh(0.15, 0.65);
+        let b = make_cube_mesh(0.4, 0.9);
+        let mesh = merge_meshes(a, b);
+        let depth = 5;
+        let size_code = 1_i32 << (depth - 1);
+        let unit_size = 1.0 / size_code as f32;
+        let min_code = IVec3::ZERO;
+
+        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+
+        // Center of the overlap region — must be inside.
+        assert!(
+            field.sign_at(IVec3::new(8, 8, 8)),
+            "overlap center must be inside"
+        );
+        // Corner of cube A only — must be inside.
+        assert!(
+            field.sign_at(IVec3::new(4, 4, 4)),
+            "cube-A-only point must be inside"
+        );
+        // Corner of cube B only — must be inside.
+        assert!(
+            field.sign_at(IVec3::new(13, 13, 13)),
+            "cube-B-only point must be inside"
+        );
+        // Outside both — must be outside.
+        assert!(
+            !field.sign_at(IVec3::new(0, 0, 0)),
+            "grid corner must be outside"
+        );
+
+        let octree = OctreeNode::build_with_scalar_field(min_code, depth, &field, false, unit_size);
+        let Some(mut octree) = octree else {
+            panic!("overlapping cubes should produce a non-empty octree");
+        };
+        OctreeNode::simplify(&mut octree, 0.0);
+        let result = OctreeNode::extract_mesh(&mut octree, &field, unit_size);
+        assert!(
+            result.triangle_count() > 0,
+            "DC output must be non-empty for overlapping cubes"
+        );
     }
 
     #[test]

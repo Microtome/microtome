@@ -6,6 +6,7 @@ pub mod indicators;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod kdtree;
 pub mod kdtree_v2;
+mod mesh_bvh;
 pub mod mesh_output;
 pub mod mesh_scan;
 pub mod octree;
