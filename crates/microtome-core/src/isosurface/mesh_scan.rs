@@ -24,8 +24,8 @@
 //!      flood-fill failure modes (sign leaks through holes /
 //!      non-manifold features).
 //!
-//! 3. **Missing-crossing synthesis.** For any grid edge whose two
-//!    corners differ in sign but no real triangle crossed it, the
+//! 3. **Missing-crossing synthesis (lazy).** For any grid edge whose
+//!    two corners differ in sign but no real triangle crossed it, the
 //!    Hermite data is borrowed from the closest real hit on a
 //!    *cousin* edge — one of the (up to) 10 grid edges incident on
 //!    this edge's two endpoint vertices. This is the common case for
@@ -34,8 +34,16 @@
 //!    "missing" even though they all describe the same surface. Only
 //!    when no real cousin exists (genuine hole or grid boundary) do
 //!    we fall back to a midpoint position with a nearest-anywhere
-//!    normal, which DC handles but with worse vertex placement and
-//!    less hierarchical simplification.
+//!    normal. Synthesis runs **on demand** inside
+//!    [`ScannedMeshField::hermite`] and the result is cached, so we
+//!    only pay for edges the DC octree actually queries.
+//!
+//! Sign-gen and synthesis are both lazy under [`SignMode::Gwn`]:
+//! `from_mesh` builds the BVH eagerly but defers all per-corner GWN
+//! queries to `index()` calls from the octree builder. Combined
+//! with `has_surface_in`-based octree pruning (which short-circuits
+//! homogeneous interior/exterior subtrees entirely), the per-grid
+//! cost scales with surface area instead of bounding-box volume.
 //!
 //! The resulting [`ScannedMeshField`] implements [`ScalarField`] and plugs
 //! directly into the existing dual-contouring pipeline via
@@ -43,6 +51,7 @@
 //! `solve` answers leaf-edge hermite points, and `normal` returns the
 //! face normal of the nearest stored intersection.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use glam::{IVec3, Vec3};
@@ -92,10 +101,10 @@ pub struct ScannedMeshField {
     min_code: PositionCode,
     /// Number of grid corners per dimension (always `size_code + 1`).
     dims: IVec3,
-    /// Per-corner inside/outside flag, laid out as `z * dims.x * dims.y + y * dims.x + x`.
-    /// `true` = inside the mesh, `false` = outside.
-    signs: Vec<bool>,
-    /// Sparse hermite data for each unit-length cell edge the mesh crosses.
+    /// Real triangle-plane crossings recorded during scan-conversion.
+    /// Patch synthesis (cousin lookup / midpoint fallback) writes into
+    /// `patch_cache` instead of mutating this map, so cousin queries
+    /// always see only authentic Hermite data.
     edges: HashMap<EdgeKey, EdgeHit>,
     /// Cells (at every depth from `size_code` down to 1) that any input
     /// triangle overlapped during scan-conversion. Read by
@@ -104,6 +113,22 @@ pub struct ScannedMeshField {
     /// recursing all the way to leaf level just to discover there's
     /// nothing there.
     active_cells: HashSet<(PositionCode, i32)>,
+    /// Per-corner inside/outside flag, encoded as `0 = unknown,
+    /// 1 = outside, 2 = inside` so a single allocation serves both
+    /// modes. For [`SignMode::FloodFill`] this is fully populated by
+    /// BFS in `from_mesh`. For [`SignMode::Gwn`] it starts all-zero
+    /// and is filled lazily on first `index()` query via the BVH;
+    /// combined with the DC octree's `has_surface_in` pruning, the
+    /// vast majority of slots are never computed.
+    sign_cache: RefCell<Vec<u8>>,
+    /// `Some` for [`SignMode::Gwn`] — used to compute corner signs
+    /// on demand. `None` for [`SignMode::FloodFill`], where signs are
+    /// pre-populated.
+    bvh: Option<MeshBvh>,
+    /// Lazily-synthesized Hermite data for sign-changing edges that
+    /// have no real triangle crossing (M-T tie-break artefacts).
+    /// Populated on first `hermite()` query that misses `edges`.
+    patch_cache: RefCell<HashMap<EdgeKey, EdgeHit>>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
@@ -117,20 +142,15 @@ pub(super) struct EdgeKey {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct EdgeHit {
     /// World-space intersection point. For real edges this is the
-    /// triangle-plane crossing on the edge itself; for patch edges
-    /// it is the cousin edge's hit position (typically near the
-    /// shared grid vertex), or — when no real cousin exists — the
-    /// edge midpoint as a last-resort fallback.
+    /// M-T crossing on the edge itself; for cousin-derived patches
+    /// it is the cousin's stored position (typically near the shared
+    /// grid vertex); for midpoint fallback patches it is the edge
+    /// midpoint.
     pub(super) position: Vec3,
     /// World-space surface normal at `position`. For real edges this
-    /// is the source triangle's face normal; for cousin-derived patch
-    /// edges it is the cousin hit's normal; for last-resort patch
-    /// edges it is the nearest real normal anywhere in the field.
+    /// is the source triangle's face normal; patches inherit the
+    /// cousin's normal (or the nearest real normal as a last resort).
     pub(super) normal: Vec3,
-    /// `true` iff this edge was synthesized by PolyMender sign-generation
-    /// patching (not produced by scan-conversion from the input mesh).
-    /// Consumers that prefer real data can filter on this.
-    pub(super) is_patch: bool,
 }
 
 impl ScannedMeshField {
@@ -150,7 +170,7 @@ impl ScannedMeshField {
     ) -> Self {
         let dims = IVec3::splat(size_code + 1);
         let total = (dims.x * dims.y * dims.z) as usize;
-        let mut signs = vec![false; total];
+        let mut sign_storage = vec![0u8; total];
         let mut edges: HashMap<EdgeKey, EdgeHit> = HashMap::new();
         let mut active_cells: HashSet<(PositionCode, i32)> = HashSet::new();
 
@@ -189,53 +209,38 @@ impl ScannedMeshField {
             );
         }
 
-        match sign_mode {
+        let bvh = match sign_mode {
             SignMode::Gwn => {
-                // Generalized winding number (Jacobson 2013), BVH-
-                // accelerated (Barill 2018). For a consistently-
-                // oriented mesh, `w(P)` is the integer count of
-                // components containing `P`; `w >= 0.5` is the
-                // **union** of components — the semantic we want for
-                // dirty meshes with multiple intersecting solids.
-                // Robust to self-intersections and small holes
-                // (near-integer values degrade gracefully rather
-                // than flipping the flood-fill propagation the way
-                // edge-parity does).
-                let bvh = MeshBvh::build(mesh);
-                for z in 0..dims.z {
-                    for y in 0..dims.y {
-                        for x in 0..dims.x {
-                            let rel = IVec3::new(x, y, z);
-                            let corner_code = min_code + rel;
-                            let world_pos = code_to_pos(corner_code, unit_size);
-                            let w = bvh.winding_number(world_pos);
-                            let idx = (rel.z * dims.x * dims.y + rel.y * dims.x + rel.x) as usize;
-                            signs[idx] = w >= 0.5;
-                        }
-                    }
-                }
+                // Build the BVH eagerly (one-shot cost) but defer all
+                // GWN queries to `index()` so we only pay for corners
+                // the DC octree actually visits — an order of magnitude
+                // fewer than the full grid for typical sparse meshes.
+                Some(MeshBvh::build(mesh))
             }
             SignMode::FloodFill => {
-                flood_fill_signs(&edges, &mut signs, min_code, dims);
+                // Flood-fill is inherently global (BFS from a known-
+                // outside seed), so populate the cache eagerly.
+                flood_fill_signs(&edges, &mut sign_storage, min_code, dims);
+                None
             }
-        }
-
-        // For any sign-change edge without a real triangle crossing (hole
-        // / non-watertight region), synthesize a midpoint hit so DC has
-        // something to place a vertex at.
-        synthesize_missing_crossings(&mut edges, &signs, min_code, dims, unit_size);
+        };
 
         Self {
             unit_size,
             min_code,
             dims,
-            signs,
             edges,
             active_cells,
+            sign_cache: RefCell::new(sign_storage),
+            bvh,
+            patch_cache: RefCell::new(HashMap::new()),
         }
     }
 
     /// Returns `true` if the grid corner at `code` is inside the mesh.
+    /// For [`SignMode::Gwn`] this lazily computes (and caches) the sign
+    /// via the BVH; for [`SignMode::FloodFill`] the cache was eagerly
+    /// populated and this is a Vec lookup.
     fn sign_at(&self, code: PositionCode) -> bool {
         let rel = code - self.min_code;
         if rel.x < 0
@@ -248,7 +253,26 @@ impl ScannedMeshField {
             return false;
         }
         let idx = (rel.z * self.dims.x * self.dims.y + rel.y * self.dims.x + rel.x) as usize;
-        self.signs[idx]
+        // Read-only fast path for already-known cells.
+        {
+            let cache = self.sign_cache.borrow();
+            let cached = cache[idx];
+            if cached != 0 {
+                return cached == 2;
+            }
+        }
+        // Lazy compute via BVH GWN; FloodFill's cache should never be
+        // 0 here (the BFS visits every reachable corner from the seed).
+        // If we land here in FloodFill mode it's an unreachable seed
+        // (degenerate grid) — treat as outside, the safe default.
+        let bvh = match &self.bvh {
+            Some(b) => b,
+            None => return false,
+        };
+        let world_pos = code_to_pos(code, self.unit_size);
+        let inside = bvh.winding_number(world_pos) >= 0.5;
+        self.sign_cache.borrow_mut()[idx] = if inside { 2 } else { 1 };
+        inside
     }
 
     /// Number of intersection edges recorded during scan-conversion
@@ -345,30 +369,30 @@ impl ScalarField for ScannedMeshField {
         } else {
             return Some(((p1 + p2) * 0.5, Vec3::Z));
         };
-        let hit = self.edges.get(&EdgeKey { lower, axis })?;
-        let n = if hit.normal.length_squared() > 1e-12 {
-            hit.normal.normalize()
-        } else {
-            Vec3::Z
-        };
-        Some((hit.position, n))
+        let key = EdgeKey { lower, axis };
+
+        // 1. Real M-T crossing.
+        if let Some(hit) = self.edges.get(&key) {
+            return Some((hit.position, normalize_or_z(hit.normal)));
+        }
+        // 2. Previously-synthesized patch.
+        if let Some(hit) = self.patch_cache.borrow().get(&key) {
+            return Some((hit.position, normalize_or_z(hit.normal)));
+        }
+        // 3. Synthesize: cousin first, midpoint as last resort. Cache
+        //    so subsequent queries on the same edge are O(1).
+        let patch =
+            synthesize_from_cousins(key, &self.edges, self.unit_size).unwrap_or_else(|| {
+                let position = edge_midpoint(key, self.unit_size);
+                let normal = nearest_normal_in_field(self.edges.values(), position);
+                EdgeHit { position, normal }
+            });
+        self.patch_cache.borrow_mut().insert(key, patch);
+        Some((patch.position, normalize_or_z(patch.normal)))
     }
 
     fn normal(&self, p: Vec3) -> Vec3 {
-        let mut best_d2 = f32::INFINITY;
-        let mut best_n = Vec3::Z;
-        for hit in self.edges.values() {
-            let d2 = (hit.position - p).length_squared();
-            if d2 < best_d2 {
-                best_d2 = d2;
-                best_n = hit.normal;
-            }
-        }
-        if best_n.length_squared() > 1e-12 {
-            best_n.normalize()
-        } else {
-            Vec3::Z
-        }
+        normalize_or_z(nearest_normal_in_field(self.edges.values(), p))
     }
 
     fn gradient_offset(&self) -> f32 {
@@ -388,20 +412,30 @@ fn edge_midpoint(edge: EdgeKey, unit_size: f32) -> Vec3 {
     lower_world + offset
 }
 
-/// Brute-force nearest-neighbor search over a (position, normal)
-/// snapshot. Falls back to +Z if the snapshot is empty.
-fn nearest_normal(candidates: &[(Vec3, Vec3)], point: Vec3) -> Vec3 {
+/// Returns the normal of the hit closest to `point`, or `Vec3::Z` if
+/// the iterator is empty. Brute-force, used as the last-resort fallback
+/// when a missing edge has no real cousin to inherit from.
+fn nearest_normal_in_field<'a, I: IntoIterator<Item = &'a EdgeHit>>(
+    candidates: I,
+    point: Vec3,
+) -> Vec3 {
     let mut best_d2 = f32::INFINITY;
     let mut best_n = Vec3::Z;
-    for &(pos, n) in candidates {
-        let d2 = (pos - point).length_squared();
+    for hit in candidates {
+        let d2 = (hit.position - point).length_squared();
         if d2 < best_d2 {
             best_d2 = d2;
-            best_n = n;
+            best_n = hit.normal;
         }
     }
-    if best_n.length_squared() > 1e-12 {
-        best_n.normalize()
+    best_n
+}
+
+/// Normalizes `n` if non-zero, else returns `Vec3::Z` as a safe default
+/// (a zero normal would contribute no constraint to the QEF anyway).
+fn normalize_or_z(n: Vec3) -> Vec3 {
+    if n.length_squared() > 1e-12 {
+        n.normalize()
     } else {
         Vec3::Z
     }
@@ -458,9 +492,6 @@ fn synthesize_from_cousins(
                 let Some(hit) = edges.get(&cousin_key) else {
                     continue;
                 };
-                if hit.is_patch {
-                    continue;
-                }
                 let d2 = (hit.position - vertex_world).length_squared();
                 if d2 < best_d2 {
                     best_d2 = d2;
@@ -473,7 +504,6 @@ fn synthesize_from_cousins(
     best.map(|h| EdgeHit {
         position: h.position,
         normal: h.normal,
-        is_patch: true,
     })
 }
 
@@ -486,7 +516,7 @@ fn synthesize_from_cousins(
 /// downstream region.
 fn flood_fill_signs(
     edges: &HashMap<EdgeKey, EdgeHit>,
-    signs: &mut [bool],
+    signs: &mut [u8],
     min_code: PositionCode,
     dims: IVec3,
 ) {
@@ -496,8 +526,8 @@ fn flood_fill_signs(
     let mut visited = vec![false; total];
     let mut queue: VecDeque<IVec3> = VecDeque::new();
 
-    // Seed at relative (0,0,0). Sign starts `false` (outside).
-    signs[0] = false;
+    // Seed at relative (0,0,0). Sign starts `1 = outside`.
+    signs[0] = 1;
     visited[0] = true;
     queue.push_back(IVec3::ZERO);
 
@@ -530,7 +560,11 @@ fn flood_fill_signs(
                     axis: axis as u8,
                 };
                 let crosses = edges.contains_key(&edge_key);
-                signs[neighbor_idx] = if crosses { !curr_sign } else { curr_sign };
+                // Toggle between 1 (outside) and 2 (inside) on each
+                // crossed edge; carry the sign across non-crossed
+                // edges. The 0 sentinel is reserved for "unknown" in
+                // the GWN code path and never appears here.
+                signs[neighbor_idx] = if crosses { 3 - curr_sign } else { curr_sign };
                 visited[neighbor_idx] = true;
                 queue.push_back(neighbor);
             }
@@ -591,7 +625,6 @@ fn scan_triangle(
                     EdgeHit {
                         position: hit_pos,
                         normal,
-                        is_patch: false,
                     },
                 );
             }
@@ -650,74 +683,15 @@ fn generalized_winding_number(point: Vec3, mesh: &MeshData) -> f32 {
     accum / std::f32::consts::TAU
 }
 
-/// For each grid edge whose endpoints have differing signs, ensure a
-/// surface crossing exists. Missing crossings arise when GWN says the
-/// sign changes across the edge but no triangle physically crossed it —
-/// either because the mesh has a hole there, or because the surface
-/// passes through a vertex/edge and the watertight tie-break assigned
-/// the hit to a different cell edge. DC needs *something* to place a
-/// vertex at, so we synthesize a midpoint position with a normal
-/// interpolated from the nearest real hit.
-fn synthesize_missing_crossings(
-    edges: &mut HashMap<EdgeKey, EdgeHit>,
-    signs: &[bool],
-    min_code: PositionCode,
-    dims: IVec3,
-    unit_size: f32,
-) {
-    let real_snapshot: Vec<(Vec3, Vec3)> = edges
-        .values()
-        .filter(|h| !h.is_patch)
-        .map(|h| (h.position, h.normal))
-        .collect();
-
-    for z in 0..dims.z {
-        for y in 0..dims.y {
-            for x in 0..dims.x {
-                let lower_rel = IVec3::new(x, y, z);
-                let idx_lo =
-                    (lower_rel.z * dims.x * dims.y + lower_rel.y * dims.x + lower_rel.x) as usize;
-                let sign_lo = signs[idx_lo];
-                for axis in 0..3u8 {
-                    let mut delta = IVec3::ZERO;
-                    delta[axis as usize] = 1;
-                    let upper_rel = lower_rel + delta;
-                    if upper_rel.x >= dims.x || upper_rel.y >= dims.y || upper_rel.z >= dims.z {
-                        continue;
-                    }
-                    let idx_hi = (upper_rel.z * dims.x * dims.y
-                        + upper_rel.y * dims.x
-                        + upper_rel.x) as usize;
-                    if sign_lo == signs[idx_hi] {
-                        continue;
-                    }
-                    let key = EdgeKey {
-                        lower: min_code + lower_rel,
-                        axis,
-                    };
-                    if edges.contains_key(&key) {
-                        continue;
-                    }
-                    // Cousin lookup recovers the actual Hermite data the
-                    // M-T tie-break stashed on a neighbouring edge; only
-                    // fall back to midpoint + nearest-anywhere if no
-                    // real cousin exists (genuine hole or boundary).
-                    let patch =
-                        synthesize_from_cousins(key, edges, unit_size).unwrap_or_else(|| {
-                            let midpoint = edge_midpoint(key, unit_size);
-                            let normal = nearest_normal(&real_snapshot, midpoint);
-                            EdgeHit {
-                                position: midpoint,
-                                normal,
-                                is_patch: true,
-                            }
-                        });
-                    edges.insert(key, patch);
-                }
-            }
-        }
-    }
-}
+// `synthesize_missing_crossings` (the eager full-grid synthesis pass)
+// has been removed. Patch synthesis is now performed on-demand by
+// [`ScannedMeshField::hermite`] when an edge query lands on a grid
+// edge with no recorded triangle crossing — typically the M-T tie-
+// break artefact described above. Doing it lazily means we only pay
+// for edges the DC octree actually queries (a small fraction of the
+// grid for sparse meshes), and we no longer need a separate
+// `is_patch` flag on `EdgeHit` to distinguish real from synthesised
+// data — patches live in `patch_cache`, real hits in `edges`.
 
 /// Returns the 8 world-space corners of an axis-aligned box in the same
 /// order as `decode_cell(i)` (i.e. `x*4 + y*2 + z`).
