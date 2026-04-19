@@ -44,6 +44,24 @@ pub trait ScalarField {
         Some(p1 + offset * mid)
     }
 
+    /// Returns the surface crossing on the segment `p1`→`p2` together
+    /// with the surface normal there.
+    ///
+    /// The default implementation computes them separately (binary
+    /// search for the crossing, central differences for the normal at
+    /// the resulting point), which is correct for any analytically-
+    /// smooth field. Mesh-derived fields **must** override this to
+    /// return the stored per-edge Hermite pair: the M-T crossing on
+    /// the edge and the source triangle's face normal. Calling
+    /// `normal(p)` separately on a piecewise-constant mesh field can
+    /// pick up the wrong triangle's normal at sharp features (the
+    /// nearest stored hit may be from the opposite face), feeding the
+    /// QEF a contradictory plane and chipping the corner.
+    fn hermite(&self, p1: Vec3, p2: Vec3) -> Option<(Vec3, Vec3)> {
+        let p = self.solve(p1, p2)?;
+        Some((p, self.normal(p)))
+    }
+
     /// Step size for numerical gradient computation.
     fn gradient_offset(&self) -> f32 {
         0.01

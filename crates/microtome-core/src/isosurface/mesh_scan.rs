@@ -20,10 +20,17 @@
 //!    to flip the entire interior.
 //!
 //! 3. **Missing-crossing synthesis.** For any grid edge whose two
-//!    corners differ in sign but no real triangle crossed it (a hole,
-//!    or a vertex/edge hit that the watertight tie-break gave to a
-//!    neighbouring cell edge), a midpoint position with nearest-normal
-//!    is synthesised so DC can still place a vertex.
+//!    corners differ in sign but no real triangle crossed it, the
+//!    Hermite data is borrowed from the closest real hit on a
+//!    *cousin* edge — one of the (up to) 10 grid edges incident on
+//!    this edge's two endpoint vertices. This is the common case for
+//!    watertight meshes: the M-T tie-break records a near-vertex
+//!    crossing on exactly one incident edge, leaving its cousins as
+//!    "missing" even though they all describe the same surface. Only
+//!    when no real cousin exists (genuine hole or grid boundary) do
+//!    we fall back to a midpoint position with a nearest-anywhere
+//!    normal, which DC handles but with worse vertex placement and
+//!    less hierarchical simplification.
 //!
 //! The resulting [`ScannedMeshField`] implements [`ScalarField`] and plugs
 //! directly into the existing dual-contouring pipeline via
@@ -71,13 +78,16 @@ pub(super) struct EdgeKey {
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct EdgeHit {
-    /// World-space intersection point on the edge. For real intersection
-    /// edges this is the triangle-plane crossing; for patch edges it is
-    /// the edge midpoint (a synthesized location, see `is_patch`).
+    /// World-space intersection point. For real edges this is the
+    /// triangle-plane crossing on the edge itself; for patch edges
+    /// it is the cousin edge's hit position (typically near the
+    /// shared grid vertex), or — when no real cousin exists — the
+    /// edge midpoint as a last-resort fallback.
     pub(super) position: Vec3,
-    /// World-space surface normal at the intersection. For real edges
-    /// this is the source triangle's face normal; for patch edges it is
-    /// a weighted blend of nearby real normals.
+    /// World-space surface normal at `position`. For real edges this
+    /// is the source triangle's face normal; for cousin-derived patch
+    /// edges it is the cousin hit's normal; for last-resort patch
+    /// edges it is the nearest real normal anywhere in the field.
     pub(super) normal: Vec3,
     /// `true` iff this edge was synthesized by PolyMender sign-generation
     /// patching (not produced by scan-conversion from the input mesh).
@@ -241,6 +251,42 @@ impl ScalarField for ScannedMeshField {
         }
     }
 
+    fn hermite(&self, p1: Vec3, p2: Vec3) -> Option<(Vec3, Vec3)> {
+        let c1 = PositionCode::new(
+            (p1.x / self.unit_size).round() as i32,
+            (p1.y / self.unit_size).round() as i32,
+            (p1.z / self.unit_size).round() as i32,
+        );
+        let c2 = PositionCode::new(
+            (p2.x / self.unit_size).round() as i32,
+            (p2.y / self.unit_size).round() as i32,
+            (p2.z / self.unit_size).round() as i32,
+        );
+        let delta = c2 - c1;
+        let (lower, axis) = if delta.x > 0 {
+            (c1, 0u8)
+        } else if delta.x < 0 {
+            (c2, 0u8)
+        } else if delta.y > 0 {
+            (c1, 1u8)
+        } else if delta.y < 0 {
+            (c2, 1u8)
+        } else if delta.z > 0 {
+            (c1, 2u8)
+        } else if delta.z < 0 {
+            (c2, 2u8)
+        } else {
+            return Some(((p1 + p2) * 0.5, Vec3::Z));
+        };
+        let hit = self.edges.get(&EdgeKey { lower, axis })?;
+        let n = if hit.normal.length_squared() > 1e-12 {
+            hit.normal.normalize()
+        } else {
+            Vec3::Z
+        };
+        Some((hit.position, n))
+    }
+
     fn normal(&self, p: Vec3) -> Vec3 {
         let mut best_d2 = f32::INFINITY;
         let mut best_n = Vec3::Z;
@@ -292,6 +338,76 @@ fn nearest_normal(candidates: &[(Vec3, Vec3)], point: Vec3) -> Vec3 {
     } else {
         Vec3::Z
     }
+}
+
+/// Returns the closest real hit on a "cousin" grid edge — one of the
+/// (up to) 10 edges sharing an endpoint vertex with `edge`. Used to
+/// repair watertight tie-break artefacts: when a triangle grazes a
+/// shared grid vertex, exactly one incident edge wins the M-T crossing,
+/// and the others' GWN sign-flipping endpoints turn into "missing"
+/// edges. The triangle that hit the cousin is the same surface that
+/// crosses *this* edge, so its (position, normal) is the right Hermite
+/// data to use here.
+fn synthesize_from_cousins(
+    edge: EdgeKey,
+    edges: &HashMap<EdgeKey, EdgeHit>,
+    unit_size: f32,
+) -> Option<EdgeHit> {
+    let mut axis_unit = IVec3::ZERO;
+    axis_unit[edge.axis as usize] = 1;
+    let v_lo = edge.lower;
+    let v_hi = edge.lower + axis_unit;
+    let v_lo_world = code_to_pos(v_lo, unit_size);
+    let v_hi_world = code_to_pos(v_hi, unit_size);
+
+    let mut best_d2 = f32::INFINITY;
+    let mut best: Option<EdgeHit> = None;
+
+    for &(vertex_code, vertex_world) in &[(v_lo, v_lo_world), (v_hi, v_hi_world)] {
+        for cousin_axis in 0..3u8 {
+            for direction in [-1i32, 1] {
+                // Skip the original edge itself (the only +axis-aligned
+                // outgoing cousin at v_lo and the only −axis-aligned
+                // incoming cousin at v_hi).
+                if cousin_axis == edge.axis
+                    && ((vertex_code == v_lo && direction == 1)
+                        || (vertex_code == v_hi && direction == -1))
+                {
+                    continue;
+                }
+                let cousin_key = if direction == 1 {
+                    EdgeKey {
+                        lower: vertex_code,
+                        axis: cousin_axis,
+                    }
+                } else {
+                    let mut step = IVec3::ZERO;
+                    step[cousin_axis as usize] = -1;
+                    EdgeKey {
+                        lower: vertex_code + step,
+                        axis: cousin_axis,
+                    }
+                };
+                let Some(hit) = edges.get(&cousin_key) else {
+                    continue;
+                };
+                if hit.is_patch {
+                    continue;
+                }
+                let d2 = (hit.position - vertex_world).length_squared();
+                if d2 < best_d2 {
+                    best_d2 = d2;
+                    best = Some(*hit);
+                }
+            }
+        }
+    }
+
+    best.map(|h| EdgeHit {
+        position: h.position,
+        normal: h.normal,
+        is_patch: true,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -439,16 +555,21 @@ fn synthesize_missing_crossings(
                     if edges.contains_key(&key) {
                         continue;
                     }
-                    let midpoint = edge_midpoint(key, unit_size);
-                    let normal = nearest_normal(&real_snapshot, midpoint);
-                    edges.insert(
-                        key,
-                        EdgeHit {
-                            position: midpoint,
-                            normal,
-                            is_patch: true,
-                        },
-                    );
+                    // Cousin lookup recovers the actual Hermite data the
+                    // M-T tie-break stashed on a neighbouring edge; only
+                    // fall back to midpoint + nearest-anywhere if no
+                    // real cousin exists (genuine hole or boundary).
+                    let patch =
+                        synthesize_from_cousins(key, edges, unit_size).unwrap_or_else(|| {
+                            let midpoint = edge_midpoint(key, unit_size);
+                            let normal = nearest_normal(&real_snapshot, midpoint);
+                            EdgeHit {
+                                position: midpoint,
+                                normal,
+                                is_patch: true,
+                            }
+                        });
+                    edges.insert(key, patch);
                 }
             }
         }

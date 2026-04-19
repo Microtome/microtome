@@ -180,6 +180,14 @@ impl RectilinearGrid {
         {
             // C++: p = qef.massPointSum / (float)qef.pointCount;
             pos = qef.mass_point();
+            // Recompute the QEF residual at the *clamped* position. The
+            // C++ source kept the SVD-solution residual here, which is
+            // misleadingly low — collapse-thresholds (kdtree_v2.rs:65,
+            // kdtree.rs:84) read this field to decide simplification, so
+            // an underreport of the actual fitted-vertex error causes
+            // overeager collapse and visible gouges around features
+            // where the SVD pushes the solution out of bounds.
+            error = qef.get_error_at(pos);
         }
 
         vertex.hermite_p = pos;
@@ -443,19 +451,20 @@ impl RectilinearGrid {
             let p2 = corner_positions[EDGE_MAP[i][1]];
             // C++: if (cornerSigns[edge_map[i][0]] != cornerSigns[edge_map[i][1]]) {
             if self.corner_signs[EDGE_MAP[i][0]] != self.corner_signs[EDGE_MAP[i][1]] {
-                // C++: fvec3 p, n;
-                // C++: if (t->solve(p1, p2, p)) {
-                if let Some(p) = field.solve(p1, p2) {
-                    // C++: t->normal(p, n);
-                    let n = field.normal(p);
-                    // C++: int qefIndex = edgeComponentIndex(edge_map[i][0], edge_map[i][1]);
+                // The C++ code split this into `solve(p1,p2,p)` followed
+                // by `normal(p,n)`. That is correct for analytic SDFs
+                // (the gradient is well-defined everywhere), but for a
+                // piecewise-constant mesh-derived field the
+                // nearest-anywhere normal lookup picks up the *wrong*
+                // triangle's normal at sharp features, feeding the QEF
+                // a contradictory plane and chipping the corner. Using
+                // the trait's paired `hermite` keeps the per-edge
+                // (position, normal) together.
+                if let Some((p, n)) = field.hermite(p1, p2) {
                     let qef_index = self.edge_component_index(EDGE_MAP[i][0], EDGE_MAP[i][1]);
-                    // C++: components.at(static_cast<unsigned long>(qefIndex)).add(p, n);
                     if qef_index >= 0 && (qef_index as usize) < self.components.len() {
                         self.components[qef_index as usize].add(p, n);
                     }
-                    // C++: if (all) { allQef.add(p, n); }
-                    // In Rust, the `all` QEF is always provided (matches the C++ `true` path).
                     all.add(p, n);
                 }
             }
