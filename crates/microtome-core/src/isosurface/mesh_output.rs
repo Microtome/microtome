@@ -39,19 +39,37 @@ impl IsoMesh {
         vertex.vertex_index
     }
 
-    /// Adds a triangle from three vertices, splitting vertices whose normals
-    /// differ significantly from the field normal at a slightly offset
-    /// position (for better shading at sharp features).
+    /// Adds a triangle from three vertices.
     ///
-    /// Adds a triangle. Uses simple index push for now to isolate
-    /// contouring issues from normal-splitting issues.
+    /// Drops degenerate cases (two indices equal, or three vertices
+    /// collinear/coincident) so the output never contains zero-area
+    /// triangles. Both arise from adjacent DC cells solving their
+    /// QEF to the same world position — typically a collapsed cell
+    /// whose mass-point fallback lines up with a neighbour's vertex,
+    /// or two clustered cells whose components share a corner. The
+    /// unused-but-coincident vertex stays in `positions` (vertex
+    /// generation is index-driven elsewhere); only the bad triangle
+    /// is suppressed, eliminating the visible T-junction artefact
+    /// where the extra point sits on a kept triangle's edge.
     pub fn add_triangle<F>(&mut self, vertices: [&Vertex; 3], _normal_fn: F)
     where
         F: Fn(Vec3) -> Vec3,
     {
-        for v in &vertices {
-            self.indices.push(v.vertex_index);
+        let i0 = vertices[0].vertex_index;
+        let i1 = vertices[1].vertex_index;
+        let i2 = vertices[2].vertex_index;
+        if i0 == i1 || i1 == i2 || i0 == i2 {
+            return;
         }
+        let p0 = vertices[0].hermite_p;
+        let p1 = vertices[1].hermite_p;
+        let p2 = vertices[2].hermite_p;
+        if (p1 - p0).cross(p2 - p0).length_squared() < 1e-20 {
+            return;
+        }
+        self.indices.push(i0);
+        self.indices.push(i1);
+        self.indices.push(i2);
     }
 
     /// Recomputes normals as flat (per-face) normals.
