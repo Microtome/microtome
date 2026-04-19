@@ -62,6 +62,24 @@ pub trait ScalarField {
         Some((p, self.normal(p)))
     }
 
+    /// Reports whether the surface passes through (or any input
+    /// triangle overlaps) the axis-aligned grid cell with corner
+    /// `min_code` and edge length `cell_size` grid units.
+    ///
+    /// The DC octree builder calls this to decide whether to recurse
+    /// into a cell. For analytic SDFs the only way to cheaply prove
+    /// "no surface here" is to evaluate the signed distance at the
+    /// cell centre and compare against the cell's diagonal radius —
+    /// not done by default, so the default returns `true` and the
+    /// builder falls back to its corner-sign-based pruning. Mesh-
+    /// derived fields (which know exactly which cells the
+    /// scan-conversion touched) override this to short-circuit the
+    /// vast majority of homogeneous interior/exterior cells without
+    /// paying any per-corner sign queries inside them.
+    fn has_surface_in(&self, _min_code: PositionCode, _cell_size: i32, _unit_size: f32) -> bool {
+        true
+    }
+
     /// Step size for numerical gradient computation.
     fn gradient_offset(&self) -> f32 {
         0.01

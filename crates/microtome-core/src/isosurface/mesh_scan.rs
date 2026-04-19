@@ -43,7 +43,7 @@
 //! `solve` answers leaf-edge hermite points, and `normal` returns the
 //! face normal of the nearest stored intersection.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use glam::{IVec3, Vec3};
 
@@ -97,6 +97,13 @@ pub struct ScannedMeshField {
     signs: Vec<bool>,
     /// Sparse hermite data for each unit-length cell edge the mesh crosses.
     edges: HashMap<EdgeKey, EdgeHit>,
+    /// Cells (at every depth from `size_code` down to 1) that any input
+    /// triangle overlapped during scan-conversion. Read by
+    /// [`Self::has_surface_in`] so the DC octree builder can short-
+    /// circuit homogeneous interior/exterior regions instead of
+    /// recursing all the way to leaf level just to discover there's
+    /// nothing there.
+    active_cells: HashSet<(PositionCode, i32)>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
@@ -145,6 +152,7 @@ impl ScannedMeshField {
         let total = (dims.x * dims.y * dims.z) as usize;
         let mut signs = vec![false; total];
         let mut edges: HashMap<EdgeKey, EdgeHit> = HashMap::new();
+        let mut active_cells: HashSet<(PositionCode, i32)> = HashSet::new();
 
         let tri_count = mesh.indices.len() / 3;
         for t in 0..tri_count {
@@ -169,7 +177,15 @@ impl ScannedMeshField {
             // edge-parity counting, so double-hits don't corrupt the
             // sign field the way they do for flood-fill pipelines.
             scan_triangle(
-                v0, v1, v2, normal, min_code, size_code, unit_size, &mut edges,
+                v0,
+                v1,
+                v2,
+                normal,
+                min_code,
+                size_code,
+                unit_size,
+                &mut edges,
+                &mut active_cells,
             );
         }
 
@@ -215,6 +231,7 @@ impl ScannedMeshField {
             dims,
             signs,
             edges,
+            active_cells,
         }
     }
 
@@ -254,6 +271,15 @@ impl ScalarField for ScannedMeshField {
 
     fn index(&self, code: PositionCode, _unit_size: f32) -> f32 {
         if self.sign_at(code) { -1.0 } else { 1.0 }
+    }
+
+    fn has_surface_in(&self, min_code: PositionCode, cell_size: i32, _unit_size: f32) -> bool {
+        // Cells the scan-conversion never visited contain no input
+        // triangles, so their corners are necessarily homogeneous and
+        // no descendant could produce a DC vertex. The octree builder
+        // can prune the entire subtree without paying for a single
+        // corner sign query.
+        self.active_cells.contains(&(min_code, cell_size))
     }
 
     fn solve(&self, p1: Vec3, p2: Vec3) -> Option<Vec3> {
@@ -522,6 +548,7 @@ fn scan_triangle(
     cell_size: i32,
     unit_size: f32,
     edges: &mut HashMap<EdgeKey, EdgeHit>,
+    active_cells: &mut HashSet<(PositionCode, i32)>,
 ) {
     let world_min = code_to_pos(cell_min, unit_size);
     let world_max = code_to_pos(cell_min + PositionCode::splat(cell_size), unit_size);
@@ -529,6 +556,10 @@ fn scan_triangle(
     if !triangle_overlaps_box(v0, v1, v2, world_min, world_max) {
         return;
     }
+
+    // Record this cell at this depth so the DC octree builder can
+    // skip homogeneous regions via `ScalarField::has_surface_in`.
+    active_cells.insert((cell_min, cell_size));
 
     if cell_size == 1 {
         let corners = cube_corners(world_min, world_max);
@@ -572,7 +603,17 @@ fn scan_triangle(
     for i in 0..8 {
         let offset = decode_cell(i);
         let child_min = cell_min + offset * half;
-        scan_triangle(v0, v1, v2, normal, child_min, half, unit_size, edges);
+        scan_triangle(
+            v0,
+            v1,
+            v2,
+            normal,
+            child_min,
+            half,
+            unit_size,
+            edges,
+            active_cells,
+        );
     }
 }
 
@@ -1318,6 +1359,37 @@ mod tests {
         assert!(
             (bb_max.x - 0.85).abs() < tol && (bb_max.y - 0.85).abs() < tol,
             "bbox max.xy close to 0.85, got {bb_max:?}"
+        );
+    }
+
+    #[test]
+    fn active_cells_prune_homogeneous_regions() {
+        // Small cube (≈12% of grid extent) centred in a depth-6 grid.
+        // The vast majority of octree cells are entirely interior or
+        // entirely exterior; `active_cells` should hold only the cells
+        // the surface actually touched.
+        let mesh = make_cube_mesh(0.45, 0.55);
+        let depth = 6;
+        let size_code = 1_i32 << (depth - 1);
+        let unit_size = 1.0 / size_code as f32;
+        let min_code = IVec3::ZERO;
+
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
+
+        // Total node count of a fully-built octree at this depth.
+        let mut total_cells = 0usize;
+        for i in 0..depth {
+            let n = (size_code >> i) as usize;
+            total_cells += n * n * n;
+        }
+        let active = field.active_cells.len();
+        // Mesh surface is 6 thin slabs ≈ 5 × 5 leaf cells each.
+        // Active set must be at least an order of magnitude smaller
+        // than the full octree — the whole point of the optimisation.
+        assert!(
+            active * 8 < total_cells,
+            "expected pruning ratio > 8×; active={active}, total={total_cells}"
         );
     }
 

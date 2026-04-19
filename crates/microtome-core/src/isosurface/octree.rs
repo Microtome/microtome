@@ -69,6 +69,17 @@ impl OctreeNode {
     ) -> Option<Box<OctreeNode>> {
         // C++: sizeCode = 1 << (depth - 1)
         let size = 1_i32 << (depth - 1);
+
+        // Top-down prune: if the field knows the surface doesn't enter
+        // this cell, skip the whole subtree without paying any corner
+        // sign queries. Default trait impl returns `true` so SDFs fall
+        // through to the original corner-sign-based pruning unchanged;
+        // mesh-derived fields override this to match the active-cell
+        // set populated during scan-conversion.
+        if !field.has_surface_in(min_code, size, unit_size) {
+            return None;
+        }
+
         let max_code = min_code + PositionCode::splat(size);
 
         let qef = QefSolver::new();
