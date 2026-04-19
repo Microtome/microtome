@@ -23,7 +23,7 @@ pub use indicators::PositionCode;
 pub use kdtree::KdTreeNode;
 pub use kdtree_v2::KdTreeV2Node;
 pub use mesh_output::IsoMesh;
-pub use mesh_scan::ScannedMeshField;
+pub use mesh_scan::{ScannedMeshField, SignMode};
 pub use octree::OctreeNode;
 pub use qef::QefSolver;
 pub use rectilinear_grid::RectilinearGrid;

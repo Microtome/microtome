@@ -10,7 +10,7 @@ use wgpu::util::DeviceExt;
 
 use microtome_core::isosurface::{
     Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, PositionCode,
-    ScalarField, ScannedMeshField,
+    ScalarField, ScannedMeshField, SignMode,
 };
 use microtome_core::{MeshData, MicrotomeError};
 
@@ -83,6 +83,10 @@ pub struct IsosurfaceApp {
     structure: Structure,
     error_threshold: f32,
     octree_depth: u32,
+    /// How `ScannedMeshField::from_mesh` computes corner signs. Switch
+    /// to `FloodFill` to A/B against `Gwn` and isolate whether artefacts
+    /// trace back to the winding-number path.
+    sign_mode: SignMode,
     show_wireframe: bool,
     needs_rebuild: bool,
     /// Whether settings have changed since the last build.
@@ -126,6 +130,7 @@ impl IsosurfaceApp {
             structure: Structure::Octree,
             error_threshold: 1e-2,
             octree_depth: 8,
+            sign_mode: SignMode::Gwn,
             show_wireframe: false,
             needs_rebuild: true,
             stale: false,
@@ -316,6 +321,7 @@ impl IsosurfaceApp {
         let depth = self.octree_depth;
         let structure = self.structure;
         let threshold = self.error_threshold;
+        let sign_mode = self.sign_mode;
 
         let snapshot = match &self.field_source {
             FieldSource::DefaultScene => FieldSourceSnapshot::DefaultScene,
@@ -358,6 +364,7 @@ impl IsosurfaceApp {
                             min_code,
                             size_code,
                             unit_size,
+                            sign_mode,
                         );
                         Self::build_mesh(&field, min_code, depth, structure, threshold, unit_size)
                     }
@@ -485,6 +492,33 @@ impl eframe::App for IsosurfaceApp {
                                     &mut self.structure,
                                     Structure::KdTreeV2,
                                     "KdTree v2",
+                                )
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                        });
+
+                    // Sign-generation mode for `ScannedMeshField`. Only
+                    // affects rebuilds of a loaded mesh; the default
+                    // scene uses an analytic SDF and skips this path.
+                    egui::ComboBox::from_label("Sign mode")
+                        .selected_text(match self.sign_mode {
+                            SignMode::Gwn => "GWN (BVH)",
+                            SignMode::FloodFill => "Flood fill",
+                        })
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_value(&mut self.sign_mode, SignMode::Gwn, "GWN (BVH)")
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                            if ui
+                                .selectable_value(
+                                    &mut self.sign_mode,
+                                    SignMode::FloodFill,
+                                    "Flood fill",
                                 )
                                 .changed()
                             {

@@ -9,15 +9,20 @@
 //!    These produce Hermite data (surface point + face normal) used by
 //!    the DC vertex solver.
 //!
-//! 2. **Corner-signs pass.** Each grid corner's inside/outside flag
-//!    comes from the **generalized winding number** (Jacobson 2013): for
-//!    a consistently-oriented mesh, `w(P)` counts how many components
-//!    contain `P`; `w ≥ 0.5` gives the **set union** of components,
-//!    which is the correct inside test for dirty meshes with multiple
-//!    intersecting/overlapping solids. Robust to self-intersections and
-//!    small holes — unlike the edge-parity + flood-fill approach used
-//!    by PolyMender and kin, no propagation can "leak" through a hole
-//!    to flip the entire interior.
+//! 2. **Corner-signs pass.** Selectable at construction time via
+//!    [`SignMode`]:
+//!    - [`SignMode::Gwn`] uses the **generalized winding number**
+//!      (Jacobson 2013): for a consistently-oriented mesh, `w(P)`
+//!      counts how many components contain `P`; `w ≥ 0.5` gives the
+//!      **set union** of components, which is the correct inside test
+//!      for dirty meshes with multiple intersecting/overlapping
+//!      solids. Robust to self-intersections and small holes.
+//!    - [`SignMode::FloodFill`] BFS-propagates a known-outside seed
+//!      across the grid, flipping sign on each edge with a recorded
+//!      triangle hit. Linear in grid size, no BVH build; correct on
+//!      clean watertight input but vulnerable to the well-known
+//!      flood-fill failure modes (sign leaks through holes /
+//!      non-manifold features).
 //!
 //! 3. **Missing-crossing synthesis.** For any grid edge whose two
 //!    corners differ in sign but no real triangle crossed it, the
@@ -38,7 +43,7 @@
 //! `solve` answers leaf-edge hermite points, and `normal` returns the
 //! face normal of the nearest stored intersection.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use glam::{IVec3, Vec3};
 
@@ -47,6 +52,32 @@ use crate::mesh::MeshData;
 use super::indicators::{EDGE_MAP, PositionCode, code_to_pos, decode_cell};
 use super::mesh_bvh::MeshBvh;
 use super::scalar_field::ScalarField;
+
+/// Selects how corner inside/outside flags are computed during
+/// [`ScannedMeshField::from_mesh`].
+///
+/// Picked at runtime so the viewer (and tests) can A/B between the
+/// robust-but-expensive winding-number path and a much cheaper
+/// flood-fill that's correct on clean watertight meshes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignMode {
+    /// Generalized winding number via [`MeshBvh`] (Jacobson 2013,
+    /// Barill 2018). `w(P) >= 0.5` ⇒ inside. Robust to
+    /// self-intersections, intersecting components, and small holes
+    /// — none of these can flip propagation the way they can for
+    /// flood-fill. Pays an O(N log N) BVH build plus an O(log N) GWN
+    /// query per grid corner; for large meshes / fine grids this
+    /// dominates the scan-conversion cost.
+    Gwn,
+    /// Edge-parity flood-fill from the grid's `(0,0,0)` corner
+    /// (assumed outside). The sign flips whenever the BFS crosses an
+    /// edge with a recorded triangle hit; otherwise it propagates.
+    /// Linear in grid size, no BVH build. Correct for clean closed
+    /// meshes; vulnerable to self-intersections, non-manifold
+    /// boundaries, and holes (sign can leak through and invert a
+    /// whole region).
+    FloodFill,
+}
 
 /// Scalar field derived from a triangle mesh via PolyMender-style scan
 /// conversion.
@@ -108,6 +139,7 @@ impl ScannedMeshField {
         min_code: PositionCode,
         size_code: i32,
         unit_size: f32,
+        sign_mode: SignMode,
     ) -> Self {
         let dims = IVec3::splat(size_code + 1);
         let total = (dims.x * dims.y * dims.z) as usize;
@@ -141,25 +173,34 @@ impl ScannedMeshField {
             );
         }
 
-        // Corner signs via generalized winding number (Jacobson 2013),
-        // BVH-accelerated (Barill 2018). For a consistently-oriented
-        // mesh, `w(P)` is the integer count of components containing
-        // `P`; `w >= 0.5` is the **union** of components — the semantic
-        // we want for dirty meshes with multiple intersecting solids.
-        // Robust to self-intersections and small holes (near-integer
-        // values degrade gracefully rather than flipping the flood-fill
-        // propagation the way edge-parity does).
-        let bvh = MeshBvh::build(mesh);
-        for z in 0..dims.z {
-            for y in 0..dims.y {
-                for x in 0..dims.x {
-                    let rel = IVec3::new(x, y, z);
-                    let corner_code = min_code + rel;
-                    let world_pos = code_to_pos(corner_code, unit_size);
-                    let w = bvh.winding_number(world_pos);
-                    let idx = (rel.z * dims.x * dims.y + rel.y * dims.x + rel.x) as usize;
-                    signs[idx] = w >= 0.5;
+        match sign_mode {
+            SignMode::Gwn => {
+                // Generalized winding number (Jacobson 2013), BVH-
+                // accelerated (Barill 2018). For a consistently-
+                // oriented mesh, `w(P)` is the integer count of
+                // components containing `P`; `w >= 0.5` is the
+                // **union** of components — the semantic we want for
+                // dirty meshes with multiple intersecting solids.
+                // Robust to self-intersections and small holes
+                // (near-integer values degrade gracefully rather
+                // than flipping the flood-fill propagation the way
+                // edge-parity does).
+                let bvh = MeshBvh::build(mesh);
+                for z in 0..dims.z {
+                    for y in 0..dims.y {
+                        for x in 0..dims.x {
+                            let rel = IVec3::new(x, y, z);
+                            let corner_code = min_code + rel;
+                            let world_pos = code_to_pos(corner_code, unit_size);
+                            let w = bvh.winding_number(world_pos);
+                            let idx = (rel.z * dims.x * dims.y + rel.y * dims.x + rel.x) as usize;
+                            signs[idx] = w >= 0.5;
+                        }
+                    }
                 }
+            }
+            SignMode::FloodFill => {
+                flood_fill_signs(&edges, &mut signs, min_code, dims);
             }
         }
 
@@ -408,6 +449,67 @@ fn synthesize_from_cousins(
         normal: h.normal,
         is_patch: true,
     })
+}
+
+/// BFS-based corner sign computation. Seeds the grid `(0,0,0)` corner
+/// as outside (the mesh is required to fit inside the scan region), then
+/// 6-connected propagates: across an edge with a recorded triangle hit
+/// the sign flips; otherwise it stays. O(grid corners). Linear, no BVH
+/// build, no per-corner GWN. Correct on clean watertight input;
+/// non-manifold or self-intersecting features can flip the sign of a
+/// downstream region.
+fn flood_fill_signs(
+    edges: &HashMap<EdgeKey, EdgeHit>,
+    signs: &mut [bool],
+    min_code: PositionCode,
+    dims: IVec3,
+) {
+    let stride_y = dims.x;
+    let stride_z = dims.x * dims.y;
+    let total = (dims.x * dims.y * dims.z) as usize;
+    let mut visited = vec![false; total];
+    let mut queue: VecDeque<IVec3> = VecDeque::new();
+
+    // Seed at relative (0,0,0). Sign starts `false` (outside).
+    signs[0] = false;
+    visited[0] = true;
+    queue.push_back(IVec3::ZERO);
+
+    while let Some(curr) = queue.pop_front() {
+        let curr_idx = (curr.z * stride_z + curr.y * stride_y + curr.x) as usize;
+        let curr_sign = signs[curr_idx];
+        for axis in 0..3usize {
+            for direction in [-1i32, 1] {
+                let mut neighbor = curr;
+                neighbor[axis] += direction;
+                if neighbor.x < 0
+                    || neighbor.y < 0
+                    || neighbor.z < 0
+                    || neighbor.x >= dims.x
+                    || neighbor.y >= dims.y
+                    || neighbor.z >= dims.z
+                {
+                    continue;
+                }
+                let neighbor_idx =
+                    (neighbor.z * stride_z + neighbor.y * stride_y + neighbor.x) as usize;
+                if visited[neighbor_idx] {
+                    continue;
+                }
+                // The grid edge between `curr` and `neighbor` is keyed
+                // by whichever endpoint is the lower along `axis`.
+                let lower = if direction > 0 { curr } else { neighbor };
+                let edge_key = EdgeKey {
+                    lower: min_code + lower,
+                    axis: axis as u8,
+                };
+                let crosses = edges.contains_key(&edge_key);
+                signs[neighbor_idx] = if crosses { !curr_sign } else { curr_sign };
+                visited[neighbor_idx] = true;
+                queue.push_back(neighbor);
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -938,7 +1040,8 @@ mod tests {
         let unit_size = 1.0 / size_code as f32;
         let min_code = IVec3::ZERO;
 
-        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
 
         // Center of the overlap region — must be inside.
         assert!(
@@ -1122,7 +1225,8 @@ mod tests {
         let unit_size = 1.0 / size_code as f32; // 0.0625
         let min_code = IVec3::ZERO;
 
-        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
         assert!(field.intersection_count() > 0);
 
         // Corner of the grid — outside.
@@ -1147,7 +1251,8 @@ mod tests {
         let unit_size = 1.0 / size_code as f32; // 0.0625
         let min_code = IVec3::ZERO;
 
-        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
 
         // Interior corner near the open face: world (0.5, 0.5, 0.8125),
         // which is inside the bbox [0.15, 0.85]³. Without patching this
@@ -1183,7 +1288,8 @@ mod tests {
         let unit_size = 1.0 / size_code as f32;
         let min_code = IVec3::ZERO;
 
-        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
 
         let octree = OctreeNode::build_with_scalar_field(min_code, depth, &field, false, unit_size);
         let mut octree = octree.expect("Phase 2 patched box should produce a non-empty octree");
@@ -1223,7 +1329,8 @@ mod tests {
         let unit_size = 1.0 / size_code as f32;
         let min_code = IVec3::ZERO;
 
-        let field = ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size);
+        let field =
+            ScannedMeshField::from_mesh(&mesh, min_code, size_code, unit_size, SignMode::Gwn);
 
         let octree = OctreeNode::build_with_scalar_field(min_code, depth, &field, false, unit_size);
         assert!(octree.is_some());
