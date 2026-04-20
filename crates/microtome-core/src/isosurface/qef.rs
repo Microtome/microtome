@@ -29,17 +29,11 @@ const MIN_SVD_FLOOR: f32 = 1.0e-12;
 /// severe chips and spikes on gear teeth and other curved-but-
 /// detailed features.
 ///
-/// Switching to relative truncation (`σ_i < SVD_RELATIVE_TOL · σ_max`)
-/// scales naturally with the matrix's largest singular value: cells
-/// with few constraints (rank-1 surface, σ_max ≈ 1) get the same
-/// truncation behaviour as cells with many (σ_max ≈ point_count).
-/// `0.1` is the figure recommended by Schaefer 2003 for unit-norm
-/// constraints — rank-3 sharp corners (`σ = 1, 1, 1`) stay crisp
-/// because their smallest σ matches the largest, while rank-1/rank-2
-/// features fall back to the mass-point along the unconstrained
-/// axes. Smaller values (`1e-2`, `1e-6`) leave the pseudoinverse
-/// dominated by noise on curved-but-detailed features.
-const SVD_RELATIVE_TOL: f32 = 1.0e-1;
+/// `1e-2` (relative to `σ_max`) is a conservative truncation: it
+/// scales naturally with the matrix size and reins in the worst
+/// pseudoinverse blow-ups without flattening lightly-curved regions
+/// the way the more aggressive `0.1` setting did.
+const SVD_RELATIVE_TOL: f32 = 1.0e-2;
 
 /// 3x3 matrix stored as `[col][row]` to match GLM's `mat3x3[col][row]`.
 type Mat3x3 = [[f32; 3]; 3];
