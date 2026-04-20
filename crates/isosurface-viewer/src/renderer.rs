@@ -5,6 +5,19 @@
 
 use glam::Mat4;
 
+/// Wireframe rendering mode — selected at draw time, mutually
+/// exclusive with respect to the back-facing tris.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum WireframeMode {
+    /// Draw every wire (front and back). Default.
+    Plain,
+    /// Paint a background-colour fill behind the wires so back lines
+    /// are occluded by front geometry.
+    Filled,
+    /// Drop back-facing triangles entirely.
+    CullBack,
+}
+
 /// Offscreen render target format.
 pub const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
@@ -54,11 +67,11 @@ pub struct ViewportRenderer {
     phong_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline_culled: wgpu::RenderPipeline,
-    /// Solid-black fill pipeline drawn behind the wireframe so the
-    /// mesh reads as black faces with red edges. Mixed-winding DC
-    /// triangles all paint the same colour, hiding the artefact.
-    fill_black_pipeline: wgpu::RenderPipeline,
-    fill_black_pipeline_culled: wgpu::RenderPipeline,
+    /// Background-colour fill pipeline drawn behind the wireframe in
+    /// `WireframeMode::Filled`. Same clear colour as the offscreen
+    /// target, so the mesh dissolves into the viewport and only the
+    /// wires (drawn afterwards) remain visible.
+    fill_bg_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     max_draw_calls: u32,
@@ -206,14 +219,22 @@ impl ViewportRenderer {
                 },
             ],
         }];
+        // `slope_scale: -1.0` was too aggressive — for polygons
+        // nearly edge-on to the camera, the dz/dx and dz/dy slopes
+        // explode and bias the wires far enough forward that
+        // back-side edges punch through the front fill. Constant
+        // bias alone is enough to keep a wire visible *on top of*
+        // its own triangle's fill at the same depth, while letting
+        // the unbiased depth ordering hide back-side wires behind
+        // front-side geometry.
         let wireframe_depth_stencil = Some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
-            depth_write_enabled: Some(true),
+            depth_write_enabled: Some(false),
             depth_compare: Some(wgpu::CompareFunction::LessEqual),
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState {
-                constant: -2,
-                slope_scale: -1.0,
+                constant: -8,
+                slope_scale: 0.0,
                 clamp: 0.0,
             },
         });
@@ -255,45 +276,40 @@ impl ViewportRenderer {
             make_wireframe_pipeline("wireframe_pipeline_culled", Some(wgpu::Face::Back));
 
         // --- Black-fill pipeline used as the backdrop pass for wireframe ---
-        let fill_black_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("fill_black_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fill_black.wgsl").into()),
+        let fill_bg_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("fill_bg_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fill_bg.wgsl").into()),
         });
-        let make_fill_black_pipeline = |label: &'static str, cull: Option<wgpu::Face>| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &fill_black_shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &wireframe_buffers,
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: cull,
-                    ..Default::default()
-                },
-                depth_stencil: depth_stencil.clone(),
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &fill_black_shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: OFFSCREEN_FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
-        let fill_black_pipeline = make_fill_black_pipeline("fill_black_pipeline", None);
-        let fill_black_pipeline_culled =
-            make_fill_black_pipeline("fill_black_pipeline_culled", Some(wgpu::Face::Back));
+        let fill_bg_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("fill_bg_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &fill_bg_shader,
+                entry_point: Some("vs_main"),
+                buffers: &wireframe_buffers,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: depth_stencil.clone(),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &fill_bg_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: OFFSCREEN_FORMAT,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
 
         // --- Blit pipeline ---
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -377,8 +393,7 @@ impl ViewportRenderer {
             phong_pipeline,
             wireframe_pipeline,
             wireframe_pipeline_culled,
-            fill_black_pipeline,
-            fill_black_pipeline_culled,
+            fill_bg_pipeline,
             uniform_buffer,
             uniform_bind_group,
             max_draw_calls,
@@ -398,7 +413,7 @@ impl ViewportRenderer {
     /// Renders the scene to the offscreen target with depth testing.
     ///
     /// Resizes offscreen targets if viewport dimensions changed.
-    /// `cull_back` only affects the wireframe pipeline.
+    /// `wireframe_mode` is consulted only when `show_wireframe`.
     #[allow(clippy::too_many_arguments)]
     pub fn render_offscreen(
         &mut self,
@@ -410,7 +425,7 @@ impl ViewportRenderer {
         view_proj: Mat4,
         mesh: Option<&MeshBuffers>,
         show_wireframe: bool,
-        cull_back: bool,
+        wireframe_mode: WireframeMode,
     ) {
         let w = width.max(1);
         let h = height.max(1);
@@ -507,20 +522,18 @@ impl ViewportRenderer {
                         mesh_buf.index_buffer.slice(..),
                         wgpu::IndexFormat::Uint32,
                     );
-                    // Pass 1: solid black fill — DC's mixed-winding
-                    // triangles all paint the same colour, so the edges
-                    // (drawn next) read against a single dark mass
-                    // instead of a confusing tangle of front/back lines.
-                    let fill_pipeline = if cull_back {
-                        &self.fill_black_pipeline_culled
-                    } else {
-                        &self.fill_black_pipeline
-                    };
-                    pass.set_pipeline(fill_pipeline);
-                    pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
-                    // Pass 2: red wireframe on top (depth bias in the
-                    // pipeline pulls it just in front of the fill).
-                    let wire_pipeline = if cull_back {
+                    let cull = matches!(wireframe_mode, WireframeMode::CullBack);
+                    // Background fill (Filled mode only): paints the
+                    // mesh in the viewport clear colour so back-side
+                    // wires get occluded by front-side geometry. In
+                    // CullBack mode the pipeline cull does the same
+                    // job; in Plain mode no fill runs and back wires
+                    // remain visible (the "see-through" view).
+                    if matches!(wireframe_mode, WireframeMode::Filled) {
+                        pass.set_pipeline(&self.fill_bg_pipeline);
+                        pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+                    }
+                    let wire_pipeline = if cull {
                         &self.wireframe_pipeline_culled
                     } else {
                         &self.wireframe_pipeline

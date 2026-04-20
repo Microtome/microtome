@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use glam::Mat4;
 
-use crate::renderer::{MeshBuffers, ViewportRenderer};
+use crate::renderer::{MeshBuffers, ViewportRenderer, WireframeMode};
 
 /// Paint callback submitted to egui for custom 3D viewport rendering.
 pub struct ViewportPaintCallback {
@@ -21,8 +21,8 @@ pub struct ViewportPaintCallback {
     pub height: u32,
     /// Whether to draw wireframe overlay.
     pub show_wireframe: bool,
-    /// Whether to back-face cull the wireframe (front faces only).
-    pub cull_back: bool,
+    /// How to handle back faces in the wireframe overlay.
+    pub wireframe_mode: WireframeMode,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -44,7 +44,7 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
                 self.view_proj,
                 self.mesh.as_deref(),
                 self.show_wireframe,
-                self.cull_back,
+                self.wireframe_mode,
             );
         }
         Vec::new()

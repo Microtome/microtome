@@ -15,8 +15,8 @@ use microtome_core::isosurface::{
 use microtome_core::{MeshData, MicrotomeError};
 
 use crate::camera::OrbitCamera;
-use crate::cli::{SignModeArg, StructureArg, default_output_path};
-use crate::renderer::{MeshBuffers, ViewportRenderer};
+use crate::cli::{SignModeArg, StructureArg, WireframeModeArg, default_output_path};
+use crate::renderer::{MeshBuffers, ViewportRenderer, WireframeMode};
 use crate::viewport::ViewportPaintCallback;
 
 /// Isosurface construction structure.
@@ -92,8 +92,9 @@ pub struct IsosurfaceApp {
     /// trace back to the winding-number path.
     sign_mode: SignMode,
     show_wireframe: bool,
-    /// Cull back faces in wireframe mode (front-facing tris only).
-    cull_back: bool,
+    /// How to handle back faces in the wireframe overlay (mutually
+    /// exclusive: plain / filled / cull-back).
+    wireframe_mode: WireframeMode,
     needs_rebuild: bool,
     /// Whether settings have changed since the last build.
     stale: bool,
@@ -142,7 +143,7 @@ impl IsosurfaceApp {
             octree_depth: 8,
             sign_mode: SignMode::Gwn,
             show_wireframe: false,
-            cull_back: false,
+            wireframe_mode: WireframeMode::Plain,
             needs_rebuild: true,
             stale: false,
             build_rx: None,
@@ -442,9 +443,15 @@ impl IsosurfaceApp {
         parts.push(format!("{:.6},{:.6},{:.6}", t.x, t.y, t.z));
         if self.show_wireframe {
             parts.push("--wireframe".into());
-        }
-        if self.cull_back {
-            parts.push("--cull-back".into());
+            let mode_arg = match self.wireframe_mode {
+                WireframeMode::Plain => WireframeModeArg::Plain,
+                WireframeMode::Filled => WireframeModeArg::Filled,
+                WireframeMode::CullBack => WireframeModeArg::CullBack,
+            };
+            if !matches!(mode_arg, WireframeModeArg::Plain) {
+                parts.push("--wireframe-mode".into());
+                parts.push(mode_arg.as_str().into());
+            }
         }
         parts.push("--output".into());
         parts.push(quote_path(&default_output_path()));
@@ -700,10 +707,26 @@ impl eframe::App for IsosurfaceApp {
                 ui.separator();
 
                 ui.checkbox(&mut self.show_wireframe, "Wireframe");
-                ui.add_enabled(
-                    self.show_wireframe,
-                    egui::Checkbox::new(&mut self.cull_back, "Cull back faces"),
-                );
+                ui.add_enabled_ui(self.show_wireframe, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Back faces:");
+                        ui.selectable_value(
+                            &mut self.wireframe_mode,
+                            WireframeMode::Plain,
+                            "Plain",
+                        );
+                        ui.selectable_value(
+                            &mut self.wireframe_mode,
+                            WireframeMode::Filled,
+                            "Fill",
+                        );
+                        ui.selectable_value(
+                            &mut self.wireframe_mode,
+                            WireframeMode::CullBack,
+                            "Cull",
+                        );
+                    });
+                });
 
                 ui.separator();
                 ui.label("View presets:");
@@ -783,7 +806,7 @@ impl eframe::App for IsosurfaceApp {
                 width,
                 height,
                 show_wireframe: self.show_wireframe,
-                cull_back: self.cull_back,
+                wireframe_mode: self.wireframe_mode,
             },
         );
         painter.add(callback);

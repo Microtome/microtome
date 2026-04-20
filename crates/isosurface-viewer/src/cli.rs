@@ -68,10 +68,13 @@ pub struct Args {
     #[arg(long)]
     pub wireframe: bool,
 
-    /// In wireframe mode, cull back faces so only the front-facing
-    /// triangles are drawn. No effect on the solid Phong path.
-    #[arg(long)]
-    pub cull_back: bool,
+    /// In wireframe mode, how to handle back-facing geometry. `plain`
+    /// shows every line; `filled` paints a background-colour fill
+    /// behind the wires so back lines are occluded; `cull-back`
+    /// drops back-facing triangles entirely. No effect on the solid
+    /// Phong path.
+    #[arg(long, value_enum, default_value_t = WireframeModeArg::Plain)]
+    pub wireframe_mode: WireframeModeArg,
 
     /// Skip remeshing — render the input `--mesh` file directly. Useful
     /// for comparing the source against the DC output without rebuilding.
@@ -148,6 +151,28 @@ impl SignModeArg {
         match self {
             Self::Gwn => "gwn",
             Self::Flood => "flood",
+        }
+    }
+}
+
+/// How the wireframe overlay handles back-facing geometry.
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum WireframeModeArg {
+    /// Draw every wire (front and back). Default.
+    Plain,
+    /// Paint a background-colour fill behind the wires so back lines
+    /// are occluded by front geometry.
+    Filled,
+    /// Drop back-facing triangles entirely (front-only wires).
+    CullBack,
+}
+
+impl WireframeModeArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plain => "plain",
+            Self::Filled => "filled",
+            Self::CullBack => "cull-back",
         }
     }
 }

@@ -16,8 +16,8 @@ use microtome_core::{MeshData, MicrotomeError};
 
 use crate::app::{IsosurfaceApp, Structure};
 use crate::camera::OrbitCamera;
-use crate::cli::{Args, default_output_path};
-use crate::renderer::{MeshBuffers, OFFSCREEN_FORMAT, ViewportRenderer};
+use crate::cli::{Args, WireframeModeArg, default_output_path};
+use crate::renderer::{MeshBuffers, OFFSCREEN_FORMAT, ViewportRenderer, WireframeMode};
 
 /// Builds the mesh from `args` and writes a PNG of the rendered frame.
 pub fn run(args: &Args) -> Result<()> {
@@ -110,7 +110,7 @@ pub fn run(args: &Args) -> Result<()> {
         view_proj,
         Some(&mesh_buffers),
         args.wireframe,
-        args.cull_back,
+        wireframe_mode_from_arg(args.wireframe_mode),
     );
     queue.submit(Some(encoder.finish()));
 
@@ -141,6 +141,14 @@ pub fn run(args: &Args) -> Result<()> {
 /// World-space bounding box of the source mesh (when one was loaded),
 /// used to default the camera target to the model's centre.
 type SourceBbox = Option<(Vec3, Vec3)>;
+
+fn wireframe_mode_from_arg(arg: WireframeModeArg) -> WireframeMode {
+    match arg {
+        WireframeModeArg::Plain => WireframeMode::Plain,
+        WireframeModeArg::Filled => WireframeMode::Filled,
+        WireframeModeArg::CullBack => WireframeMode::CullBack,
+    }
+}
 
 /// Loads an OBJ or STL from disk into a `MeshData`.
 fn load_mesh_file(path: &std::path::Path) -> Result<MeshData> {
