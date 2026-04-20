@@ -1,15 +1,31 @@
 //! Isosurface viewer application entry point.
 //!
 //! A standalone viewer for isosurface extraction via dual contouring,
-//! supporting both octree and k-d tree structures.
+//! supporting both octree and k-d tree structures. With `--headless` the
+//! viewer skips the GUI, builds the requested mesh, renders one frame,
+//! writes a PNG, and exits — used for scripted / regression captures.
 
 mod app;
 mod camera;
+mod cli;
+mod headless;
 mod renderer;
 mod viewport;
 
+use clap::Parser;
+
 fn main() {
     env_logger::init();
+
+    let args = cli::Args::parse();
+
+    if args.headless {
+        if let Err(e) = headless::run(&args) {
+            log::error!("headless render failed: {e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

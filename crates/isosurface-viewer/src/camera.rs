@@ -151,6 +151,36 @@ impl OrbitCamera {
         self.phi = std::f32::consts::FRAC_PI_3;
     }
 
+    /// Returns the current azimuth angle in radians.
+    pub fn theta(&self) -> f32 {
+        self.theta
+    }
+
+    /// Returns the current elevation angle from +Z in radians.
+    pub fn phi(&self) -> f32 {
+        self.phi
+    }
+
+    /// Returns the current orbit radius (distance from target).
+    pub fn radius(&self) -> f32 {
+        self.radius
+    }
+
+    /// Returns the current orbit target.
+    pub fn target(&self) -> Vec3 {
+        self.target
+    }
+
+    /// Overwrites the camera state, clamping `phi` and `radius` to their
+    /// allowed ranges. Used to reconstruct the camera from CLI args in
+    /// headless rendering mode.
+    pub fn set_state(&mut self, theta: f32, phi: f32, radius: f32, target: Vec3) {
+        self.theta = theta;
+        self.phi = phi.clamp(PHI_MIN, PHI_MAX);
+        self.radius = radius.clamp(RADIUS_MIN, RADIUS_MAX);
+        self.target = target;
+    }
+
     /// Handles mouse/scroll input from an egui response.
     ///
     /// - Primary button drag rotates the camera (theta/phi).

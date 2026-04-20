@@ -20,3 +20,6 @@ log.workspace = true
 env_logger = "0.11"
 anyhow.workspace = true
 rfd = "0.15"
+clap = { version = "4", features = ["derive"] }
+pollster = "0.4"
+image.workspace = true

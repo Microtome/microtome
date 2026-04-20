@@ -1,6 +1,6 @@
 //! Isosurface viewer application state and eframe integration.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
@@ -15,6 +15,7 @@ use microtome_core::isosurface::{
 use microtome_core::{MeshData, MicrotomeError};
 
 use crate::camera::OrbitCamera;
+use crate::cli::{SignModeArg, StructureArg, default_output_path};
 use crate::renderer::{MeshBuffers, ViewportRenderer};
 use crate::viewport::ViewportPaintCallback;
 
@@ -63,6 +64,9 @@ enum FieldSource {
     LoadedMesh {
         /// Display name (file basename).
         name: String,
+        /// Original on-disk path. Embedded into the "copy CLI" command so
+        /// the headless renderer can re-open the same file.
+        path: PathBuf,
         /// Original mesh geometry, also displayed before the first remesh.
         mesh: Arc<MeshData>,
     },
@@ -107,6 +111,10 @@ pub struct IsosurfaceApp {
     /// Deferred flag: open the file dialog on the next frame (handled outside
     /// the side-panel closure so it can borrow the wgpu device).
     want_load_dialog: bool,
+    /// Last "copy CLI for view" output, shown in the side panel so I (and
+    /// the headless render automation) can read off the exact command that
+    /// reproduces the current view.
+    last_cli_view: Option<String>,
 }
 
 impl IsosurfaceApp {
@@ -141,6 +149,7 @@ impl IsosurfaceApp {
             displaying_remesh: false,
             load_error: None,
             want_load_dialog: false,
+            last_cli_view: None,
         }
     }
 
@@ -221,6 +230,7 @@ impl IsosurfaceApp {
         let name = display_name(path);
         self.field_source = FieldSource::LoadedMesh {
             name,
+            path: path.to_path_buf(),
             mesh: Arc::new(mesh_data),
         };
         self.displaying_remesh = false;
@@ -230,7 +240,7 @@ impl IsosurfaceApp {
     }
 
     /// Builds the default SDF scene: cube with a cylindrical hole through it.
-    fn build_default_scene() -> Box<dyn ScalarField> {
+    pub(crate) fn build_default_scene() -> Box<dyn ScalarField> {
         Box::new(Difference::new(
             Aabb::new(Vec3::splat(-4.0), Vec3::splat(4.0)),
             Cylinder::new(Vec3::new(0.0, 0.0, 3.0)),
@@ -238,7 +248,7 @@ impl IsosurfaceApp {
     }
 
     /// Bounds for the default scene (`[-16, 16]³` world-space).
-    fn default_scene_bounds(depth: u32) -> (PositionCode, f32) {
+    pub(crate) fn default_scene_bounds(depth: u32) -> (PositionCode, f32) {
         let size_code = 1_i32 << (depth - 1);
         let unit_size = 32.0 / size_code as f32;
         let min_code = PositionCode::splat(-size_code / 2);
@@ -246,7 +256,11 @@ impl IsosurfaceApp {
     }
 
     /// Bounds for a loaded mesh: fits the bbox with 10% padding on all sides.
-    fn loaded_mesh_bounds(bbox_min: Vec3, bbox_max: Vec3, depth: u32) -> (PositionCode, f32) {
+    pub(crate) fn loaded_mesh_bounds(
+        bbox_min: Vec3,
+        bbox_max: Vec3,
+        depth: u32,
+    ) -> (PositionCode, f32) {
         let size_code = 1_i32 << (depth - 1);
         let raw_extent = (bbox_max - bbox_min).max_element().max(1e-6);
         let extent = raw_extent * 1.1;
@@ -262,7 +276,7 @@ impl IsosurfaceApp {
     }
 
     /// Builds an isosurface mesh from the scalar field over the given grid.
-    fn build_mesh(
+    pub(crate) fn build_mesh(
         field: &dyn ScalarField,
         min_code: PositionCode,
         depth: u32,
@@ -382,6 +396,50 @@ impl IsosurfaceApp {
                 }
                 // If mesh_opt is None, the channel drops and recv will fail gracefully
             });
+    }
+
+    /// Formats a `cargo run` command line that reproduces the current
+    /// view in headless mode (writes a PNG and exits). Includes the loaded
+    /// mesh path when applicable, all build parameters, the camera state,
+    /// and a fresh `/tmp/microtome-view-*.png` output path.
+    fn format_view_cli(&self) -> String {
+        let mut parts: Vec<String> = vec![
+            "cargo".into(),
+            "run".into(),
+            "--release".into(),
+            "-q".into(),
+            "-p".into(),
+            "isosurface-viewer".into(),
+            "--".into(),
+            "--headless".into(),
+        ];
+        if let FieldSource::LoadedMesh { path, .. } = &self.field_source {
+            parts.push("--mesh".into());
+            parts.push(quote_path(path));
+        }
+        parts.push("--depth".into());
+        parts.push(self.octree_depth.to_string());
+        parts.push("--threshold".into());
+        parts.push(format!("{:.6}", self.error_threshold));
+        parts.push("--structure".into());
+        parts.push(StructureArg::from(self.structure).as_str().into());
+        parts.push("--sign-mode".into());
+        parts.push(SignModeArg::from(self.sign_mode).as_str().into());
+        parts.push("--theta".into());
+        parts.push(format!("{:.6}", self.camera.theta()));
+        parts.push("--phi".into());
+        parts.push(format!("{:.6}", self.camera.phi()));
+        parts.push("--radius".into());
+        parts.push(format!("{:.6}", self.camera.radius()));
+        let t = self.camera.target();
+        parts.push("--target".into());
+        parts.push(format!("{:.6},{:.6},{:.6}", t.x, t.y, t.z));
+        if self.show_wireframe {
+            parts.push("--wireframe".into());
+        }
+        parts.push("--output".into());
+        parts.push(quote_path(&default_output_path()));
+        parts.join(" ")
     }
 
     /// Polls for build completion. If ready, uploads the mesh to the GPU.
@@ -660,6 +718,22 @@ impl eframe::App for IsosurfaceApp {
                 if ui.button(persp_label).clicked() {
                     self.camera.use_perspective = !self.camera.use_perspective;
                 }
+
+                ui.separator();
+
+                if ui.button("Copy CLI for view").clicked() {
+                    let cli = self.format_view_cli();
+                    ui.ctx().copy_text(cli.clone());
+                    self.last_cli_view = Some(cli);
+                }
+                if let Some(cli) = &self.last_cli_view {
+                    ui.add(
+                        egui::TextEdit::multiline(&mut cli.as_str())
+                            .font(egui::TextStyle::Monospace)
+                            .desired_rows(4)
+                            .desired_width(f32::INFINITY),
+                    );
+                }
             });
 
         // Handle deferred file-dialog request now that the panel closure has
@@ -713,4 +787,19 @@ fn display_name(path: &Path) -> String {
         .and_then(|n| n.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Single-quotes a path for the generated CLI command iff it contains a
+/// shell-significant character. Keeps the common no-spaces case readable.
+fn quote_path(path: &Path) -> String {
+    let s = path.display().to_string();
+    let needs_quotes = s
+        .chars()
+        .any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '$' | '`' | '\\' | '*' | '?' | '['));
+    if needs_quotes {
+        let escaped = s.replace('\'', "'\\''");
+        format!("'{escaped}'")
+    } else {
+        s
+    }
 }

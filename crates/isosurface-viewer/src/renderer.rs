@@ -6,7 +6,7 @@
 use glam::Mat4;
 
 /// Offscreen render target format.
-const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// Depth buffer format.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -474,6 +474,85 @@ impl ViewportRenderer {
         render_pass.draw(0..3, 0..1);
     }
 
+    /// Returns the current offscreen target dimensions.
+    pub fn offscreen_size(&self) -> (u32, u32) {
+        (self.offscreen_width, self.offscreen_height)
+    }
+
+    /// Copies the current offscreen color texture back to the CPU as
+    /// tightly-packed `Rgba8UnormSrgb` bytes (`width * height * 4`).
+    /// Used by headless render mode to write a PNG of the rendered frame.
+    pub fn read_offscreen_pixels(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> anyhow::Result<Vec<u8>> {
+        let width = self.offscreen_width;
+        let height = self.offscreen_height;
+        let bytes_per_pixel = 4u32;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
+        let buffer_size = u64::from(padded_bytes_per_row) * u64::from(height);
+
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("offscreen_readback"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("offscreen_readback_encoder"),
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.color_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit(Some(encoder.finish()));
+
+        let slice = buffer.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| anyhow::anyhow!("device poll failed: {e:?}"))?;
+        receiver
+            .recv()
+            .map_err(|e| anyhow::anyhow!("readback channel closed: {e}"))?
+            .map_err(|e| anyhow::anyhow!("buffer map failed: {e:?}"))?;
+
+        let view = slice.get_mapped_range();
+        let mut packed = Vec::with_capacity((unpadded_bytes_per_row * height) as usize);
+        for row in 0..height {
+            let start = (row * padded_bytes_per_row) as usize;
+            let end = start + unpadded_bytes_per_row as usize;
+            packed.extend_from_slice(&view[start..end]);
+        }
+        drop(view);
+        buffer.unmap();
+        Ok(packed)
+    }
+
     /// Grows the uniform buffer to hold at least `needed` entries.
     fn grow_uniform_buffer(&mut self, device: &wgpu::Device, needed: u32) {
         let new_max = needed.next_power_of_two();
@@ -524,7 +603,9 @@ fn create_offscreen_targets(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: OFFSCREEN_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
     let color_view = color_texture.create_view(&Default::default());
