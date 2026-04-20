@@ -110,6 +110,7 @@ pub fn run(args: &Args) -> Result<()> {
         view_proj,
         Some(&mesh_buffers),
         args.wireframe,
+        args.cull_back,
     );
     queue.submit(Some(encoder.finish()));
 

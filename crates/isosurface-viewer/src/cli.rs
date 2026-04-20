@@ -68,6 +68,11 @@ pub struct Args {
     #[arg(long)]
     pub wireframe: bool,
 
+    /// In wireframe mode, cull back faces so only the front-facing
+    /// triangles are drawn. No effect on the solid Phong path.
+    #[arg(long)]
+    pub cull_back: bool,
+
     /// Skip remeshing — render the input `--mesh` file directly. Useful
     /// for comparing the source against the DC output without rebuilding.
     #[arg(long)]

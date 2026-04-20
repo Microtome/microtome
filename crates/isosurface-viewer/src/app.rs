@@ -92,6 +92,8 @@ pub struct IsosurfaceApp {
     /// trace back to the winding-number path.
     sign_mode: SignMode,
     show_wireframe: bool,
+    /// Cull back faces in wireframe mode (front-facing tris only).
+    cull_back: bool,
     needs_rebuild: bool,
     /// Whether settings have changed since the last build.
     stale: bool,
@@ -140,6 +142,7 @@ impl IsosurfaceApp {
             octree_depth: 8,
             sign_mode: SignMode::Gwn,
             show_wireframe: false,
+            cull_back: false,
             needs_rebuild: true,
             stale: false,
             build_rx: None,
@@ -440,6 +443,9 @@ impl IsosurfaceApp {
         if self.show_wireframe {
             parts.push("--wireframe".into());
         }
+        if self.cull_back {
+            parts.push("--cull-back".into());
+        }
         parts.push("--output".into());
         parts.push(quote_path(&default_output_path()));
         parts.join(" ")
@@ -694,6 +700,10 @@ impl eframe::App for IsosurfaceApp {
                 ui.separator();
 
                 ui.checkbox(&mut self.show_wireframe, "Wireframe");
+                ui.add_enabled(
+                    self.show_wireframe,
+                    egui::Checkbox::new(&mut self.cull_back, "Cull back faces"),
+                );
 
                 ui.separator();
                 ui.label("View presets:");
@@ -773,6 +783,7 @@ impl eframe::App for IsosurfaceApp {
                 width,
                 height,
                 show_wireframe: self.show_wireframe,
+                cull_back: self.cull_back,
             },
         );
         painter.add(callback);

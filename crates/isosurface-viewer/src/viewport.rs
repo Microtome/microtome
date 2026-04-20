@@ -21,6 +21,8 @@ pub struct ViewportPaintCallback {
     pub height: u32,
     /// Whether to draw wireframe overlay.
     pub show_wireframe: bool,
+    /// Whether to back-face cull the wireframe (front faces only).
+    pub cull_back: bool,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
@@ -42,6 +44,7 @@ impl egui_wgpu::CallbackTrait for ViewportPaintCallback {
                 self.view_proj,
                 self.mesh.as_deref(),
                 self.show_wireframe,
+                self.cull_back,
             );
         }
         Vec::new()

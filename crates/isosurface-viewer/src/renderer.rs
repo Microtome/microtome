@@ -53,6 +53,7 @@ pub struct MeshBuffers {
 pub struct ViewportRenderer {
     phong_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
+    wireframe_pipeline_culled: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     max_draw_calls: u32,
@@ -184,62 +185,69 @@ impl ViewportRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/wireframe.wgsl").into()),
         });
 
-        let wireframe_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("wireframe_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &wireframe_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<microtome_core::MeshVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x3,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x3,
-                            offset: 12,
-                            shader_location: 1,
-                        },
-                    ],
-                }],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                polygon_mode: wgpu::PolygonMode::Line,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState {
-                    constant: -2,
-                    slope_scale: -1.0,
-                    clamp: 0.0,
+        let wireframe_buffers = [wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<microtome_core::MeshVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
                 },
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &wireframe_shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: OFFSCREEN_FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 12,
+                    shader_location: 1,
+                },
+            ],
+        }];
+        let wireframe_depth_stencil = Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState {
+                constant: -2,
+                slope_scale: -1.0,
+                clamp: 0.0,
+            },
         });
+        let make_wireframe_pipeline = |label: &'static str, cull: Option<wgpu::Face>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &wireframe_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &wireframe_buffers,
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    polygon_mode: wgpu::PolygonMode::Line,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: cull,
+                    ..Default::default()
+                },
+                depth_stencil: wireframe_depth_stencil.clone(),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &wireframe_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: OFFSCREEN_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let wireframe_pipeline = make_wireframe_pipeline("wireframe_pipeline", None);
+        let wireframe_pipeline_culled =
+            make_wireframe_pipeline("wireframe_pipeline_culled", Some(wgpu::Face::Back));
 
         // --- Blit pipeline ---
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -322,6 +330,7 @@ impl ViewportRenderer {
         Self {
             phong_pipeline,
             wireframe_pipeline,
+            wireframe_pipeline_culled,
             uniform_buffer,
             uniform_bind_group,
             max_draw_calls,
@@ -341,6 +350,7 @@ impl ViewportRenderer {
     /// Renders the scene to the offscreen target with depth testing.
     ///
     /// Resizes offscreen targets if viewport dimensions changed.
+    /// `cull_back` only affects the wireframe pipeline.
     #[allow(clippy::too_many_arguments)]
     pub fn render_offscreen(
         &mut self,
@@ -352,6 +362,7 @@ impl ViewportRenderer {
         view_proj: Mat4,
         mesh: Option<&MeshBuffers>,
         show_wireframe: bool,
+        cull_back: bool,
     ) {
         let w = width.max(1);
         let h = height.max(1);
@@ -443,7 +454,12 @@ impl ViewportRenderer {
                 if show_wireframe {
                     // Wireframe only — no solid faces.
                     let offset = UNIFORM_ALIGN as u32;
-                    pass.set_pipeline(&self.wireframe_pipeline);
+                    let pipeline = if cull_back {
+                        &self.wireframe_pipeline_culled
+                    } else {
+                        &self.wireframe_pipeline
+                    };
+                    pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
                     pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
                     pass.set_index_buffer(
