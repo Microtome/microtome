@@ -54,6 +54,11 @@ pub struct ViewportRenderer {
     phong_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline_culled: wgpu::RenderPipeline,
+    /// Solid-black fill pipeline drawn behind the wireframe so the
+    /// mesh reads as black faces with red edges. Mixed-winding DC
+    /// triangles all paint the same colour, hiding the artefact.
+    fill_black_pipeline: wgpu::RenderPipeline,
+    fill_black_pipeline_culled: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     max_draw_calls: u32,
@@ -249,6 +254,47 @@ impl ViewportRenderer {
         let wireframe_pipeline_culled =
             make_wireframe_pipeline("wireframe_pipeline_culled", Some(wgpu::Face::Back));
 
+        // --- Black-fill pipeline used as the backdrop pass for wireframe ---
+        let fill_black_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("fill_black_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fill_black.wgsl").into()),
+        });
+        let make_fill_black_pipeline = |label: &'static str, cull: Option<wgpu::Face>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &fill_black_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &wireframe_buffers,
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: cull,
+                    ..Default::default()
+                },
+                depth_stencil: depth_stencil.clone(),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &fill_black_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: OFFSCREEN_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let fill_black_pipeline = make_fill_black_pipeline("fill_black_pipeline", None);
+        let fill_black_pipeline_culled =
+            make_fill_black_pipeline("fill_black_pipeline_culled", Some(wgpu::Face::Back));
+
         // --- Blit pipeline ---
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("blit_shader"),
@@ -331,6 +377,8 @@ impl ViewportRenderer {
             phong_pipeline,
             wireframe_pipeline,
             wireframe_pipeline_culled,
+            fill_black_pipeline,
+            fill_black_pipeline_culled,
             uniform_buffer,
             uniform_bind_group,
             max_draw_calls,
@@ -452,20 +500,32 @@ impl ViewportRenderer {
 
             if let Some(mesh_buf) = mesh {
                 if show_wireframe {
-                    // Wireframe only — no solid faces.
                     let offset = UNIFORM_ALIGN as u32;
-                    let pipeline = if cull_back {
-                        &self.wireframe_pipeline_culled
-                    } else {
-                        &self.wireframe_pipeline
-                    };
-                    pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[offset]);
                     pass.set_vertex_buffer(0, mesh_buf.vertex_buffer.slice(..));
                     pass.set_index_buffer(
                         mesh_buf.index_buffer.slice(..),
                         wgpu::IndexFormat::Uint32,
                     );
+                    // Pass 1: solid black fill — DC's mixed-winding
+                    // triangles all paint the same colour, so the edges
+                    // (drawn next) read against a single dark mass
+                    // instead of a confusing tangle of front/back lines.
+                    let fill_pipeline = if cull_back {
+                        &self.fill_black_pipeline_culled
+                    } else {
+                        &self.fill_black_pipeline
+                    };
+                    pass.set_pipeline(fill_pipeline);
+                    pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
+                    // Pass 2: red wireframe on top (depth bias in the
+                    // pipeline pulls it just in front of the fill).
+                    let wire_pipeline = if cull_back {
+                        &self.wireframe_pipeline_culled
+                    } else {
+                        &self.wireframe_pipeline
+                    };
+                    pass.set_pipeline(wire_pipeline);
                     pass.draw_indexed(0..mesh_buf.index_count, 0, 0..1);
                 } else {
                     // Solid shaded mesh.
