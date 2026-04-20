@@ -11,8 +11,35 @@ use glam::Vec3;
 // #define SVD_NUM_SWEEPS 5
 const SVD_NUM_SWEEPS: usize = 5;
 
-// const float Tiny_Number = 1.e-4f;
-const TINY_NUMBER: f32 = 1.0e-4;
+// Floor for the SVD pseudoinverse: any singular value smaller than
+// `MIN_SVD_FLOOR` in absolute terms is treated as zero, regardless of
+// the relative threshold below.
+const MIN_SVD_FLOOR: f32 = 1.0e-12;
+
+/// Relative-to-`σ_max` truncation threshold for the SVD pseudoinverse.
+/// The C++ source used an absolute `Tiny_Number = 1e-4`, which is
+/// well-behaved for clean SDF inputs (normals at corners are exactly
+/// the gradient — `ATA` is well-conditioned) but breaks badly for
+/// mesh-derived normals: each constraint is a per-triangle face
+/// normal, so a curved feature rasterised onto the grid produces an
+/// `ATA` with several genuinely-tiny but-not-zero singular values.
+/// An absolute threshold leaves those singular values un-truncated;
+/// the pseudoinverse then amplifies their inverse into the QEF
+/// solution, throwing vertices far past the surface — visible as
+/// severe chips and spikes on gear teeth and other curved-but-
+/// detailed features.
+///
+/// Switching to relative truncation (`σ_i < SVD_RELATIVE_TOL · σ_max`)
+/// scales naturally with the matrix's largest singular value: cells
+/// with few constraints (rank-1 surface, σ_max ≈ 1) get the same
+/// truncation behaviour as cells with many (σ_max ≈ point_count).
+/// `0.1` is the figure recommended by Schaefer 2003 for unit-norm
+/// constraints — rank-3 sharp corners (`σ = 1, 1, 1`) stay crisp
+/// because their smallest σ matches the largest, while rank-1/rank-2
+/// features fall back to the mass-point along the unconstrained
+/// axes. Smaller values (`1e-2`, `1e-6`) leave the pseudoinverse
+/// dominated by noise on curved-but-detailed features.
+const SVD_RELATIVE_TOL: f32 = 1.0e-1;
 
 /// 3x3 matrix stored as `[col][row]` to match GLM's `mat3x3[col][row]`.
 type Mat3x3 = [[f32; 3]; 3];
@@ -415,11 +442,13 @@ fn svd_rotateq_xy(x: &mut f32, y: &mut f32, a: f32, c: f32, s: f32) {
     *y = ss * u + mx + cc * v;
 }
 
-// float svd_invdet(float x, float tol) {
-//   return (std::abs(x) < tol || std::abs(1.0f / x) < tol) ? 0.0f : 1.0f / x;
-// }
+/// Pseudoinverse helper: returns `1/x`, or 0 when `|x|` falls below
+/// `tol`. The C++ source also short-circuits to 0 when `|1/x| < tol`
+/// (i.e. `|x| > 1/tol`); we keep that guard at `MIN_SVD_FLOOR` so
+/// extremely large singular values (whose inverses would underflow)
+/// don't pollute the result.
 fn svd_invdet(x: f32, tol: f32) -> f32 {
-    if x.abs() < tol || (1.0 / x).abs() < tol {
+    if x.abs() < tol || (1.0 / x).abs() < MIN_SVD_FLOOR {
         0.0
     } else {
         1.0 / x
@@ -441,9 +470,11 @@ fn svd_invdet(x: f32, tol: f32) -> f32 {
 //                 v[2][0] * d0 * v[2][0] + v[2][1] * d1 * v[2][1] + v[2][2] * d2 * v[2][2]);
 // }
 fn svd_pseudoinverse(sigma: Vec3, v: &Mat3x3) -> Mat3x3 {
-    let d0 = svd_invdet(sigma.x, TINY_NUMBER);
-    let d1 = svd_invdet(sigma.y, TINY_NUMBER);
-    let d2 = svd_invdet(sigma.z, TINY_NUMBER);
+    let sigma_max = sigma.x.abs().max(sigma.y.abs()).max(sigma.z.abs());
+    let tol = (sigma_max * SVD_RELATIVE_TOL).max(MIN_SVD_FLOOR);
+    let d0 = svd_invdet(sigma.x, tol);
+    let d1 = svd_invdet(sigma.y, tol);
+    let d2 = svd_invdet(sigma.z, tol);
     // glm::mat3 constructor takes args in column-major order:
     // (col0_row0, col0_row1, col0_row2, col1_row0, col1_row1, ...)
     // Our Mat3x3 is [col][row], so we fill it directly.
