@@ -416,6 +416,9 @@ impl IsosurfaceApp {
         if let FieldSource::LoadedMesh { path, .. } = &self.field_source {
             parts.push("--mesh".into());
             parts.push(quote_path(path));
+            if !self.displaying_remesh {
+                parts.push("--original".into());
+            }
         }
         parts.push("--depth".into());
         parts.push(self.octree_depth.to_string());

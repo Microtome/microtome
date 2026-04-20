@@ -67,6 +67,11 @@ pub struct Args {
     /// Render the wireframe overlay instead of solid Phong-shaded faces.
     #[arg(long)]
     pub wireframe: bool,
+
+    /// Skip remeshing — render the input `--mesh` file directly. Useful
+    /// for comparing the source against the DC output without rebuilding.
+    #[arg(long)]
+    pub original: bool,
 }
 
 /// CLI surface for [`Structure`]. Kept separate so the `clap` derive

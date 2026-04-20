@@ -23,15 +23,25 @@ use crate::renderer::{MeshBuffers, OFFSCREEN_FORMAT, ViewportRenderer};
 pub fn run(args: &Args) -> Result<()> {
     let structure: Structure = args.structure.into();
 
-    // ---- Build the isosurface mesh ----------------------------------
-    let (mesh, frame_bbox) = build_mesh(args, structure)?;
-    let mut iso_mesh = mesh.ok_or_else(|| {
-        anyhow!("isosurface build produced no geometry — check --depth/--threshold and --mesh")
-    })?;
-    iso_mesh.generate_flat_normals();
-    let mesh_data = iso_mesh.to_mesh_data();
+    // ---- Pick mesh: original input file, or DC-extracted ------------
+    let (mesh_data, frame_bbox) = if args.original {
+        let path = args
+            .mesh
+            .as_ref()
+            .ok_or_else(|| anyhow!("--original requires --mesh"))?;
+        let loaded = load_mesh_file(path)?;
+        let bbox = (loaded.bbox.min, loaded.bbox.max);
+        (loaded, Some(bbox))
+    } else {
+        let (mesh, frame_bbox) = build_mesh(args, structure)?;
+        let mut iso_mesh = mesh.ok_or_else(|| {
+            anyhow!("isosurface build produced no geometry — check --depth/--threshold and --mesh")
+        })?;
+        iso_mesh.generate_flat_normals();
+        (iso_mesh.to_mesh_data(), frame_bbox)
+    };
     if mesh_data.vertices.is_empty() || mesh_data.indices.is_empty() {
-        return Err(anyhow!("built mesh has no vertices/indices"));
+        return Err(anyhow!("rendered mesh has no vertices/indices"));
     }
 
     // ---- Camera -----------------------------------------------------
@@ -131,28 +141,34 @@ pub fn run(args: &Args) -> Result<()> {
 /// used to default the camera target to the model's centre.
 type SourceBbox = Option<(Vec3, Vec3)>;
 
+/// Loads an OBJ or STL from disk into a `MeshData`.
+fn load_mesh_file(path: &std::path::Path) -> Result<MeshData> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    let mesh: MeshData = match ext.as_str() {
+        "obj" => MeshData::from_obj(path)?,
+        "stl" => {
+            let file = std::fs::File::open(path).map_err(MicrotomeError::Io)?;
+            let mut reader = std::io::BufReader::new(file);
+            MeshData::from_stl(&mut reader)?
+        }
+        other => return Err(anyhow!("unsupported mesh extension `.{other}`")),
+    };
+    if mesh.indices.is_empty() || mesh.vertices.is_empty() {
+        return Err(anyhow!("loaded mesh has no geometry"));
+    }
+    Ok(mesh)
+}
+
 /// Builds the requested isosurface mesh. Returns `(mesh, optional_bbox)`
 /// — bbox is set when a file was loaded so the caller can default the
 /// camera target to the model's centre.
 fn build_mesh(args: &Args, structure: Structure) -> Result<(Option<IsoMesh>, SourceBbox)> {
     if let Some(path) = &args.mesh {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|s| s.to_ascii_lowercase())
-            .unwrap_or_default();
-        let mesh: MeshData = match ext.as_str() {
-            "obj" => MeshData::from_obj(path)?,
-            "stl" => {
-                let file = std::fs::File::open(path).map_err(MicrotomeError::Io)?;
-                let mut reader = std::io::BufReader::new(file);
-                MeshData::from_stl(&mut reader)?
-            }
-            other => return Err(anyhow!("unsupported mesh extension `.{other}`")),
-        };
-        if mesh.indices.is_empty() || mesh.vertices.is_empty() {
-            return Err(anyhow!("loaded mesh has no geometry"));
-        }
+        let mesh = load_mesh_file(path)?;
         let (min_code, unit_size) =
             IsosurfaceApp::loaded_mesh_bounds(mesh.bbox.min, mesh.bbox.max, args.depth);
         let size_code = 1_i32 << (args.depth - 1);
