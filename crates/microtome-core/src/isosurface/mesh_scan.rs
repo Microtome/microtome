@@ -60,14 +60,14 @@ use crate::mesh::MeshData;
 
 use super::indicators::{EDGE_MAP, PositionCode, code_to_pos, decode_cell};
 use super::mesh_bvh::MeshBvh;
+use super::polymender;
 use super::scalar_field::ScalarField;
 
 /// Selects how corner inside/outside flags are computed during
 /// [`ScannedMeshField::from_mesh`].
 ///
 /// Picked at runtime so the viewer (and tests) can A/B between the
-/// robust-but-expensive winding-number path and a much cheaper
-/// flood-fill that's correct on clean watertight meshes.
+/// three supported sign-generation paths.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignMode {
     /// Generalized winding number via [`MeshBvh`] (Jacobson 2013,
@@ -86,6 +86,14 @@ pub enum SignMode {
     /// boundaries, and holes (sign can leak through and invert a
     /// whole region).
     FloodFill,
+    /// PolyMender (Ju 2004, "Robust Repair of Polygonal Models"):
+    /// scan-convert, detect boundary cycles on the dual surface
+    /// (primal cell faces with odd intersection-edge count), patch
+    /// the cycles with synthetic intersection edges so `∂S = ∅`,
+    /// then flood-fill signs on the augmented edge set. Closes
+    /// holes in the input mesh instead of leaving GWN's smooth
+    /// taper across them.
+    Polymender,
 }
 
 /// Scalar field derived from a triangle mesh via PolyMender-style scan
@@ -132,11 +140,11 @@ pub struct ScannedMeshField {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
-pub(super) struct EdgeKey {
+pub(crate) struct EdgeKey {
     /// Grid coordinate of the edge's lower endpoint.
-    pub(super) lower: PositionCode,
+    pub(crate) lower: PositionCode,
     /// Axis of the edge: 0 = +X, 1 = +Y, 2 = +Z.
-    pub(super) axis: u8,
+    pub(crate) axis: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -220,7 +228,46 @@ impl ScannedMeshField {
             SignMode::FloodFill => {
                 // Flood-fill is inherently global (BFS from a known-
                 // outside seed), so populate the cache eagerly.
-                flood_fill_signs(&edges, &mut sign_storage, min_code, dims);
+                let key_set: HashSet<EdgeKey> = edges.keys().copied().collect();
+                flood_fill_signs(&key_set, &mut sign_storage, min_code, dims);
+                None
+            }
+            SignMode::Polymender => {
+                // PolyMender §5.2 + §5.3: detect odd-parity cell
+                // faces on the dual surface, solve `M x = b` over
+                // GF(2) to find synthetic edges whose toggles zero
+                // the parity. §5.4 (the same `flood_fill_signs` the
+                // plain flood-fill path uses) then propagates a
+                // consistent sign configuration over `S ⊕ P`.
+                let real_keys: HashSet<EdgeKey> = edges.keys().copied().collect();
+                let patch_keys = polymender::compute_patch_edges(&real_keys);
+                // Symmetric difference `S ⊕ P`: anything in exactly
+                // one of the two sets.
+                let mut augmented: HashSet<EdgeKey> = real_keys;
+                for e in &patch_keys {
+                    if !augmented.insert(*e) {
+                        augmented.remove(e);
+                    }
+                }
+                flood_fill_signs(&augmented, &mut sign_storage, min_code, dims);
+                // Seed Hermite entries for patch edges that are
+                // genuinely synthetic (not already real). Position =
+                // edge midpoint; normal = the edge's own axis. A
+                // nearest-real-normal would pick up the hole *rim*'s
+                // normal (tangent to the missing surface) and steer
+                // DC the wrong way; axis-aligned normals give a flat
+                // patch surface perpendicular to the edges — which
+                // matches PolyMender's implicit "closed dual surface"
+                // interpretation of the synthetic edges.
+                for edge in patch_keys {
+                    if edges.contains_key(&edge) {
+                        continue;
+                    }
+                    let position = edge_midpoint(edge, unit_size);
+                    let mut normal = Vec3::ZERO;
+                    normal[edge.axis as usize] = 1.0;
+                    edges.insert(edge, EdgeHit { position, normal });
+                }
                 None
             }
         };
@@ -446,9 +493,18 @@ fn normalize_or_z(n: Vec3) -> Vec3 {
 /// repair watertight tie-break artefacts: when a triangle grazes a
 /// shared grid vertex, exactly one incident edge wins the M-T crossing,
 /// and the others' GWN sign-flipping endpoints turn into "missing"
-/// edges. The triangle that hit the cousin is the same surface that
-/// crosses *this* edge, so its (position, normal) is the right Hermite
-/// data to use here.
+/// edges.
+///
+/// Cousins are ranked by perpendicular distance from their hit to the
+/// *line through the requested edge*, not by distance to the shared
+/// endpoint vertex. The reason: at sharp features (e.g. gear-tooth
+/// tips, where two flanks meet at a ridge close to a grid vertex)
+/// cousins from each flank are equidistant from the shared vertex, and
+/// vertex-distance ranking can pick a hit on the *wrong* flank — its
+/// tangent plane then pulls the QEF off-feature, visibly chipping the
+/// flank surface in the DC output. Perpendicular-to-edge ranking
+/// naturally prefers hits whose surface piece actually crosses the
+/// requested edge.
 fn synthesize_from_cousins(
     edge: EdgeKey,
     edges: &HashMap<EdgeKey, EdgeHit>,
@@ -460,11 +516,13 @@ fn synthesize_from_cousins(
     let v_hi = edge.lower + axis_unit;
     let v_lo_world = code_to_pos(v_lo, unit_size);
     let v_hi_world = code_to_pos(v_hi, unit_size);
+    let edge_vec = v_hi_world - v_lo_world;
+    let edge_len_sq = edge_vec.length_squared();
 
     let mut best_d2 = f32::INFINITY;
     let mut best: Option<EdgeHit> = None;
 
-    for &(vertex_code, vertex_world) in &[(v_lo, v_lo_world), (v_hi, v_hi_world)] {
+    for &(vertex_code, _) in &[(v_lo, v_lo_world), (v_hi, v_hi_world)] {
         for cousin_axis in 0..3u8 {
             for direction in [-1i32, 1] {
                 // Skip the original edge itself (the only +axis-aligned
@@ -492,9 +550,20 @@ fn synthesize_from_cousins(
                 let Some(hit) = edges.get(&cousin_key) else {
                     continue;
                 };
-                let d2 = (hit.position - vertex_world).length_squared();
-                if d2 < best_d2 {
-                    best_d2 = d2;
+                // Perpendicular distance from cousin hit to the line
+                // through the requested edge. Hits on the same surface
+                // piece our edge crosses sit close to that line; hits
+                // from a neighbouring sharp feature sit further off.
+                let to_hit = hit.position - v_lo_world;
+                let along = if edge_len_sq > 0.0 {
+                    to_hit.dot(edge_vec) / edge_len_sq
+                } else {
+                    0.0
+                };
+                let on_line = v_lo_world + edge_vec * along;
+                let perp_d2 = (hit.position - on_line).length_squared();
+                if perp_d2 < best_d2 {
+                    best_d2 = perp_d2;
                     best = Some(*hit);
                 }
             }
@@ -515,7 +584,7 @@ fn synthesize_from_cousins(
 /// non-manifold or self-intersecting features can flip the sign of a
 /// downstream region.
 fn flood_fill_signs(
-    edges: &HashMap<EdgeKey, EdgeHit>,
+    edges: &HashSet<EdgeKey>,
     signs: &mut [u8],
     min_code: PositionCode,
     dims: IVec3,
@@ -553,13 +622,16 @@ fn flood_fill_signs(
                     continue;
                 }
                 // The grid edge between `curr` and `neighbor` is keyed
-                // by whichever endpoint is the lower along `axis`.
+                // by whichever endpoint is the lower along `axis`,
+                // in *absolute* grid coordinates (same frame as
+                // scan_triangle's inserts and polymender's patch
+                // edges).
                 let lower = if direction > 0 { curr } else { neighbor };
                 let edge_key = EdgeKey {
                     lower: min_code + lower,
                     axis: axis as u8,
                 };
-                let crosses = edges.contains_key(&edge_key);
+                let crosses = edges.contains(&edge_key);
                 // Toggle between 1 (outside) and 2 (inside) on each
                 // crossed edge; carry the sign across non-crossed
                 // edges. The 0 sentinel is reserved for "unknown" in

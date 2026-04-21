@@ -38,23 +38,23 @@ pub struct Args {
     pub height: u32,
 
     /// Camera azimuth in radians.
-    #[arg(long, default_value_t = std::f32::consts::FRAC_PI_4)]
+    #[arg(long, allow_hyphen_values = true, default_value_t = std::f32::consts::FRAC_PI_4)]
     pub theta: f32,
     /// Camera elevation from +Z in radians.
-    #[arg(long, default_value_t = std::f32::consts::FRAC_PI_3)]
+    #[arg(long, allow_hyphen_values = true, default_value_t = std::f32::consts::FRAC_PI_3)]
     pub phi: f32,
     /// Camera orbit radius (distance from target).
-    #[arg(long, default_value_t = 16.0)]
+    #[arg(long, allow_hyphen_values = true, default_value_t = 16.0)]
     pub radius: f32,
     /// Orbit target as `x,y,z` in world space.
-    #[arg(long, value_parser = parse_vec3, default_value = "0,0,0")]
+    #[arg(long, allow_hyphen_values = true, value_parser = parse_vec3, default_value = "0,0,0")]
     pub target: Vec3,
 
     /// Octree depth.
     #[arg(long, default_value_t = 8)]
     pub depth: u32,
     /// QEF error threshold for octree simplification.
-    #[arg(long, default_value_t = 1e-2)]
+    #[arg(long, allow_hyphen_values = true, default_value_t = 1e-2)]
     pub threshold: f32,
     /// Acceleration structure used to extract the mesh.
     #[arg(long, value_enum, default_value_t = StructureArg::Octree)]
@@ -126,6 +126,7 @@ impl StructureArg {
 pub enum SignModeArg {
     Gwn,
     Flood,
+    Polymender,
 }
 
 impl From<SignModeArg> for SignMode {
@@ -133,6 +134,7 @@ impl From<SignModeArg> for SignMode {
         match s {
             SignModeArg::Gwn => Self::Gwn,
             SignModeArg::Flood => Self::FloodFill,
+            SignModeArg::Polymender => Self::Polymender,
         }
     }
 }
@@ -142,6 +144,7 @@ impl From<SignMode> for SignModeArg {
         match s {
             SignMode::Gwn => Self::Gwn,
             SignMode::FloodFill => Self::Flood,
+            SignMode::Polymender => Self::Polymender,
         }
     }
 }
@@ -151,6 +154,7 @@ impl SignModeArg {
         match self {
             Self::Gwn => "gwn",
             Self::Flood => "flood",
+            Self::Polymender => "polymender",
         }
     }
 }

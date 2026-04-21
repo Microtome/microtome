@@ -580,6 +580,7 @@ impl eframe::App for IsosurfaceApp {
                         .selected_text(match self.sign_mode {
                             SignMode::Gwn => "GWN (BVH)",
                             SignMode::FloodFill => "Flood fill",
+                            SignMode::Polymender => "PolyMender",
                         })
                         .show_ui(ui, |ui| {
                             if ui
@@ -593,6 +594,16 @@ impl eframe::App for IsosurfaceApp {
                                     &mut self.sign_mode,
                                     SignMode::FloodFill,
                                     "Flood fill",
+                                )
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                            if ui
+                                .selectable_value(
+                                    &mut self.sign_mode,
+                                    SignMode::Polymender,
+                                    "PolyMender",
                                 )
                                 .changed()
                             {

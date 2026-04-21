@@ -10,11 +10,17 @@ mod mesh_bvh;
 pub mod mesh_output;
 pub mod mesh_scan;
 pub mod octree;
+mod polymender;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod qef;
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod rectilinear_grid;
 pub mod scalar_field;
+// sign_gen.rs was a previous, unfinished attempt at PolyMender-style
+// repair. The working implementation now lives in `polymender.rs`;
+// keep this around as a reference but relax strict lints so the dead
+// code doesn't block the workspace build.
+#[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 mod sign_gen;
 pub mod vertex;
 pub mod volume_data;
