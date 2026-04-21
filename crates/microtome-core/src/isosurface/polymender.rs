@@ -115,15 +115,22 @@ pub(super) fn compute_patch_edges(edges: &HashSet<EdgeKey>) -> HashSet<EdgeKey> 
     let cycles = extract_cycles(boundary_faces);
 
     // Each cycle is patched independently inside its own bbox-
-    // expanded discrete convex hull. A single global GF(2) solve is
-    // tempting, but the minimum candidate set (edges of boundary
-    // faces) is typically too tight to span the boundary's homology
-    // class — the system ends up inconsistent. Per-cycle bbox
-    // expansion by one cell in each direction gives the solver
-    // enough free edges to always find a patch.
+    // expanded discrete convex hull. Two gotchas:
+    //
+    //   * Candidate edges must span the boundary's homology class.
+    //     The minimum candidate set (edges of boundary faces) is
+    //     typically too tight, leaving the GF(2) system
+    //     inconsistent. A bbox+1 expansion fixes this.
+    //
+    //   * We must NOT let the solver toggle existing real edges. A
+    //     real edge represents a genuine scan-converted crossing;
+    //     toggling it off erases that surface and opens a new hole
+    //     somewhere the mesh had geometry. Excluding real edges
+    //     from the candidate set keeps the patch purely additive —
+    //     synthetic edges inserted into empty grid positions.
     let mut patch: HashSet<EdgeKey> = HashSet::new();
     for cycle in &cycles {
-        if let Some(p) = patch_cycle(cycle) {
+        if let Some(p) = patch_cycle(cycle, edges) {
             for edge in p {
                 // Patches from different cycles XOR together — two
                 // cycles that want to toggle the same edge cancel.
@@ -176,10 +183,11 @@ fn extract_cycles(mut boundary: HashSet<FaceKey>) -> Vec<Vec<FaceKey>> {
 }
 
 /// Patches a single boundary cycle via a local GF(2) solve within an
-/// expanded bbox. Returns `None` if no patch exists with the
-/// candidate edges we're willing to consider (typically means the
-/// cycle is ill-formed — e.g. its bbox exceeds the grid).
-fn patch_cycle(cycle: &[FaceKey]) -> Option<Vec<EdgeKey>> {
+/// expanded bbox. Excludes `real_edges` from the candidate set so
+/// the patch is purely additive and never erases a scan-converted
+/// crossing. Returns `None` if no purely-additive patch exists with
+/// the candidate edges we're willing to consider.
+fn patch_cycle(cycle: &[FaceKey], real_edges: &HashSet<EdgeKey>) -> Option<Vec<EdgeKey>> {
     // 1. Cycle bbox.
     let mut mn = IVec3::splat(i32::MAX);
     let mut mx = IVec3::splat(i32::MIN);
@@ -196,23 +204,25 @@ fn patch_cycle(cycle: &[FaceKey]) -> Option<Vec<EdgeKey>> {
     mx += pad;
 
     // 3. Candidate edges: every primal edge with lower corner in the
-    //    expanded bbox. That's 3 axis choices × (mx.x-mn.x) × ...
+    //    expanded bbox, minus any edge that already exists in the
+    //    real scan-converted set. Keeping the patch purely additive
+    //    preserves the original surface wherever it was actually
+    //    measured.
     let mut edge_list: Vec<EdgeKey> = Vec::new();
     for axis in 0u8..3 {
         let a = axis as usize;
-        // Edge along `a` has lower corners inside the bbox such that
-        // the edge's other end is also inside the grid. We generate
-        // all lowers in [mn, mx) along the transverse axes and
-        // [mn, mx) along the edge's axis.
         for x in mn.x..mx.x {
             for y in mn.y..mx.y {
                 for z in mn.z..mx.z {
                     let lower = IVec3::new(x, y, z);
-                    // Skip edges that stick out of the bbox.
                     if lower[a] + 1 > mx[a] {
                         continue;
                     }
-                    edge_list.push(EdgeKey { lower, axis });
+                    let key = EdgeKey { lower, axis };
+                    if real_edges.contains(&key) {
+                        continue;
+                    }
+                    edge_list.push(key);
                 }
             }
         }
@@ -405,6 +415,9 @@ mod tests {
         });
         let boundary = detect_boundary_faces(&edges);
         assert_eq!(boundary.len(), 4);
+        // Note: with the purely-additive constraint, this test
+        // requires padding around the real edge — which our bbox+1
+        // expansion provides.
         let patch = compute_patch_edges(&edges);
         // Apply as symmetric difference.
         let mut augmented = edges.clone();
