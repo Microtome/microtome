@@ -251,21 +251,21 @@ impl ScannedMeshField {
                 }
                 flood_fill_signs(&augmented, &mut sign_storage, min_code, dims);
                 // Seed Hermite entries for patch edges that are
-                // genuinely synthetic (not already real). Position =
-                // edge midpoint; normal = the edge's own axis. A
-                // nearest-real-normal would pick up the hole *rim*'s
-                // normal (tangent to the missing surface) and steer
-                // DC the wrong way; axis-aligned normals give a flat
-                // patch surface perpendicular to the edges — which
-                // matches PolyMender's implicit "closed dual surface"
-                // interpretation of the synthetic edges.
+                // genuinely synthetic. Position = edge midpoint;
+                // normal = the cousin-averaged normal from nearby
+                // real hits. The paper's §5.3 creates patch edges
+                // "by intersecting h with the cell edges and
+                // interpolating the normals associated with the end
+                // points of h" — we approximate by averaging real
+                // neighbour normals, which keeps the patch smoothly
+                // continuous with the surrounding surface instead of
+                // introducing axis-aligned flat plates.
                 for edge in patch_keys {
                     if edges.contains_key(&edge) {
                         continue;
                     }
                     let position = edge_midpoint(edge, unit_size);
-                    let mut normal = Vec3::ZERO;
-                    normal[edge.axis as usize] = 1.0;
+                    let normal = average_neighbour_normal(edge, &edges, unit_size);
                     edges.insert(edge, EdgeHit { position, normal });
                 }
                 None
@@ -485,6 +485,43 @@ fn normalize_or_z(n: Vec3) -> Vec3 {
         n.normalize()
     } else {
         Vec3::Z
+    }
+}
+
+/// Averages the normals of real hits within a local neighbourhood of
+/// `edge`'s midpoint, weighted by inverse squared distance. Used to
+/// seed Hermite data on PolyMender patch edges so the synthetic
+/// surface blends smoothly into the surrounding hole rim rather than
+/// introducing an axis-aligned plate. The weighting keeps the sum
+/// bounded when hits lie exactly on the midpoint, and falls off
+/// quickly past a cell's worth of distance so only local hits
+/// dominate.
+fn average_neighbour_normal(
+    edge: EdgeKey,
+    edges: &HashMap<EdgeKey, EdgeHit>,
+    unit_size: f32,
+) -> Vec3 {
+    let midpoint = edge_midpoint(edge, unit_size);
+    let radius_sq = (unit_size * 3.0).powi(2);
+    let mut acc = Vec3::ZERO;
+    let mut weight_sum = 0.0f32;
+    for hit in edges.values() {
+        let d2 = (hit.position - midpoint).length_squared();
+        if d2 > radius_sq {
+            continue;
+        }
+        let w = 1.0 / (d2 + 1e-6);
+        acc += hit.normal * w;
+        weight_sum += w;
+    }
+    if weight_sum > 0.0 {
+        normalize_or_z(acc / weight_sum)
+    } else {
+        // No neighbours at all — fall back to the edge's own axis so
+        // the QEF gets *some* constraint rather than a zero normal.
+        let mut n = Vec3::ZERO;
+        n[edge.axis as usize] = 1.0;
+        n
     }
 }
 

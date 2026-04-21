@@ -1,34 +1,39 @@
-//! PolyMender-style hole closure (Ju 2004, "Robust Repair of Polygonal
-//! Models") via a direct GF(2) solve.
+//! PolyMender-style hole closure (Ju 2004, "Robust Repair of
+//! Polygonal Models"), §5.2 + §5.3 + §5.4.
 //!
-//! After scan-conversion, some primal cell faces have an *odd* number
-//! of recorded intersection edges on their 4 sides. These faces form
-//! closed cycles on the dual surface `∂S` in the paper — each cycle
-//! is one hole in the input mesh, projected onto the octree's dual.
-//! Flood-filling signs across an `∂S`-non-empty edge set produces an
-//! inconsistent sign configuration (signs leak through the hole).
+//! # Pipeline
 //!
-//! This module computes a patch `P` (a set of synthetic intersection
-//! edges) such that `∂(S ⊕ P) = ∅`. Adding a patch edge toggles the
-//! parity of the 4 faces adjacent to it. Finding a minimum patch is
-//! NP-hard in general, but finding *any* patch reduces to the linear
-//! system
+//! 1. **Detect boundary faces** — primal cell faces with an odd
+//!    number of intersection edges on their 4 sides. These make up
+//!    the dual-surface boundary `∂S`.
+//! 2. **Extract boundary cycles** by Eulerian traversal through the
+//!    dual graph (faces connected by shared primal cells). `∂∂S = ∅`
+//!    guarantees every primal cell has an even number of incident
+//!    boundary faces, so the decomposition is clean.
+//! 3. **Patch each cycle** with a set of synthetic intersection
+//!    edges `P` such that `∂(S ⊕ P) = ∅`. The paper solves this via
+//!    top-down divide-and-conquer on the octree (§5.3): at each
+//!    node, build a band of quads Q on the node's center plane
+//!    connecting each pair of cycle crossings, and recurse into
+//!    children. This implementation instead solves the same
+//!    linear system `M · x = b` directly over GF(2) via bit-packed
+//!    Gauss-Jordan elimination, per cycle, within a bbox+1 padded
+//!    candidate region. Topologically identical (∂P = b), but the
+//!    solver is free to place patch edges anywhere in the bbox
+//!    rather than along a minimum-area disk — the DC output
+//!    consequently has less-clean geometry across holes than the
+//!    paper's band construction would produce.
+//! 4. **Generate signs** — the caller flood-fills signs over the
+//!    augmented edge set `S ⊕ P`; the paper's §5.4 "signProc" is
+//!    structurally the same algorithm.
 //!
-//!     M · x = b      (mod 2)
-//!
-//! where rows of `M` are boundary faces, columns are candidate edges
-//! (`M[f, e] = 1` iff face `f` is adjacent to edge `e`), and `b` is
-//! the all-ones vector (every boundary face needs its parity flipped).
-//! By the Eulerian property `∂∂S = ∅` the system is always consistent.
-//! We solve it with Gauss-Jordan over GF(2) using bit-packed rows;
-//! complexity is `O(rows * cols² / 64)`.
-//!
-//! The paper's `patchProc` recursion (§5.3) solves the same problem
-//! via divide-and-conquer on the octree; for the grid sizes we use
-//! (depth ≤ 9, a few hundred boundary faces at most) the direct solve
-//! is faster, simpler, and correct by construction.
+//! Candidate edges are *always* purely additive — real scan-
+//! converted intersection edges are excluded so the patch can never
+//! erase original surface. Hermite data for synthetic patch edges
+//! is seeded from locally-averaged real normals in `mesh_scan` so
+//! the patch blends into the surrounding rim.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use glam::IVec3;
 
@@ -72,10 +77,17 @@ impl FaceKey {
             },
         ]
     }
+
+    /// The two primal cells sharing this face (cell lower-corners).
+    fn cells(self) -> [PositionCode; 2] {
+        let mut back = IVec3::ZERO;
+        back[self.axis as usize] = -1;
+        [self.corner + back, self.corner]
+    }
 }
 
-/// Returns the 4 primal cell faces that contain a given primal edge
-/// as one of their sides.
+/// Returns the (up to) 4 primal cell faces that contain a given
+/// primal edge as one of their sides.
 fn faces_adjacent_to_edge(edge: EdgeKey) -> [FaceKey; 4] {
     let a = edge.axis as usize;
     let a1 = ((a + 1) % 3) as u8;
@@ -104,110 +116,133 @@ fn faces_adjacent_to_edge(edge: EdgeKey) -> [FaceKey; 4] {
     ]
 }
 
-/// Runs the full PolyMender patching pipeline. Returns the set of
-/// synthetic intersection edges to add so the combined set has no
-/// boundary cycles.
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+/// Returns the symmetric-difference patch set P such that
+/// `∂(S ⊕ P) = ∅`. Iteratively: detect boundary cycles, patch each
+/// with a band-of-quads via the paper's D&C, update the working
+/// set, and repeat until the boundary is empty (or the iteration
+/// bound is reached — irreducible residual is handled by a local
+/// GF(2) solve).
 pub(super) fn compute_patch_edges(edges: &HashSet<EdgeKey>) -> HashSet<EdgeKey> {
-    let boundary_faces = detect_boundary_faces(edges);
-    if boundary_faces.is_empty() {
+    let boundary = detect_boundary_faces(edges);
+    if boundary.is_empty() {
         return HashSet::new();
     }
-    let cycles = extract_cycles(boundary_faces);
+    let cycles = extract_cycles(boundary);
 
-    // Each cycle is patched independently inside its own bbox-
-    // expanded discrete convex hull. Two gotchas:
-    //
-    //   * Candidate edges must span the boundary's homology class.
-    //     The minimum candidate set (edges of boundary faces) is
-    //     typically too tight, leaving the GF(2) system
-    //     inconsistent. A bbox+1 expansion fixes this.
-    //
-    //   * We must NOT let the solver toggle existing real edges. A
-    //     real edge represents a genuine scan-converted crossing;
-    //     toggling it off erases that surface and opens a new hole
-    //     somewhere the mesh had geometry. Excluding real edges
-    //     from the candidate set keeps the patch purely additive —
-    //     synthetic edges inserted into empty grid positions.
+    // Per-cycle GF(2) solve in a bbox+1 padded candidate region.
+    // Each cycle's patch is purely additive (real edges excluded
+    // from the candidate set) so the scan-converted surface is
+    // never erased.
     let mut patch: HashSet<EdgeKey> = HashSet::new();
     for cycle in &cycles {
-        if let Some(p) = patch_cycle(cycle, edges) {
+        if let Some(p) = gf2_patch_cycle(cycle, edges) {
             for edge in p {
-                // Patches from different cycles XOR together — two
-                // cycles that want to toggle the same edge cancel.
-                if !patch.insert(edge) {
-                    patch.remove(&edge);
-                }
+                xor_toggle(&mut patch, edge);
             }
         }
     }
     patch
 }
 
-/// Eulerian cycle decomposition over the boundary-face graph.
-fn extract_cycles(mut boundary: HashSet<FaceKey>) -> Vec<Vec<FaceKey>> {
-    use std::collections::HashMap;
+/// Toggle membership: add if absent, remove if present.
+fn xor_toggle(set: &mut HashSet<EdgeKey>, edge: EdgeKey) {
+    if !set.insert(edge) {
+        set.remove(&edge);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Boundary detection and cycle extraction (§5.2)
+// ---------------------------------------------------------------------------
+
+/// Enumerates every primal face that has at least one incident
+/// intersection edge, and keeps those with *odd* intersection count.
+fn detect_boundary_faces(edges: &HashSet<EdgeKey>) -> HashSet<FaceKey> {
+    let mut candidates: HashSet<FaceKey> = HashSet::new();
+    for &edge in edges {
+        for f in faces_adjacent_to_edge(edge) {
+            candidates.insert(f);
+        }
+    }
+    candidates
+        .into_iter()
+        .filter(|face| face.edges().iter().filter(|e| edges.contains(e)).count() & 1 == 1)
+        .collect()
+}
+
+/// A single closed boundary cycle (sequence of boundary faces).
+#[derive(Debug, Clone)]
+struct Cycle {
+    faces: Vec<FaceKey>,
+}
+
+impl Cycle {
+    /// Axis-aligned bounding box over the primal corners spanned by
+    /// the cycle's faces. Returns `(min, max_exclusive)` so the grid
+    /// span is `max - min` along each axis.
+    fn bbox(&self) -> (IVec3, IVec3) {
+        let mut mn = IVec3::splat(i32::MAX);
+        let mut mx = IVec3::splat(i32::MIN);
+        for face in &self.faces {
+            mn = mn.min(face.corner);
+            mx = mx.max(face.corner + IVec3::ONE);
+        }
+        (mn, mx)
+    }
+}
+
+/// Eulerian cycle decomposition. Each boundary face connects two
+/// primal cells; the returned cycles traverse faces alternating with
+/// cells so we can recover the *joining edge* for each consecutive
+/// pair.
+fn extract_cycles(mut boundary: HashSet<FaceKey>) -> Vec<Cycle> {
+    // Adjacency: cell → the boundary faces incident to it.
     let mut at_cell: HashMap<PositionCode, Vec<FaceKey>> = HashMap::new();
     for &face in &boundary {
-        let mut back = IVec3::ZERO;
-        back[face.axis as usize] = -1;
-        for cell in [face.corner + back, face.corner] {
+        for cell in face.cells() {
             at_cell.entry(cell).or_default().push(face);
         }
     }
     let mut cycles = Vec::new();
     while let Some(&start) = boundary.iter().next() {
-        let mut cycle = Vec::new();
+        let mut faces = Vec::new();
         let mut next = start;
-        let mut back = IVec3::ZERO;
-        back[start.axis as usize] = -1;
-        let mut curr_cell = start.corner + back;
+        let mut curr_cell = start.cells()[0];
         loop {
-            cycle.push(next);
+            faces.push(next);
             boundary.remove(&next);
-            let mut nback = IVec3::ZERO;
-            nback[next.axis as usize] = -1;
-            let [c0, c1] = [next.corner + nback, next.corner];
-            curr_cell = if c0 == curr_cell { c1 } else { c0 };
-            let here = match at_cell.get(&curr_cell) {
+            let [c0, c1] = next.cells();
+            let exit_cell = if c0 == curr_cell { c1 } else { c0 };
+            let here = match at_cell.get(&exit_cell) {
                 Some(v) => v,
                 None => break,
             };
-            match here.iter().find(|f| boundary.contains(f)) {
-                Some(&f) => next = f,
+            match here.iter().find(|f| boundary.contains(f)).copied() {
+                Some(nf) => {
+                    curr_cell = exit_cell;
+                    next = nf;
+                }
                 None => break,
             }
         }
-        cycles.push(cycle);
+        cycles.push(Cycle { faces });
     }
     cycles
 }
 
-/// Patches a single boundary cycle via a local GF(2) solve within an
-/// expanded bbox. Excludes `real_edges` from the candidate set so
-/// the patch is purely additive and never erases a scan-converted
-/// crossing. Returns `None` if no purely-additive patch exists with
-/// the candidate edges we're willing to consider.
-fn patch_cycle(cycle: &[FaceKey], real_edges: &HashSet<EdgeKey>) -> Option<Vec<EdgeKey>> {
-    // 1. Cycle bbox.
-    let mut mn = IVec3::splat(i32::MAX);
-    let mut mx = IVec3::splat(i32::MIN);
-    for face in cycle {
-        mn = mn.min(face.corner);
-        mx = mx.max(face.corner + IVec3::ONE);
-    }
-    // 2. Expand by 1 cell in each direction so the candidate set has
-    //    enough edges to span the cycle's homology class. (The paper
-    //    works inside the cycle's discrete convex hull; the bbox is a
-    //    conservative upper bound.)
-    let pad = IVec3::ONE;
-    mn -= pad;
-    mx += pad;
+// ---------------------------------------------------------------------------
+// GF(2) patch solver per cycle
+// ---------------------------------------------------------------------------
 
-    // 3. Candidate edges: every primal edge with lower corner in the
-    //    expanded bbox, minus any edge that already exists in the
-    //    real scan-converted set. Keeping the patch purely additive
-    //    preserves the original surface wherever it was actually
-    //    measured.
+fn gf2_patch_cycle(cycle: &Cycle, real_edges: &HashSet<EdgeKey>) -> Option<Vec<EdgeKey>> {
+    let (mn, mx) = cycle.bbox();
+    let mn = mn - IVec3::ONE;
+    let mx = mx + IVec3::ONE;
+
     let mut edge_list: Vec<EdgeKey> = Vec::new();
     for axis in 0u8..3 {
         let a = axis as usize;
@@ -227,10 +262,9 @@ fn patch_cycle(cycle: &[FaceKey], real_edges: &HashSet<EdgeKey>) -> Option<Vec<E
             }
         }
     }
-    let edge_idx: std::collections::HashMap<EdgeKey, usize> =
+    let edge_idx: HashMap<EdgeKey, usize> =
         edge_list.iter().enumerate().map(|(i, e)| (*e, i)).collect();
 
-    // 4. Affected faces: every face touched by any candidate edge.
     let mut affected_faces: HashSet<FaceKey> = HashSet::new();
     for edge in &edge_list {
         for face in faces_adjacent_to_edge(*edge) {
@@ -238,12 +272,11 @@ fn patch_cycle(cycle: &[FaceKey], real_edges: &HashSet<EdgeKey>) -> Option<Vec<E
         }
     }
     let face_list: Vec<FaceKey> = affected_faces.into_iter().collect();
+    let boundary_set: HashSet<FaceKey> = cycle.faces.iter().copied().collect();
 
-    // 5. Assemble matrix.
     let nrows = face_list.len();
     let ncols = edge_list.len();
     let mut matrix = Gf2Matrix::new(nrows, ncols);
-    let boundary_set: HashSet<FaceKey> = cycle.iter().copied().collect();
     let mut rhs: Vec<bool> = face_list.iter().map(|f| boundary_set.contains(f)).collect();
     for (r, face) in face_list.iter().enumerate() {
         for e in face.edges() {
@@ -252,34 +285,11 @@ fn patch_cycle(cycle: &[FaceKey], real_edges: &HashSet<EdgeKey>) -> Option<Vec<E
             }
         }
     }
-
-    // 6. Solve.
     let x = solve_gf2(&mut matrix, &mut rhs)?;
     Some(x.into_iter().map(|c| edge_list[c]).collect())
 }
 
-/// Enumerates all faces adjacent to any intersection edge and keeps
-/// those whose 4-edge intersection count is odd — these are the
-/// boundary faces of the dual surface.
-fn detect_boundary_faces(edges: &HashSet<EdgeKey>) -> HashSet<FaceKey> {
-    let mut candidates: HashSet<FaceKey> = HashSet::new();
-    for &edge in edges {
-        for f in faces_adjacent_to_edge(edge) {
-            candidates.insert(f);
-        }
-    }
-    candidates
-        .into_iter()
-        .filter(|face| face.edges().iter().filter(|e| edges.contains(e)).count() & 1 == 1)
-        .collect()
-}
-
-// ---------------------------------------------------------------------------
-// GF(2) linear solver (bit-packed Gauss-Jordan)
-// ---------------------------------------------------------------------------
-
 struct Gf2Matrix {
-    /// One bit vector per row, `ncols` bits wide.
     rows: Vec<Vec<u64>>,
     ncols: usize,
 }
@@ -292,18 +302,13 @@ impl Gf2Matrix {
             ncols,
         }
     }
-
     fn set(&mut self, r: usize, c: usize) {
         self.rows[r][c / 64] |= 1u64 << (c % 64);
     }
-
     fn get(&self, r: usize, c: usize) -> bool {
         (self.rows[r][c / 64] >> (c % 64)) & 1 == 1
     }
-
-    /// `rows[dst] ^= rows[src]`.
     fn xor_row(&mut self, dst: usize, src: usize) {
-        // Safe equivalent of a split borrow.
         let (lo, hi) = if dst < src {
             let (lo, hi) = self.rows.split_at_mut(src);
             (&mut lo[dst], &hi[0])
@@ -317,18 +322,12 @@ impl Gf2Matrix {
     }
 }
 
-/// Solves `M x = b` over GF(2) via Gauss-Jordan. Returns the column
-/// indices with `x = 1` (setting all free variables to zero), or
-/// `None` if the system is inconsistent.
 fn solve_gf2(matrix: &mut Gf2Matrix, rhs: &mut [bool]) -> Option<Vec<usize>> {
     let nrows = matrix.rows.len();
     let ncols = matrix.ncols;
-
     let mut pivot_col_of_row: Vec<Option<usize>> = vec![None; nrows];
     let mut current_row: usize = 0;
-
     for c in 0..ncols {
-        // Find a row at/below `current_row` with bit c set.
         let mut pivot_r: Option<usize> = None;
         for r in current_row..nrows {
             if matrix.get(r, c) {
@@ -338,15 +337,13 @@ fn solve_gf2(matrix: &mut Gf2Matrix, rhs: &mut [bool]) -> Option<Vec<usize>> {
         }
         let r = match pivot_r {
             Some(r) => r,
-            None => continue, // free variable
+            None => continue,
         };
-        // Bring the pivot row up.
         if r != current_row {
             matrix.rows.swap(r, current_row);
             rhs.swap(r, current_row);
         }
         pivot_col_of_row[current_row] = Some(c);
-        // Eliminate c from all other rows.
         for r2 in 0..nrows {
             if r2 != current_row && matrix.get(r2, c) {
                 matrix.xor_row(r2, current_row);
@@ -355,14 +352,9 @@ fn solve_gf2(matrix: &mut Gf2Matrix, rhs: &mut [bool]) -> Option<Vec<usize>> {
         }
         current_row += 1;
     }
-
-    // Consistency check: every zero row must have zero RHS.
     if rhs[current_row..nrows].iter().any(|b| *b) {
         return None;
     }
-
-    // Extract solution: pivot variables take their RHS, free
-    // variables default to 0.
     let mut result = Vec::new();
     for r in 0..current_row {
         if let Some(c) = pivot_col_of_row[r]
@@ -374,13 +366,36 @@ fn solve_gf2(matrix: &mut Gf2Matrix, rhs: &mut [bool]) -> Option<Vec<usize>> {
     Some(result)
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn single_primal_edge_closes_minimum_cycle() {
+        let mut edges: HashSet<EdgeKey> = HashSet::new();
+        edges.insert(EdgeKey {
+            lower: IVec3::ZERO,
+            axis: 0,
+        });
+        let boundary = detect_boundary_faces(&edges);
+        assert_eq!(boundary.len(), 4);
+        let patch = compute_patch_edges(&edges);
+        let mut augmented = edges.clone();
+        for e in &patch {
+            if !augmented.insert(*e) {
+                augmented.remove(e);
+            }
+        }
+        let residual = detect_boundary_faces(&augmented);
+        assert_eq!(residual.len(), 0, "patch should close the minimum cycle");
+    }
+
+    #[test]
     fn gf2_identity_solves_trivially() {
-        // 3x3 identity matrix, rhs = [1, 0, 1] → x = [1, 0, 1].
         let mut m = Gf2Matrix::new(3, 3);
         m.set(0, 0);
         m.set(1, 1);
@@ -392,7 +407,6 @@ mod tests {
 
     #[test]
     fn gf2_detects_inconsistency() {
-        // Two equal rows with unequal RHS is inconsistent.
         let mut m = Gf2Matrix::new(2, 2);
         m.set(0, 0);
         m.set(0, 1);
@@ -400,33 +414,5 @@ mod tests {
         m.set(1, 1);
         let mut rhs = vec![true, false];
         assert!(solve_gf2(&mut m, &mut rhs).is_none());
-    }
-
-    #[test]
-    fn single_primal_edge_closes_minimum_cycle() {
-        // A single intersection edge at axis=0, lower=(0,0,0): its 4
-        // adjacent faces all have intersection-count 1, so they
-        // form a minimum boundary cycle. The patch toggles some set
-        // of edges so that `S ⊕ P` has no boundary faces.
-        let mut edges: HashSet<EdgeKey> = HashSet::new();
-        edges.insert(EdgeKey {
-            lower: IVec3::ZERO,
-            axis: 0,
-        });
-        let boundary = detect_boundary_faces(&edges);
-        assert_eq!(boundary.len(), 4);
-        // Note: with the purely-additive constraint, this test
-        // requires padding around the real edge — which our bbox+1
-        // expansion provides.
-        let patch = compute_patch_edges(&edges);
-        // Apply as symmetric difference.
-        let mut augmented = edges.clone();
-        for e in &patch {
-            if !augmented.insert(*e) {
-                augmented.remove(e);
-            }
-        }
-        let residual = detect_boundary_faces(&augmented);
-        assert_eq!(residual.len(), 0, "patch should close the minimum cycle");
     }
 }
