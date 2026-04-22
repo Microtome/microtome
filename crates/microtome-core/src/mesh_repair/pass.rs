@@ -8,6 +8,7 @@
 
 use std::time::Duration;
 
+use super::context::RepairContext;
 use super::error::PassError;
 use super::half_edge::HalfEdgeMesh;
 use crate::isosurface::IsoMesh;
@@ -34,13 +35,22 @@ pub trait MeshRepairPass: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Runs the pass on a half-edge mesh. Default: no-op.
-    fn apply(&self, mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
-        let _ = mesh;
+    fn apply(
+        &self,
+        mesh: &mut HalfEdgeMesh,
+        ctx: &RepairContext<'_>,
+    ) -> Result<PassOutcome, PassError> {
+        let _ = (mesh, ctx);
         Ok(PassOutcome::noop(self.name()))
     }
 
     /// Runs the pass on an `IsoMesh` before half-edge construction. Default: no-op.
-    fn pre_construction(&self, iso: IsoMesh) -> Result<(IsoMesh, PassOutcome), PassError> {
+    fn pre_construction(
+        &self,
+        iso: IsoMesh,
+        ctx: &RepairContext<'_>,
+    ) -> Result<(IsoMesh, PassOutcome), PassError> {
+        let _ = ctx;
         Ok((iso, PassOutcome::noop(self.name())))
     }
 
@@ -55,6 +65,13 @@ pub trait MeshRepairPass: Send + Sync {
     /// pass has corrupted manifoldness (under `ContinueOnError` policy).
     fn requires_manifold(&self) -> bool {
         true
+    }
+
+    /// `true` if this pass mutates connectivity in a way that invalidates
+    /// the per-vertex class. The pipeline reruns the classifier after such
+    /// passes when a [`RepairContext`] supplies one. Default `false`.
+    fn reclassifies(&self) -> bool {
+        false
     }
 }
 
@@ -180,7 +197,9 @@ mod tests {
     fn default_apply_returns_noop() {
         let pass = NoopPass;
         let mut mesh = HalfEdgeMesh::new();
-        let outcome = pass.apply(&mut mesh).expect("noop");
+        let nf = |_p: glam::Vec3| glam::Vec3::Z;
+        let ctx = RepairContext::normal_only(&nf);
+        let outcome = pass.apply(&mut mesh, &ctx).expect("noop");
         assert_eq!(outcome.name, "noop");
         assert_eq!(outcome.stats, PassStats::default());
     }
@@ -190,8 +209,16 @@ mod tests {
         let pass = NoopPass;
         let iso = IsoMesh::new();
         let pre_len = iso.indices.len();
-        let (out_iso, outcome) = pass.pre_construction(iso).expect("noop");
+        let nf = |_p: glam::Vec3| glam::Vec3::Z;
+        let ctx = RepairContext::normal_only(&nf);
+        let (out_iso, outcome) = pass.pre_construction(iso, &ctx).expect("noop");
         assert_eq!(out_iso.indices.len(), pre_len);
         assert_eq!(outcome.name, "noop");
+    }
+
+    #[test]
+    fn default_reclassifies_is_false() {
+        let pass = NoopPass;
+        assert!(!pass.reclassifies());
     }
 }

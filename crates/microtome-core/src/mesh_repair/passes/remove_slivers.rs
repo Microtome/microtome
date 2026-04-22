@@ -9,6 +9,7 @@ use super::super::error::PassError;
 use super::super::half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh};
 use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
 use super::super::quality::QualityThresholds;
+use crate::mesh_repair::RepairContext;
 
 /// Collapses or flips low-quality triangles.
 #[derive(Debug, Clone)]
@@ -40,7 +41,11 @@ impl MeshRepairPass for RemoveSlivers {
         "remove_slivers"
     }
 
-    fn apply(&self, mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
+    fn apply(
+        &self,
+        mesh: &mut HalfEdgeMesh,
+        _ctx: &RepairContext<'_>,
+    ) -> Result<PassOutcome, PassError> {
         let mut outcome = PassOutcome::noop(self.name());
         let thresholds = QualityThresholds {
             min_angle_deg: self.min_angle_deg,
@@ -232,7 +237,9 @@ mod tests {
         assert!(pre >= 1, "test mesh should contain at least one sliver");
 
         let pass = RemoveSlivers::default();
-        let _outcome = pass.apply(&mut mesh).expect("apply");
+        let _outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
 
         let post = mesh.quality_report(&thresholds).sliver_count;
         assert!(
@@ -254,8 +261,12 @@ mod tests {
         };
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&clean).expect("build");
         let pass = RemoveSlivers::default();
-        let first = pass.apply(&mut mesh).expect("apply");
-        let second = pass.apply(&mut mesh).expect("apply");
+        let first = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
+        let second = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
         assert_eq!(first.stats.edges_collapsed, 0);
         assert_eq!(first.stats.edges_flipped, 0);
         assert_eq!(second.stats.edges_collapsed, 0);
@@ -270,7 +281,9 @@ mod tests {
             max_iterations: 0,
             ..RemoveSlivers::default()
         };
-        let outcome = pass.apply(&mut mesh).expect("apply");
+        let outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
         assert_eq!(outcome.stats.edges_collapsed, 0);
         assert_eq!(outcome.stats.edges_flipped, 0);
     }

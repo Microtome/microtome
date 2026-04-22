@@ -11,6 +11,7 @@ use glam::Vec3;
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeId, HalfEdgeMesh};
 use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use crate::mesh_repair::RepairContext;
 
 /// How to triangulate a boundary loop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,7 +49,11 @@ impl MeshRepairPass for FillSmallHoles {
         "fill_small_holes"
     }
 
-    fn apply(&self, mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
+    fn apply(
+        &self,
+        mesh: &mut HalfEdgeMesh,
+        _ctx: &RepairContext<'_>,
+    ) -> Result<PassOutcome, PassError> {
         let mut outcome = PassOutcome::noop(self.name());
         let loops = mesh.boundary_loops();
         for loop_hes in &loops {
@@ -138,7 +143,9 @@ mod tests {
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&cube_with_hole()).expect("build");
         assert_eq!(mesh.boundary_loops().len(), 1);
         let pass = FillSmallHoles::default();
-        let outcome = pass.apply(&mut mesh).expect("fill");
+        let outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("fill");
         assert_eq!(outcome.stats.holes_filled, 1);
         assert_eq!(outcome.stats.vertices_added, 1);
         assert_eq!(outcome.stats.faces_added, 4);
@@ -155,7 +162,9 @@ mod tests {
             max_boundary_length: 3,
             method: HoleFillMethod::Auto,
         };
-        let outcome = pass.apply(&mut mesh).expect("fill");
+        let outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("fill");
         assert_eq!(outcome.stats.holes_filled, 0);
         assert_eq!(outcome.warnings.len(), 1);
         assert_eq!(outcome.warnings[0].kind, PassWarningKind::BudgetExceeded);
@@ -175,7 +184,9 @@ mod tests {
         };
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&closed).expect("build");
         let pass = FillSmallHoles::default();
-        let outcome = pass.apply(&mut mesh).expect("fill");
+        let outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("fill");
         assert_eq!(outcome.stats.holes_filled, 0);
         assert!(outcome.warnings.is_empty());
     }

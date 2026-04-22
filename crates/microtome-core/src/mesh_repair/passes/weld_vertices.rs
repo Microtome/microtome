@@ -13,6 +13,7 @@ use glam::{IVec3, Vec3};
 use super::super::error::PassError;
 use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use crate::isosurface::IsoMesh;
+use crate::mesh_repair::RepairContext;
 
 /// Merges spatially-coincident vertices within `epsilon`.
 #[derive(Debug, Clone)]
@@ -62,7 +63,11 @@ impl MeshRepairPass for WeldVertices {
         PassStage::PreConstruction
     }
 
-    fn pre_construction(&self, iso: IsoMesh) -> Result<(IsoMesh, PassOutcome), PassError> {
+    fn pre_construction(
+        &self,
+        iso: IsoMesh,
+        _ctx: &RepairContext<'_>,
+    ) -> Result<(IsoMesh, PassOutcome), PassError> {
         let mut outcome = PassOutcome::noop(self.name());
 
         if iso.positions.is_empty() {
@@ -214,7 +219,9 @@ mod tests {
             indices: vec![0, 1, 2, 3, 4, 5],
         };
         let pass = WeldVertices::absolute(1e-4);
-        let (out, outcome) = pass.pre_construction(iso).expect("weld");
+        let (out, outcome) = pass
+            .pre_construction(iso, &crate::mesh_repair::RepairContext::noop())
+            .expect("weld");
         assert_eq!(out.positions.len(), 5);
         assert_eq!(outcome.stats.vertices_merged, 1);
         assert_eq!(out.indices.len(), 6);
@@ -233,7 +240,9 @@ mod tests {
             indices: vec![0, 1, 2],
         };
         let pass = WeldVertices::absolute(1e-4);
-        let (out, outcome) = pass.pre_construction(iso).expect("weld");
+        let (out, outcome) = pass
+            .pre_construction(iso, &crate::mesh_repair::RepairContext::noop())
+            .expect("weld");
         assert_eq!(out.positions.len(), 2);
         assert_eq!(outcome.stats.faces_removed, 1);
         assert!(out.indices.is_empty());
@@ -252,7 +261,9 @@ mod tests {
             indices: vec![0, 1, 2],
         };
         let pass = WeldVertices::absolute(1e-4);
-        let (out, outcome) = pass.pre_construction(iso.clone()).expect("weld");
+        let (out, outcome) = pass
+            .pre_construction(iso.clone(), &crate::mesh_repair::RepairContext::noop())
+            .expect("weld");
         assert_eq!(out.positions.len(), 3);
         assert_eq!(outcome.stats.vertices_merged, 0);
         assert_eq!(out.indices, iso.indices);
@@ -279,8 +290,12 @@ mod tests {
             indices: iso_small.indices.clone(),
         };
         let pass = WeldVertices::relative(1e-6);
-        let (out_small, _) = pass.pre_construction(iso_small).expect("weld");
-        let (out_big, _) = pass.pre_construction(iso_big).expect("weld");
+        let (out_small, _) = pass
+            .pre_construction(iso_small, &crate::mesh_repair::RepairContext::noop())
+            .expect("weld");
+        let (out_big, _) = pass
+            .pre_construction(iso_big, &crate::mesh_repair::RepairContext::noop())
+            .expect("weld");
         assert_eq!(out_small.positions.len(), out_big.positions.len());
     }
 
@@ -298,7 +313,9 @@ mod tests {
             indices: vec![0, 1, 2],
         };
         let pass = WeldVertices::absolute(0.0);
-        let err = pass.pre_construction(iso).unwrap_err();
+        let err = pass
+            .pre_construction(iso, &crate::mesh_repair::RepairContext::noop())
+            .unwrap_err();
         assert!(matches!(err, PassError::InvalidConfig(_)));
     }
 }

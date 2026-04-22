@@ -10,6 +10,7 @@ use glam::Vec3;
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeMesh, VertexId};
 use super::super::pass::{MeshRepairPass, PassOutcome};
+use crate::mesh_repair::RepairContext;
 
 /// Taubin-style Laplacian smoothing.
 #[derive(Debug, Clone)]
@@ -41,7 +42,11 @@ impl MeshRepairPass for TaubinSmooth {
         "taubin_smooth"
     }
 
-    fn apply(&self, mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
+    fn apply(
+        &self,
+        mesh: &mut HalfEdgeMesh,
+        _ctx: &RepairContext<'_>,
+    ) -> Result<PassOutcome, PassError> {
         if !(0.0 < self.lambda && self.lambda < 1.0) {
             return Err(PassError::InvalidConfig(format!(
                 "taubin_smooth lambda must be in (0, 1); got {}",
@@ -144,7 +149,10 @@ mod tests {
             lambda: -0.1,
             ..TaubinSmooth::default()
         };
-        assert!(pass.apply(&mut mesh).is_err());
+        assert!(
+            pass.apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+                .is_err()
+        );
     }
 
     #[test]
@@ -154,7 +162,10 @@ mod tests {
             mu: 0.1,
             ..TaubinSmooth::default()
         };
-        assert!(pass.apply(&mut mesh).is_err());
+        assert!(
+            pass.apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+                .is_err()
+        );
     }
 
     #[test]
@@ -165,7 +176,10 @@ mod tests {
             mu: -0.4,
             ..TaubinSmooth::default()
         };
-        assert!(pass.apply(&mut mesh).is_err());
+        assert!(
+            pass.apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+                .is_err()
+        );
     }
 
     #[test]
@@ -189,7 +203,8 @@ mod tests {
             pin_boundary: true,
             ..TaubinSmooth::default()
         };
-        pass.apply(&mut mesh).expect("apply");
+        pass.apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
         for i in 0u32..3 {
             assert_eq!(mesh.vertex_position(VertexId(i)), pre[i as usize]);
         }
@@ -203,7 +218,9 @@ mod tests {
         // the "does run without blowing up" case.
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("build");
         let pass = TaubinSmooth::default();
-        let outcome = pass.apply(&mut mesh).expect("apply");
+        let outcome = pass
+            .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())
+            .expect("apply");
         assert_eq!(outcome.name, "taubin_smooth");
     }
 }

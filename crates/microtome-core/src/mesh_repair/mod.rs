@@ -15,6 +15,7 @@
 //! See the plan at `/home/djoyce/.claude/plans/stateful-sauteeing-wave.md`
 //! for the full design, including v2 passes not yet implemented.
 
+pub mod context;
 pub mod error;
 pub mod features;
 pub mod half_edge;
@@ -26,6 +27,7 @@ pub mod quality;
 pub mod reprojection;
 pub mod vertex_class;
 
+pub use context::RepairContext;
 pub use error::{HalfEdgeOpError, PassError, RepairError, TopologyError};
 pub use features::FeatureSet;
 pub use half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};

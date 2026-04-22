@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use glam::Vec3;
 
+use super::context::RepairContext;
 use super::error::RepairError;
 use super::half_edge::HalfEdgeMesh;
 use super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarning, PassWarningKind};
@@ -138,11 +139,24 @@ impl MeshRepairPipeline {
     ///
     /// `normal_fn` is invoked during writeback to compute per-vertex
     /// normals. Callers that have a [`ScalarField`](crate::isosurface::ScalarField)
-    /// typically pass `|p| field.normal(p)`.
+    /// typically pass `|p| field.normal(p)`. v1-flavoured wrapper around
+    /// [`run_with`](Self::run_with) — for v2 features (reprojection,
+    /// classification, features) build a [`RepairContext`] explicitly.
     pub fn run(
         &self,
         iso: &IsoMesh,
         normal_fn: impl Fn(Vec3) -> Vec3,
+    ) -> Result<(IsoMesh, RepairReport), RepairError> {
+        let nf = move |p| normal_fn(p);
+        let ctx = RepairContext::normal_only(&nf);
+        self.run_with(iso, &ctx)
+    }
+
+    /// Runs the pipeline with a full [`RepairContext`].
+    pub fn run_with(
+        &self,
+        iso: &IsoMesh,
+        ctx: &RepairContext<'_>,
     ) -> Result<(IsoMesh, RepairReport), RepairError> {
         let total_start = Instant::now();
 
@@ -156,7 +170,7 @@ impl MeshRepairPipeline {
             .filter(|p| p.stage() == PassStage::PreConstruction)
         {
             let pass_start = Instant::now();
-            match pass.pre_construction(current_iso) {
+            match pass.pre_construction(current_iso, ctx) {
                 Ok((iso_out, mut outcome)) => {
                     outcome.elapsed = pass_start.elapsed();
                     current_iso = iso_out;
@@ -183,6 +197,9 @@ impl MeshRepairPipeline {
         // Build the half-edge mesh. The quality report on the IsoMesh must be
         // computed via a half-edge build too, so just build once here.
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&current_iso)?;
+        // Run the classifier before any half-edge pass so passes that read
+        // VertexClass see populated data.
+        ctx.classifier.classify_with(&mut mesh, ctx.features);
         let pre_quality = mesh.quality_report(&self.quality_thresholds);
         let mut manifold_broken = false;
 
@@ -202,10 +219,13 @@ impl MeshRepairPipeline {
                 continue;
             }
             let pass_start = Instant::now();
-            match pass.apply(&mut mesh) {
+            match pass.apply(&mut mesh, ctx) {
                 Ok(mut outcome) => {
                     outcome.elapsed = pass_start.elapsed();
                     per_pass.push(outcome);
+                    if pass.reclassifies() {
+                        ctx.classifier.classify_with(&mut mesh, ctx.features);
+                    }
                     if !mesh.is_manifold() {
                         manifold_broken = true;
                         if matches!(self.policy, FailurePolicy::StopOnFirstError) {
@@ -238,7 +258,7 @@ impl MeshRepairPipeline {
         }
 
         let post_quality = mesh.quality_report(&self.quality_thresholds);
-        let out_iso = mesh.to_iso_mesh(normal_fn);
+        let out_iso = mesh.to_iso_mesh(ctx.normal_fn);
 
         Ok((
             out_iso,
@@ -255,7 +275,11 @@ impl MeshRepairPipeline {
     ///
     /// Useful for callers who want to apply repair steps to a mesh they
     /// constructed programmatically (tests, caching).
-    pub fn run_in_place(&self, mesh: &mut HalfEdgeMesh) -> Result<RepairReport, RepairError> {
+    pub fn run_in_place(
+        &self,
+        mesh: &mut HalfEdgeMesh,
+        ctx: &RepairContext<'_>,
+    ) -> Result<RepairReport, RepairError> {
         let total_start = Instant::now();
         let pre_quality = mesh.quality_report(&self.quality_thresholds);
         let mut per_pass: Vec<PassOutcome> = Vec::with_capacity(self.passes.len());
@@ -276,10 +300,13 @@ impl MeshRepairPipeline {
                 continue;
             }
             let pass_start = Instant::now();
-            match pass.apply(mesh) {
+            match pass.apply(mesh, ctx) {
                 Ok(mut outcome) => {
                     outcome.elapsed = pass_start.elapsed();
                     per_pass.push(outcome);
+                    if pass.reclassifies() {
+                        ctx.classifier.classify_with(mesh, ctx.features);
+                    }
                     if !mesh.is_manifold() {
                         manifold_broken = true;
                         if matches!(self.policy, FailurePolicy::StopOnFirstError) {
@@ -349,7 +376,11 @@ mod tests {
         fn name(&self) -> &'static str {
             "failing"
         }
-        fn apply(&self, _mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
+        fn apply(
+            &self,
+            _mesh: &mut HalfEdgeMesh,
+            _ctx: &RepairContext<'_>,
+        ) -> Result<PassOutcome, PassError> {
             Err(PassError::Aborted {
                 pass: "failing",
                 detail: "synthetic failure".into(),
@@ -362,7 +393,11 @@ mod tests {
         fn name(&self) -> &'static str {
             "counting"
         }
-        fn apply(&self, _mesh: &mut HalfEdgeMesh) -> Result<PassOutcome, PassError> {
+        fn apply(
+            &self,
+            _mesh: &mut HalfEdgeMesh,
+            _ctx: &RepairContext<'_>,
+        ) -> Result<PassOutcome, PassError> {
             let mut outcome = PassOutcome::noop("counting");
             outcome.stats = PassStats {
                 vertices_smoothed: 1,
@@ -460,7 +495,9 @@ mod tests {
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("build");
         let mut pipeline = MeshRepairPipeline::new();
         pipeline.add(CountingPass);
-        let report = pipeline.run_in_place(&mut mesh).expect("in-place");
+        let nf = |_p: Vec3| Vec3::Z;
+        let ctx = RepairContext::normal_only(&nf);
+        let report = pipeline.run_in_place(&mut mesh, &ctx).expect("in-place");
         assert_eq!(report.pre_quality.triangle_count, 1);
         assert_eq!(report.post_quality.triangle_count, 1);
         assert_eq!(report.per_pass.len(), 1);
