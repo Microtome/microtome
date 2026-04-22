@@ -146,6 +146,32 @@ impl IsoMesh {
     pub fn triangle_count(&self) -> usize {
         self.indices.len() / 3
     }
+
+    /// Runs a mesh-repair pipeline on this mesh, returning the repaired mesh
+    /// plus a diagnostic report.
+    ///
+    /// `normal_fn` is invoked during writeback to populate per-vertex normals.
+    /// Pass `|p| field.normal(p)` when repairing DC output; pass `|_| Vec3::ZERO`
+    /// and call [`generate_flat_normals`](Self::generate_flat_normals) when no
+    /// field is available.
+    pub fn repair(
+        &self,
+        pipeline: &crate::mesh_repair::MeshRepairPipeline,
+        normal_fn: impl Fn(Vec3) -> Vec3,
+    ) -> Result<(IsoMesh, crate::mesh_repair::RepairReport), crate::mesh_repair::RepairError> {
+        pipeline.run(self, normal_fn)
+    }
+
+    /// Builds a mesh quality report without modifying the mesh.
+    ///
+    /// The report is computed from a transient [`HalfEdgeMesh`] and uses the
+    /// default [`QualityThresholds`](crate::mesh_repair::QualityThresholds).
+    pub fn quality_report(
+        &self,
+    ) -> Result<crate::mesh_repair::MeshQualityReport, crate::mesh_repair::TopologyError> {
+        let mesh = crate::mesh_repair::HalfEdgeMesh::from_iso_mesh(self)?;
+        Ok(mesh.quality_report(&crate::mesh_repair::QualityThresholds::default()))
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +194,55 @@ mod tests {
         assert_eq!(v.vertex_index, 0);
         assert_eq!(v.hermite_n, Vec3::Y);
         assert_eq!(mesh.positions.len(), 1);
+    }
+
+    #[test]
+    fn empty_pipeline_repair_is_identity() {
+        let mut mesh = IsoMesh::new();
+        mesh.positions.push(Vec3::ZERO);
+        mesh.positions.push(Vec3::X);
+        mesh.positions.push(Vec3::Y);
+        mesh.normals.push(Vec3::Z);
+        mesh.normals.push(Vec3::Z);
+        mesh.normals.push(Vec3::Z);
+        mesh.indices.push(0);
+        mesh.indices.push(1);
+        mesh.indices.push(2);
+
+        let pipeline = crate::mesh_repair::MeshRepairPipeline::new();
+        let (out, report) = mesh.repair(&pipeline, |_| Vec3::Z).expect("repair");
+        assert_eq!(out.triangle_count(), 1);
+        assert_eq!(report.per_pass.len(), 0);
+        assert_eq!(report.pre_quality.triangle_count, 1);
+        assert_eq!(report.post_quality.triangle_count, 1);
+    }
+
+    #[test]
+    fn quality_report_on_trivial_mesh() {
+        let mut mesh = IsoMesh::new();
+        mesh.positions.push(Vec3::ZERO);
+        mesh.positions.push(Vec3::X);
+        mesh.positions.push(Vec3::Y);
+        mesh.normals.push(Vec3::Z);
+        mesh.normals.push(Vec3::Z);
+        mesh.normals.push(Vec3::Z);
+        mesh.indices.push(0);
+        mesh.indices.push(1);
+        mesh.indices.push(2);
+
+        let report = mesh.quality_report().expect("quality");
+        assert_eq!(report.triangle_count, 1);
+        assert_eq!(report.boundary_loop_count, 1);
+    }
+
+    #[test]
+    fn quality_report_on_malformed_mesh_errors() {
+        let mesh = IsoMesh {
+            positions: vec![Vec3::ZERO; 3],
+            normals: vec![Vec3::Z; 3],
+            indices: vec![0, 1], // not a multiple of 3
+        };
+        assert!(mesh.quality_report().is_err());
     }
 
     #[test]
