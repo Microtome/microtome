@@ -7,6 +7,7 @@ pub mod gpu;
 pub mod isosurface;
 pub mod job;
 pub mod mesh;
+pub mod mesh_repair;
 pub mod scene;
 pub mod slicer;
 pub mod units;
