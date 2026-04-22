@@ -10,7 +10,7 @@
 
 use glam::Vec3;
 
-use crate::isosurface::ScalarField;
+use crate::isosurface::{IsoMesh, ScalarField};
 
 /// Result of projecting a point onto a target surface.
 #[derive(Debug, Clone, Copy)]
@@ -136,6 +136,111 @@ impl ReprojectionTarget for ScalarFieldTarget<'_> {
     }
 }
 
+/// Reprojection onto a reference triangle mesh via brute-force closest
+/// point search.
+///
+/// v2 first cut is O(n) per query (no BVH). For repair-time use cases
+/// this is acceptable up to a few thousand reference triangles. A
+/// BVH-accelerated variant lands with v2.5; the closest-point query
+/// would need a closest-point BVH separate from
+/// [`mesh_bvh`](crate::isosurface), which is specialised for winding
+/// queries.
+pub struct MeshTarget<'a> {
+    triangles: Vec<[Vec3; 3]>,
+    _mesh: std::marker::PhantomData<&'a IsoMesh>,
+}
+
+impl<'a> MeshTarget<'a> {
+    /// Wraps a reference [`IsoMesh`]; precomputes triangle vertex tuples.
+    pub fn new(mesh: &'a IsoMesh) -> Self {
+        let mut triangles = Vec::with_capacity(mesh.indices.len() / 3);
+        for tri in mesh.indices.chunks_exact(3) {
+            triangles.push([
+                mesh.positions[tri[0] as usize],
+                mesh.positions[tri[1] as usize],
+                mesh.positions[tri[2] as usize],
+            ]);
+        }
+        Self {
+            triangles,
+            _mesh: std::marker::PhantomData,
+        }
+    }
+}
+
+impl ReprojectionTarget for MeshTarget<'_> {
+    fn project(&self, p: Vec3, _hint_normal: Option<Vec3>) -> Option<ProjectionResult> {
+        if self.triangles.is_empty() {
+            return None;
+        }
+        let mut best: Option<(Vec3, f32, [Vec3; 3])> = None;
+        for tri in &self.triangles {
+            let q = closest_point_on_triangle(p, tri);
+            let d = (q - p).length();
+            if best.is_none_or(|(_, bd, _)| d < bd) {
+                best = Some((q, d, *tri));
+            }
+        }
+        let (position, distance, tri) = best?;
+        let n = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalize_or_zero();
+        Some(ProjectionResult {
+            position,
+            normal: n,
+            distance,
+        })
+    }
+
+    fn normal(&self, p: Vec3) -> Vec3 {
+        self.project(p, None).map(|r| r.normal).unwrap_or(Vec3::Z)
+    }
+}
+
+/// Closest point on a triangle (Ericson, Real-Time Collision Detection §5.1.5).
+fn closest_point_on_triangle(p: Vec3, tri: &[Vec3; 3]) -> Vec3 {
+    let a = tri[0];
+    let b = tri[1];
+    let c = tri[2];
+    let ab = b - a;
+    let ac = c - a;
+    let ap = p - a;
+    let d1 = ab.dot(ap);
+    let d2 = ac.dot(ap);
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return a;
+    }
+    let bp = p - b;
+    let d3 = ab.dot(bp);
+    let d4 = ac.dot(bp);
+    if d3 >= 0.0 && d4 <= d3 {
+        return b;
+    }
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+        let v = d1 / (d1 - d3);
+        return a + v * ab;
+    }
+    let cp = p - c;
+    let d5 = ab.dot(cp);
+    let d6 = ac.dot(cp);
+    if d6 >= 0.0 && d5 <= d6 {
+        return c;
+    }
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+        let w = d2 / (d2 - d6);
+        return a + w * ac;
+    }
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
+        let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return b + w * (c - b);
+    }
+    let denom = 1.0 / (va + vb + vc);
+    let v = vb * denom;
+    let w = vc * denom;
+    a + ab * v + ac * w
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +287,50 @@ mod tests {
         let target = ScalarFieldTarget::new(&f);
         let result = target.project(Vec3::ZERO, None);
         assert!(result.is_none(), "flat field should bail");
+    }
+
+    #[test]
+    fn mesh_target_returns_nearest_point_on_triangle() {
+        let iso = IsoMesh {
+            positions: vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+            ],
+            normals: vec![Vec3::Z; 3],
+            indices: vec![0, 1, 2],
+        };
+        let target = MeshTarget::new(&iso);
+        // Point above the triangle: closest is the perpendicular foot.
+        let p = Vec3::new(0.25, 0.25, 5.0);
+        let result = target.project(p, None).expect("projects");
+        assert!((result.position.z).abs() < 1e-4);
+        assert!((result.distance - 5.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn mesh_target_returns_corner_for_far_outside_point() {
+        let iso = IsoMesh {
+            positions: vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+            ],
+            normals: vec![Vec3::Z; 3],
+            indices: vec![0, 1, 2],
+        };
+        let target = MeshTarget::new(&iso);
+        // Point far in the -x, -y quadrant: closest is the (0,0,0) corner.
+        let p = Vec3::new(-5.0, -5.0, 0.0);
+        let result = target.project(p, None).expect("projects");
+        assert!((result.position - Vec3::ZERO).length() < 1e-4);
+    }
+
+    #[test]
+    fn mesh_target_empty_returns_none() {
+        let iso = IsoMesh::new();
+        let target = MeshTarget::new(&iso);
+        assert!(target.project(Vec3::ONE, None).is_none());
     }
 
     #[test]

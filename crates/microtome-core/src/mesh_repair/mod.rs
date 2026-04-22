@@ -35,6 +35,6 @@ pub use half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
 pub use pass::{MeshRepairPass, PassOutcome, PassStage, PassStats, PassWarning, PassWarningKind};
 pub use pipeline::{FailurePolicy, MeshRepairPipeline, RepairReport};
 pub use quality::{MeshQualityReport, QualityThresholds, TriangleQuality};
-pub use reprojection::{ProjectionResult, ReprojectionTarget, ScalarFieldTarget};
+pub use reprojection::{MeshTarget, ProjectionResult, ReprojectionTarget, ScalarFieldTarget};
 pub use vertex_class::{VertexClass, VertexClassifier};
 pub use vertex_quadric::{QuadricWeights, VertexQuadric, accumulate_for_mesh};
