@@ -1,5 +1,6 @@
 //! Concrete mesh repair passes.
 
+pub mod angle_relax;
 pub mod clean_mesh;
 pub mod feature_smooth;
 pub mod fill_holes;
@@ -8,6 +9,7 @@ pub mod reproject;
 pub mod taubin_smooth;
 pub mod weld_vertices;
 
+pub use angle_relax::AngleRelax;
 pub use clean_mesh::CleanMesh;
 pub use feature_smooth::{FeatureSmooth, FeatureSmoothMethod};
 pub use fill_holes::{FillSmallHoles, HoleFillMethod};
