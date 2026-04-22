@@ -15,6 +15,7 @@
 
 use glam::Vec3;
 
+use super::features::FeatureSet;
 use super::half_edge::{FaceId, HalfEdgeMesh, VertexId};
 
 /// How a vertex should be treated by repair passes.
@@ -89,14 +90,37 @@ impl Default for VertexClassifier {
 
 impl VertexClassifier {
     /// Resets every live vertex to `Interior`, then walks topology to mark
-    /// `Boundary` and `Feature` classes, then applies pins.
+    /// `Boundary` and `Feature` classes, then applies pins. No explicit
+    /// feature set — purely topological.
     pub fn classify(&self, mesh: &mut HalfEdgeMesh) {
+        self.classify_with(mesh, None);
+    }
+
+    /// Same as [`classify`](Self::classify) but consults an optional
+    /// [`FeatureSet`] for caller-supplied creases and pinned vertices. The
+    /// declared creases mark their endpoints `Feature` *before* dihedral
+    /// detection runs, and the pinned vertices are upgraded to `Fixed` at
+    /// the end alongside `user_pinned`.
+    pub fn classify_with(&self, mesh: &mut HalfEdgeMesh, features: Option<&FeatureSet>) {
         // 1. Reset live vertices to Interior.
         let n_verts = mesh.vertices.len();
         for vi in 0..n_verts {
             let vid = VertexId(vi as u32);
             if mesh.vertex_is_live(vid) {
                 mesh.set_vertex_class(vid, VertexClass::Interior);
+            }
+        }
+
+        // 1.5. Caller-declared creases come first; combine() means later
+        // dihedral / boundary marks can only upgrade, never downgrade.
+        if let Some(fs) = features {
+            for (u, v) in fs.creases() {
+                if mesh.vertex_is_live(u) {
+                    set_at_least(mesh, u, VertexClass::Feature);
+                }
+                if mesh.vertex_is_live(v) {
+                    set_at_least(mesh, v, VertexClass::Feature);
+                }
             }
         }
 
@@ -158,10 +182,17 @@ impl VertexClassifier {
             }
         }
 
-        // 5. User pins always win.
+        // 5. User pins always win — both classifier-level and feature-set-level.
         for &vid in &self.user_pinned {
             if mesh.vertex_is_live(vid) {
                 mesh.set_vertex_class(vid, VertexClass::Fixed);
+            }
+        }
+        if let Some(fs) = features {
+            for vid in fs.pinned() {
+                if mesh.vertex_is_live(vid) {
+                    mesh.set_vertex_class(vid, VertexClass::Fixed);
+                }
             }
         }
     }
@@ -326,6 +357,53 @@ mod tests {
         for v in 0u32..4 {
             assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Interior);
         }
+    }
+
+    #[test]
+    fn featureset_creases_promote_interior_vertices() {
+        // Build a closed surface (tetrahedron-derived) and use a high
+        // dihedral threshold so nothing else qualifies as Feature. The
+        // FeatureSet then provides the only source of Feature classification.
+        // Use the tetrahedron — its edges have dihedral well below 179°.
+        let iso = iso(
+            vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ],
+            vec![0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3],
+        );
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&iso).expect("tet");
+        let mut fs = FeatureSet::new();
+        fs.add_crease(VertexId(0), VertexId(1));
+        let classifier = VertexClassifier {
+            feature_dihedral_deg: 179.0,
+            pin_boundary: false,
+            ..VertexClassifier::default()
+        };
+        classifier.classify_with(&mut mesh, Some(&fs));
+        // Tetrahedron is closed — no boundary promotions to override.
+        // 0 and 1 are on the declared crease.
+        assert_eq!(mesh.vertex_class(VertexId(0)), VertexClass::Feature);
+        assert_eq!(mesh.vertex_class(VertexId(1)), VertexClass::Feature);
+        // 2 and 3 are not on the crease and dihedral is below threshold.
+        assert_eq!(mesh.vertex_class(VertexId(2)), VertexClass::Interior);
+        assert_eq!(mesh.vertex_class(VertexId(3)), VertexClass::Interior);
+    }
+
+    #[test]
+    fn featureset_pinned_vertices_become_fixed() {
+        let mut mesh = cube();
+        let mut fs = FeatureSet::new();
+        fs.pin(VertexId(3));
+        let classifier = VertexClassifier {
+            pin_boundary: false,
+            pin_features: false,
+            ..VertexClassifier::default()
+        };
+        classifier.classify_with(&mut mesh, Some(&fs));
+        assert_eq!(mesh.vertex_class(VertexId(3)), VertexClass::Fixed);
     }
 
     #[test]

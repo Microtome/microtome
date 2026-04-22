@@ -16,6 +16,7 @@
 //! for the full design, including v2 passes not yet implemented.
 
 pub mod error;
+pub mod features;
 pub mod half_edge;
 pub mod half_edge_ops;
 pub mod pass;
@@ -25,6 +26,7 @@ pub mod quality;
 pub mod vertex_class;
 
 pub use error::{HalfEdgeOpError, PassError, RepairError, TopologyError};
+pub use features::FeatureSet;
 pub use half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
 pub use pass::{MeshRepairPass, PassOutcome, PassStage, PassStats, PassWarning, PassWarningKind};
 pub use pipeline::{FailurePolicy, MeshRepairPipeline, RepairReport};
