@@ -129,6 +129,35 @@ impl MeshRepairPipeline {
         pipeline
     }
 
+    /// Builds the v2 "standard" repair chain. Targets DC output with a
+    /// reprojection target available.
+    ///
+    /// 1. [`CleanMesh`](super::passes::CleanMesh) (pre-construction):
+    ///    duplicate-face / orphan-vertex removal, optional winding fix.
+    /// 2. [`WeldVertices`](super::passes::WeldVertices) (pre-construction):
+    ///    coincidence-induced non-manifold cleanup.
+    /// 3. [`FillSmallHoles`](super::passes::FillSmallHoles): close small
+    ///    boundary loops.
+    /// 4. [`FeatureSmooth`](super::passes::FeatureSmooth) (HC-Laplacian):
+    ///    smooth respecting `VertexClass`.
+    /// 5. [`ReprojectToSurface`](super::passes::ReprojectToSurface): pull
+    ///    smoothed vertices back onto `ctx.target` (skipped silently if
+    ///    no target — emits PassError; pipeline records and continues).
+    ///
+    /// `SimplifyQuadric` and `IsotropicRemesh` are not in the default
+    /// chain because they need caller-specified budgets / target edge
+    /// lengths; users add them explicitly.
+    pub fn standard_v2() -> Self {
+        let mut pipeline = Self::new();
+        pipeline
+            .add(super::passes::CleanMesh::default())
+            .add(super::passes::WeldVertices::default())
+            .add(super::passes::FillSmallHoles::default())
+            .add(super::passes::FeatureSmooth::default())
+            .add(super::passes::ReprojectToSurface::default());
+        pipeline
+    }
+
     /// Builds an empty pipeline for callers that want only the pre/post
     /// quality reports without mutating geometry.
     pub fn inspect_only() -> Self {
