@@ -9,9 +9,10 @@
 //! mesh `prev(h) = h.next.next`.
 //!
 //! Vertices store a single outgoing half-edge `he_out`. For boundary
-//! vertices we prefer an `he_out` whose preceding half-edge has an
-//! invalid twin — that way walking the one-ring via `prev(h).twin`
-//! naturally terminates on the boundary.
+//! vertices we pick an outgoing half-edge whose own twin is invalid —
+//! i.e. the one on the "far end" of the vertex's face chain. Walking
+//! backward via `prev(h).twin` from this he_out visits every incident
+//! face before terminating on the boundary at the other end.
 //!
 //! # Freelists
 //!
@@ -96,8 +97,9 @@ pub(super) struct VertexRecord {
     /// World-space position.
     pub pos: Vec3,
     /// Any outgoing half-edge from this vertex. For boundary vertices this
-    /// is specifically chosen so `prev(he_out).twin == INVALID`, making
-    /// one-ring traversal terminate cleanly.
+    /// is specifically chosen so `he_out.twin == INVALID` — i.e. it's a
+    /// boundary half-edge. Walking backward from it via `prev(h).twin`
+    /// visits all incident faces and terminates on the boundary.
     pub he_out: HalfEdgeId,
     /// Soft-delete flag. Removed vertices are compacted away in
     /// [`HalfEdgeMesh::to_iso_mesh`].
@@ -277,15 +279,13 @@ impl HalfEdgeMesh {
     /// Returns `true` if the vertex lies on a boundary loop.
     ///
     /// Relies on the he_out assignment invariant: for boundary vertices,
-    /// `prev(he_out).twin` is `HalfEdgeId::INVALID`.
+    /// `he_out.twin == HalfEdgeId::INVALID`.
     pub fn vertex_is_boundary(&self, v: VertexId) -> bool {
         let he_out = self.vertices[v.index()].he_out;
         if !he_out.is_valid() {
             return false;
         }
-        !self.half_edges[self.he_prev(he_out).index()]
-            .twin
-            .is_valid()
+        !self.half_edges[he_out.index()].twin.is_valid()
     }
 
     /// Iterates the one-ring neighbours of a vertex.
@@ -545,22 +545,25 @@ impl HalfEdgeMesh {
         Ok(mesh_out)
     }
 
-    /// Picks each vertex's `he_out`, preferring boundary-preceded half-edges.
+    /// Picks each vertex's `he_out`, preferring outgoing boundary half-edges
+    /// (those with `twin == INVALID`).
     fn assign_vertex_he_out(&mut self) {
         for i in 0..self.half_edges.len() {
             let this_he = HalfEdgeId(i as u32);
+            let rec = &self.half_edges[i];
+            if rec.removed {
+                continue;
+            }
             let tail = self.he_tail(this_he);
-            let prev_twin_invalid =
-                self.half_edges[self.he_prev(this_he).index()].twin == HalfEdgeId::INVALID;
             let current = self.vertices[tail.index()].he_out;
+            let this_twin_invalid = rec.twin == HalfEdgeId::INVALID;
             let should_assign = if !current.is_valid() {
                 true
-            } else if prev_twin_invalid {
-                // Prefer a boundary-preceded outgoing half-edge so one-ring
-                // walks via `prev(h).twin` terminate on boundary contact.
-                self.half_edges[self.he_prev(current).index()]
-                    .twin
-                    .is_valid()
+            } else if this_twin_invalid {
+                // Prefer an outgoing boundary half-edge — walking backward
+                // from it via prev.twin reaches every incident face before
+                // hitting the boundary on the opposite end.
+                self.half_edges[current.index()].twin.is_valid()
             } else {
                 false
             };
@@ -1107,19 +1110,16 @@ mod tests {
     }
 
     #[test]
-    fn boundary_vertex_he_out_points_to_boundary_preceded_edge() {
-        // Single triangle: all vertices boundary, all prev-twins INVALID.
+    fn boundary_vertex_he_out_is_a_boundary_half_edge() {
+        // Single triangle: all vertices boundary, every half-edge has twin INVALID,
+        // so he_out for each vertex should itself be boundary.
         let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
         for v in 0..3 {
             let vid = VertexId(v);
             let he = mesh.vertex_he_out(vid);
             assert!(he.is_valid());
             assert_eq!(mesh.he_tail(he), vid);
-            // The single-triangle case: all prev-twins are INVALID.
-            assert_eq!(
-                mesh.half_edges[mesh.he_prev(he).index()].twin,
-                HalfEdgeId::INVALID
-            );
+            assert_eq!(mesh.he_twin(he), HalfEdgeId::INVALID);
         }
     }
 }
