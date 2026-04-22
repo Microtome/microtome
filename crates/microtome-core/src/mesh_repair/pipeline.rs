@@ -108,12 +108,24 @@ impl MeshRepairPipeline {
         self.passes.is_empty()
     }
 
-    /// Builds an empty pipeline. Populated with the v1 chain by
-    /// [`standard`](Self::standard) once concrete passes exist.
+    /// Builds the v1 "standard" repair chain:
+    ///
+    /// 1. [`WeldVertices`](super::passes::WeldVertices) (pre-construction)
+    ///    with default bbox-relative epsilon of `1e-6 × diag`.
+    /// 2. [`FillSmallHoles`](super::passes::FillSmallHoles) with a budget of
+    ///    8 boundary half-edges.
+    /// 3. [`RemoveSlivers`](super::passes::RemoveSlivers) with min-angle 5°
+    ///    and max-aspect-ratio 50.
+    /// 4. [`TaubinSmooth`](super::passes::TaubinSmooth) with λ=0.33, μ=-0.34,
+    ///    two iterations, boundary pinned.
     pub fn standard() -> Self {
-        // v1 passes land in task #14; until then `standard` returns an
-        // empty pipeline so callers can already wire it through the API.
-        Self::new()
+        let mut pipeline = Self::new();
+        pipeline
+            .add(super::passes::WeldVertices::default())
+            .add(super::passes::FillSmallHoles::default())
+            .add(super::passes::RemoveSlivers::default())
+            .add(super::passes::TaubinSmooth::default());
+        pipeline
     }
 
     /// Builds an empty pipeline for callers that want only the pre/post
@@ -395,6 +407,52 @@ mod tests {
         let mut pipeline = MeshRepairPipeline::new();
         pipeline.add(CountingPass).add(CountingPass);
         assert_eq!(pipeline.len(), 2);
+    }
+
+    #[test]
+    fn standard_pipeline_runs_on_single_triangle_without_error() {
+        // Single triangle: welder+hole fill (triangle is its own hole, 3 edges,
+        // within budget 8) + sliver removal (equilateral, not a sliver) + Taubin
+        // (boundary pinned → no-op). End-to-end smoke test for the standard chain.
+        let pipeline = MeshRepairPipeline::standard();
+        let iso = single_triangle();
+        let (_out, report) = pipeline.run(&iso, |_| Vec3::Z).expect("run");
+        assert_eq!(report.per_pass.len(), 4);
+        assert_eq!(report.per_pass[0].name, "weld_vertices");
+        assert_eq!(report.per_pass[1].name, "fill_small_holes");
+        assert_eq!(report.per_pass[2].name, "remove_slivers");
+        assert_eq!(report.per_pass[3].name, "taubin_smooth");
+    }
+
+    #[test]
+    fn standard_pipeline_reduces_sliver_count() {
+        // Three-triangle strip with one needle in the middle — the same
+        // fixture RemoveSlivers is tested against, now run through the
+        // full standard chain.
+        let iso = IsoMesh {
+            positions: vec![
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(1.0, 1.0, 0.0),
+                Vec3::new(2.0, 1.0, 0.0),
+                Vec3::new(3.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(1.001, 0.0, 0.0),
+                Vec3::new(3.0, 0.0, 0.0),
+            ],
+            normals: vec![Vec3::Z; 8],
+            indices: vec![0, 1, 4, 1, 5, 4, 1, 2, 5, 2, 6, 5, 2, 3, 6, 3, 7, 6],
+        };
+        let pre = iso.quality_report().expect("pre");
+        let pipeline = MeshRepairPipeline::standard();
+        let (out, _report) = pipeline.run(&iso, |_| Vec3::Z).expect("run");
+        let post = out.quality_report().expect("post");
+        assert!(
+            post.sliver_count < pre.sliver_count,
+            "standard pipeline should reduce slivers: pre={} post={}",
+            pre.sliver_count,
+            post.sliver_count
+        );
     }
 
     #[test]
