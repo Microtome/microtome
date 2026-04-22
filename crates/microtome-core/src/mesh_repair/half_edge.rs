@@ -247,19 +247,162 @@ impl HalfEdgeMesh {
         [v0, v1, v2]
     }
 
-    /// Returns whether the mesh is 2-manifold.
+    /// Alias for [`face_vertices`](Self::face_vertices).
+    pub fn face_triangle(&self, f: FaceId) -> [VertexId; 3] {
+        self.face_vertices(f)
+    }
+
+    /// Returns the three world-space positions of a face, in winding order.
+    pub fn face_positions(&self, f: FaceId) -> [Vec3; 3] {
+        let [v0, v1, v2] = self.face_vertices(f);
+        [
+            self.vertices[v0.index()].pos,
+            self.vertices[v1.index()].pos,
+            self.vertices[v2.index()].pos,
+        ]
+    }
+
+    /// Returns the length of the edge represented by a half-edge.
+    pub fn edge_length(&self, h: HalfEdgeId) -> f32 {
+        let head = self.vertices[self.he_head(h).index()].pos;
+        let tail = self.vertices[self.he_tail(h).index()].pos;
+        (head - tail).length()
+    }
+
+    /// Returns the degree (count of one-ring neighbours) of a vertex.
+    pub fn vertex_valence(&self, v: VertexId) -> u32 {
+        self.vertex_one_ring(v).count() as u32
+    }
+
+    /// Returns `true` if the vertex lies on a boundary loop.
     ///
-    /// A mesh is 2-manifold when every live edge is shared by at most two
-    /// live faces (non-manifold rejection happens at construction) and every
-    /// vertex's one-ring of faces is connected.
+    /// Relies on the he_out assignment invariant: for boundary vertices,
+    /// `prev(he_out).twin` is `HalfEdgeId::INVALID`.
+    pub fn vertex_is_boundary(&self, v: VertexId) -> bool {
+        let he_out = self.vertices[v.index()].he_out;
+        if !he_out.is_valid() {
+            return false;
+        }
+        !self.half_edges[self.he_prev(he_out).index()]
+            .twin
+            .is_valid()
+    }
+
+    /// Iterates the one-ring neighbours of a vertex.
     ///
-    /// v1 implementation: returns `true` as a placeholder; construction
-    /// already rejects non-manifold inputs. A rigorous post-mutation check
-    /// lands with task #4.
+    /// For interior vertices, yields the head of every outgoing half-edge in
+    /// cyclic order. For boundary vertices, yields the same *plus* one extra
+    /// neighbour across the boundary gap — namely the head of the "next"
+    /// half-edge after the boundary-adjacent outgoing, which is the
+    /// across-the-gap neighbour that is only reachable via an incoming
+    /// boundary half-edge.
+    pub fn vertex_one_ring(&self, v: VertexId) -> OneRingIter<'_> {
+        let start = self.vertices[v.index()].he_out;
+        OneRingIter {
+            mesh: self,
+            start,
+            current: start,
+            first: true,
+            pending_tail: HalfEdgeId::INVALID,
+        }
+    }
+
+    /// Iterates unique edges of the mesh, yielding one half-edge per edge.
+    ///
+    /// Boundary half-edges (no twin) are yielded once; interior edges yield
+    /// the half-edge with the lower index.
+    pub fn edge_iter(&self) -> EdgeIter<'_> {
+        EdgeIter {
+            mesh: self,
+            index: 0,
+        }
+    }
+
+    /// Returns the boundary loops of the mesh.
+    ///
+    /// Each loop is a sequence of boundary half-edges (twin == INVALID) in
+    /// the order they connect around a hole. The emitted order for a given
+    /// loop starts at the lowest-indexed half-edge in that loop.
+    pub fn boundary_loops(&self) -> Vec<Vec<HalfEdgeId>> {
+        let mut visited = vec![false; self.half_edges.len()];
+        let mut loops: Vec<Vec<HalfEdgeId>> = Vec::new();
+        for i in 0..self.half_edges.len() {
+            let h = &self.half_edges[i];
+            if h.removed || h.twin.is_valid() || visited[i] {
+                continue;
+            }
+            let mut loop_hes = Vec::new();
+            let start = HalfEdgeId(i as u32);
+            let mut current = start;
+            loop {
+                loop_hes.push(current);
+                visited[current.index()] = true;
+                let next = self.next_boundary_he(current);
+                if next == start {
+                    break;
+                }
+                current = next;
+            }
+            loops.push(loop_hes);
+        }
+        loops
+    }
+
+    /// Given a boundary half-edge (twin == INVALID), returns the next boundary
+    /// half-edge in the loop. Walks around `he_head(h)` via `next` / `twin`
+    /// pivots until the next boundary-adjacent outgoing is found.
+    pub fn next_boundary_he(&self, h: HalfEdgeId) -> HalfEdgeId {
+        debug_assert!(!self.half_edges[h.index()].twin.is_valid());
+        let mut current = self.he_next(h);
+        loop {
+            let twin = self.he_twin(current);
+            if !twin.is_valid() {
+                return current;
+            }
+            current = self.he_next(twin);
+        }
+    }
+
+    /// Returns `true` if construction-time invariants still hold:
+    /// - every live half-edge's twin (when valid) points back;
+    /// - every face's three half-edges cycle correctly via `next`;
+    /// - no edge has more than two incident live faces.
+    ///
+    /// The pipeline calls this between passes when policy dictates.
     pub fn is_manifold(&self) -> bool {
-        // Post-construction mutations are the only way to break manifoldness,
-        // and v1 ops all gate on link-condition / boundary-merge checks that
-        // preserve it. A rigorous audit lands alongside the query helpers.
+        // Twin symmetry.
+        for (i, h) in self.half_edges.iter().enumerate() {
+            if h.removed {
+                continue;
+            }
+            if h.twin.is_valid() {
+                if !self.half_edge_is_live(h.twin) {
+                    return false;
+                }
+                if self.half_edges[h.twin.index()].twin != HalfEdgeId(i as u32) {
+                    return false;
+                }
+            }
+        }
+        // Face cycles of length 3 and each face's half-edges point back.
+        for (fi, f) in self.faces.iter().enumerate() {
+            if f.removed {
+                continue;
+            }
+            let expected_face = FaceId(fi as u32);
+            let h0 = f.he;
+            let h1 = self.half_edges[h0.index()].next;
+            let h2 = self.half_edges[h1.index()].next;
+            let h3 = self.half_edges[h2.index()].next;
+            if h3 != h0 {
+                return false;
+            }
+            for h in [h0, h1, h2] {
+                if self.half_edges[h.index()].face != expected_face {
+                    return false;
+                }
+            }
+        }
         true
     }
 
@@ -544,6 +687,73 @@ impl HalfEdgeMesh {
     }
 }
 
+/// Iterator over a vertex's one-ring neighbours.
+///
+/// See [`HalfEdgeMesh::vertex_one_ring`] for semantics.
+pub struct OneRingIter<'a> {
+    mesh: &'a HalfEdgeMesh,
+    start: HalfEdgeId,
+    current: HalfEdgeId,
+    first: bool,
+    pending_tail: HalfEdgeId,
+}
+
+impl Iterator for OneRingIter<'_> {
+    type Item = VertexId;
+
+    fn next(&mut self) -> Option<VertexId> {
+        if self.current.is_valid() {
+            let h = self.current;
+            let head = self.mesh.he_head(h);
+            let prev = self.mesh.he_prev(h);
+            let prev_twin = self.mesh.he_twin(prev);
+            if !prev_twin.is_valid() {
+                // Boundary: stash the across-the-gap neighbour for the next call.
+                self.pending_tail = self.mesh.he_next(h);
+                self.current = HalfEdgeId::INVALID;
+            } else if !self.first && prev_twin == self.start {
+                self.current = HalfEdgeId::INVALID;
+            } else {
+                self.current = prev_twin;
+                self.first = false;
+            }
+            return Some(head);
+        }
+        if self.pending_tail.is_valid() {
+            let h = self.pending_tail;
+            self.pending_tail = HalfEdgeId::INVALID;
+            return Some(self.mesh.he_head(h));
+        }
+        None
+    }
+}
+
+/// Iterator over unique edges of a [`HalfEdgeMesh`].
+pub struct EdgeIter<'a> {
+    mesh: &'a HalfEdgeMesh,
+    index: usize,
+}
+
+impl Iterator for EdgeIter<'_> {
+    type Item = HalfEdgeId;
+
+    fn next(&mut self) -> Option<HalfEdgeId> {
+        while self.index < self.mesh.half_edges.len() {
+            let i = self.index;
+            self.index += 1;
+            let h = &self.mesh.half_edges[i];
+            if h.removed {
+                continue;
+            }
+            let this_id = HalfEdgeId(i as u32);
+            if !h.twin.is_valid() || this_id.0 < h.twin.0 {
+                return Some(this_id);
+            }
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -734,6 +944,166 @@ mod tests {
             assert_eq!(mesh.he_head(hid).index(), head.index());
             assert_eq!(tail.index(), mesh.he_tail(hid).index());
         }
+    }
+
+    fn cube_with_hole() -> IsoMesh {
+        // 8 cube corners, 5 faces (one face of the cube removed). 10 triangles.
+        // Vertex numbering:
+        //   0: (0,0,0)  1: (1,0,0)  2: (1,1,0)  3: (0,1,0)  (bottom face, y=0 → z=0)
+        //   4: (0,0,1)  5: (1,0,1)  6: (1,1,1)  7: (0,1,1)
+        //
+        // Remove the +z face (vertices 4,5,6,7).
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(0.0, 1.0, 1.0),
+        ];
+        // 5 faces × 2 triangles, CCW when viewed from outside. The missing
+        // face is the +z face (indices 4,5,6,7).
+        #[rustfmt::skip]
+        let indices = vec![
+            // -z bottom (inward normal = +z, so from below CCW = 0,2,1 / 0,3,2)
+            0, 2, 1,
+            0, 3, 2,
+            // -y front
+            0, 1, 5,
+            0, 5, 4,
+            // +x right
+            1, 2, 6,
+            1, 6, 5,
+            // +y back
+            2, 3, 7,
+            2, 7, 6,
+            // -x left
+            3, 0, 4,
+            3, 4, 7,
+        ];
+        IsoMesh {
+            positions,
+            normals: vec![Vec3::ZERO; 8],
+            indices,
+        }
+    }
+
+    #[test]
+    fn single_triangle_vertex_valence() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        for v in 0..3 {
+            assert_eq!(mesh.vertex_valence(VertexId(v)), 2);
+        }
+    }
+
+    #[test]
+    fn tetrahedron_vertex_valence_is_three() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        for v in 0..4 {
+            assert_eq!(mesh.vertex_valence(VertexId(v)), 3);
+        }
+    }
+
+    #[test]
+    fn single_triangle_all_vertices_are_boundary() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        for v in 0..3 {
+            assert!(mesh.vertex_is_boundary(VertexId(v)));
+        }
+    }
+
+    #[test]
+    fn tetrahedron_no_boundary_vertices() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        for v in 0..4 {
+            assert!(!mesh.vertex_is_boundary(VertexId(v)));
+        }
+    }
+
+    #[test]
+    fn single_triangle_boundary_loop() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        let loops = mesh.boundary_loops();
+        assert_eq!(loops.len(), 1);
+        assert_eq!(loops[0].len(), 3);
+    }
+
+    #[test]
+    fn tetrahedron_no_boundary_loops() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        assert!(mesh.boundary_loops().is_empty());
+    }
+
+    #[test]
+    fn cube_with_hole_has_single_boundary_loop_of_four() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&cube_with_hole()).expect("construct");
+        let loops = mesh.boundary_loops();
+        assert_eq!(loops.len(), 1);
+        assert_eq!(loops[0].len(), 4);
+        // Exactly vertices 4,5,6,7 appear on the loop.
+        let mut verts: Vec<u32> = loops[0].iter().map(|h| mesh.he_head(*h).0).collect();
+        verts.sort_unstable();
+        let mut tails: Vec<u32> = loops[0].iter().map(|h| mesh.he_tail(*h).0).collect();
+        tails.sort_unstable();
+        assert_eq!(verts, vec![4, 5, 6, 7]);
+        assert_eq!(tails, vec![4, 5, 6, 7]);
+    }
+
+    #[test]
+    fn edge_iter_yields_unique_edges() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        // Tetrahedron has 6 edges. 12 half-edges / 2 = 6 unique.
+        let edges: Vec<_> = mesh.edge_iter().collect();
+        assert_eq!(edges.len(), 6);
+    }
+
+    #[test]
+    fn edge_iter_on_cube_with_hole() {
+        // 8 vertices, 10 faces → Euler: V - E + F = 2 - g where g = boundary loops.
+        // For genus-0 surface with 1 boundary: 8 - E + 10 = 1 → E = 17? Actually
+        // for a disk-with-hole topology, V - E + F = 1 (single disk). 8 - E + 10 = 1 → E = 17.
+        let mesh = HalfEdgeMesh::from_iso_mesh(&cube_with_hole()).expect("construct");
+        let edges: Vec<_> = mesh.edge_iter().collect();
+        assert_eq!(edges.len(), 17);
+    }
+
+    #[test]
+    fn edge_length_matches_geometry() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        // Any half-edge from vertex 0 (origin) to vertex 1 (1,0,0) has length 1.
+        for h in 0..3 {
+            let hid = HalfEdgeId(h);
+            let tail = mesh.he_tail(hid);
+            let head = mesh.he_head(hid);
+            if (tail, head) == (VertexId(0), VertexId(1))
+                || (tail, head) == (VertexId(1), VertexId(0))
+            {
+                assert!((mesh.edge_length(hid) - 1.0).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn face_positions_matches_vertices() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        let ps = mesh.face_positions(FaceId(0));
+        assert_eq!(ps[0], Vec3::new(0.0, 0.0, 0.0));
+        assert_eq!(ps[1], Vec3::new(1.0, 0.0, 0.0));
+        assert_eq!(ps[2], Vec3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn is_manifold_true_for_tetrahedron() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        assert!(mesh.is_manifold());
+    }
+
+    #[test]
+    fn is_manifold_true_for_single_triangle() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        assert!(mesh.is_manifold());
     }
 
     #[test]
