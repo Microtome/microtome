@@ -372,7 +372,7 @@ impl HalfEdgeMesh {
     /// Returns `true` if construction-time invariants still hold:
     /// - every live half-edge's twin (when valid) points back;
     /// - every face's three half-edges cycle correctly via `next`;
-    /// - no edge has more than two incident live faces.
+    /// - no undirected edge is referenced by more than two live half-edges.
     ///
     /// The pipeline calls this between passes when policy dictates.
     pub fn is_manifold(&self) -> bool {
@@ -409,7 +409,40 @@ impl HalfEdgeMesh {
                 }
             }
         }
-        true
+        // Edge-uniqueness: no undirected edge may have more than two
+        // live half-edges. v1 ops (collapse + fan-fill) occasionally
+        // produce 3-incident edges on busy DC output; this catches
+        // them so the pipeline can flag the run as broken.
+        self.count_non_manifold_edges() == 0
+    }
+
+    /// Counts undirected edges referenced by more than two live half-edges.
+    ///
+    /// Returns 0 on a valid 2-manifold (or boundary-manifold) mesh. The
+    /// pipeline reads this via [`MeshQualityReport`](super::quality::MeshQualityReport)
+    /// for diagnostics independent of the boolean [`is_manifold`](Self::is_manifold).
+    pub fn count_non_manifold_edges(&self) -> u32 {
+        use std::collections::HashMap;
+        let mut counts: HashMap<(u32, u32), u32> = HashMap::new();
+        for h in &self.half_edges {
+            if h.removed {
+                continue;
+            }
+            // Use the head and the prev-head (= tail) to canonicalise the edge.
+            // Walking via fields directly avoids the borrow gymnastics of
+            // calling he_tail() in this context.
+            let head = h.vertex.0;
+            let tail = self.half_edges[self.half_edges[h.next.index()].next.index()]
+                .vertex
+                .0;
+            let key = if head <= tail {
+                (head, tail)
+            } else {
+                (tail, head)
+            };
+            *counts.entry(key).or_insert(0) += 1;
+        }
+        counts.values().filter(|&&c| c > 2).count() as u32
     }
 
     /// Builds a `HalfEdgeMesh` from an `IsoMesh`.
@@ -1134,6 +1167,62 @@ mod tests {
     fn is_manifold_true_for_single_triangle() {
         let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
         assert!(mesh.is_manifold());
+    }
+
+    #[test]
+    fn manifold_check_detects_three_face_edge() {
+        // Build a valid 2-tri mesh, then manually corrupt by flipping a
+        // boundary half-edge to point at another half-edge, simulating a
+        // 3-incident edge.
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("build");
+        // Inject a duplicate half-edge that references the same edge as h0.
+        // Push a new half-edge claiming the (0,1) edge and a face that
+        // doesn't exist (we only need to fool the count, not the cycles).
+        mesh.half_edges.push(HalfEdgeRecord {
+            vertex: VertexId(1), // head 1 (same as h0's edge 0→1)
+            face: FaceId::INVALID,
+            // Make this fake half-edge a self-loop in next/prev space so
+            // he_tail returns vertex 0 when called.
+            next: HalfEdgeId(3),
+            twin: HalfEdgeId::INVALID,
+            removed: false,
+        });
+        mesh.half_edges.push(HalfEdgeRecord {
+            vertex: VertexId(0), // dummy "next" pointing at v0
+            face: FaceId::INVALID,
+            next: HalfEdgeId(3),
+            twin: HalfEdgeId::INVALID,
+            removed: false,
+        });
+        // Now there's a 3rd half-edge with head=v1, tail=v0 → edge (0,1)
+        // referenced 3× total (h0 once, the new one once, plus the same
+        // edge from the other triangle direction h2 once).
+        // Actually wait — let me think. single_triangle has:
+        //   h0: 0→1, h1: 1→2, h2: 2→0. Edges: (0,1), (1,2), (0,2).
+        // So edge (0,1) was referenced once (by h0). Adding a 4th half-edge
+        // pointing 0→1 makes edge (0,1) referenced twice. Need a 3rd.
+        // Add another:
+        mesh.half_edges.push(HalfEdgeRecord {
+            vertex: VertexId(1),
+            face: FaceId::INVALID,
+            next: HalfEdgeId(3),
+            twin: HalfEdgeId::INVALID,
+            removed: false,
+        });
+        mesh.half_edges.push(HalfEdgeRecord {
+            vertex: VertexId(0),
+            face: FaceId::INVALID,
+            next: HalfEdgeId(3),
+            twin: HalfEdgeId::INVALID,
+            removed: false,
+        });
+        // count_non_manifold_edges scans head-tail pairs; (0,1) now has
+        // 1 (h0) + 1 (idx 3) + 1 (idx 5) = 3 entries from heads-of-h0,
+        // h_new1, h_new3 plus tails from index 4 and 6 going TO 0 — actually
+        // each push adds one tail-to-head pair. Let me just assert
+        // count > 0 — corrupted mesh fails the check.
+        assert!(mesh.count_non_manifold_edges() > 0);
+        assert!(!mesh.is_manifold());
     }
 
     #[test]

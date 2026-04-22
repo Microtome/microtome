@@ -144,10 +144,10 @@ impl HalfEdgeMesh {
             min_angle_deg,
             sliver_count,
             boundary_loop_count: self.boundary_loops().len() as u32,
-            // With our construction rejecting non-manifold input and ops
-            // preserving manifoldness, this is always zero. Future work can
-            // count them explicitly if passes introduce non-manifold states.
-            non_manifold_edge_count: 0,
+            // Real count: scans live half-edges for undirected edges referenced
+            // by > 2 entries. v1 ops can occasionally produce these on busy
+            // DC output (see project_mesh_repair_v1 memory).
+            non_manifold_edge_count: self.count_non_manifold_edges(),
             approx_volume: volume,
         }
     }
