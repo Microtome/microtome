@@ -275,6 +275,45 @@ impl QefSolver {
         self.average_normal_sum += n;
     }
 
+    /// Accumulates a weighted plane constraint `n · x = d`.
+    ///
+    /// Equivalent to [`add`](Self::add) with `p = n * d` (assuming `n` is
+    /// unit-length) and a multiplicative `weight`. Used by Garland-Heckbert
+    /// quadric accumulation in `mesh_repair::vertex_quadric` (task #23).
+    pub fn add_plane(&mut self, normal: Vec3, d: f32, weight: f32) {
+        let n = normal;
+        let w = weight;
+        let wn = n * w;
+        self.ata[0][0] += wn.x * n.x;
+        self.ata[0][1] += wn.x * n.y;
+        self.ata[0][2] += wn.x * n.z;
+        self.ata[1][1] += wn.y * n.y;
+        self.ata[1][2] += wn.y * n.z;
+        self.ata[2][2] += wn.z * n.z;
+        self.atb += wn * d;
+        self.btb += w * d * d;
+        // Representative point on the plane (closest to origin if n is
+        // unit-length); contributes to mass-point fallback so plane-only
+        // QefSolvers still have something to centre on.
+        let p = n * d;
+        let c = p * n;
+        self.diag_atc += wn * c;
+        self.diag_ctc += (c * c) * w;
+        self.point_count += 1;
+        self.mass_point_sum += p * w;
+        self.average_normal_sum += wn;
+    }
+
+    /// Evaluates the QEF at `p`: returns `(p − x*)^T A (p − x*)` shifted by
+    /// the accumulated constraint terms.
+    ///
+    /// Equivalent to [`get_error_at`](Self::get_error_at); kept as a
+    /// named alias since `quadric.evaluate(p)` reads more naturally in
+    /// Garland-Heckbert collapse-cost code.
+    pub fn evaluate(&self, p: Vec3) -> f32 {
+        self.get_error_at(p)
+    }
+
     // ========================================================================
     // Qef.cpp — void QefSolver::solve(...)
     // ========================================================================
@@ -734,5 +773,53 @@ mod tests {
         let mut _err = 0.0_f32;
         solver.solve(&mut pos, &mut _err);
         assert!(pos.length() < 0.5, "pos = {pos:?}, expected near origin");
+    }
+
+    #[test]
+    fn add_plane_evaluates_to_zero_on_plane() {
+        // Plane n·x = d with n = +Z, d = 1 → plane z = 1.
+        let mut solver = QefSolver::new();
+        solver.add_plane(Vec3::Z, 1.0, 1.0);
+        let on_plane = Vec3::new(2.5, -7.0, 1.0);
+        assert!(solver.evaluate(on_plane).abs() < 1e-4);
+    }
+
+    #[test]
+    fn add_plane_distance_squared_off_plane() {
+        // Single plane z = 0 with weight 1. evaluate at z=2 → distance² = 4.
+        let mut solver = QefSolver::new();
+        solver.add_plane(Vec3::Z, 0.0, 1.0);
+        let off = Vec3::new(0.0, 0.0, 2.0);
+        assert!((solver.evaluate(off) - 4.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn add_plane_with_weight_scales_residual() {
+        // Same plane, weight 5 → residual scales 5×.
+        let mut light = QefSolver::new();
+        light.add_plane(Vec3::Z, 0.0, 1.0);
+        let mut heavy = QefSolver::new();
+        heavy.add_plane(Vec3::Z, 0.0, 5.0);
+        let off = Vec3::new(0.0, 0.0, 1.0);
+        assert!((heavy.evaluate(off) - 5.0 * light.evaluate(off)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn add_plane_combines_additively() {
+        // Two perpendicular planes (z=0 and x=0). At (1, 0, 1) the squared
+        // distance to each is 1; sum should be 2.
+        let mut solver = QefSolver::new();
+        solver.add_plane(Vec3::Z, 0.0, 1.0);
+        solver.add_plane(Vec3::X, 0.0, 1.0);
+        let p = Vec3::new(1.0, 0.0, 1.0);
+        assert!((solver.evaluate(p) - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn evaluate_alias_matches_get_error_at() {
+        let mut solver = QefSolver::new();
+        solver.add_plane(Vec3::Z, 0.5, 2.0);
+        let p = Vec3::new(0.3, 0.4, 1.7);
+        assert_eq!(solver.evaluate(p), solver.get_error_at(p));
     }
 }
