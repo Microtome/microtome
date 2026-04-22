@@ -26,6 +26,7 @@ use glam::Vec3;
 use std::collections::HashMap;
 
 use super::error::TopologyError;
+use super::vertex_class::VertexClass;
 use crate::isosurface::IsoMesh;
 
 /// Opaque identifier for a vertex in a [`HalfEdgeMesh`].
@@ -142,6 +143,11 @@ pub struct HalfEdgeMesh {
     pub(super) vertices: Vec<VertexRecord>,
     pub(super) half_edges: Vec<HalfEdgeRecord>,
     pub(super) faces: Vec<FaceRecord>,
+    /// Per-vertex class, parallel to `vertices`. Default `Interior`.
+    /// Populated by [`VertexClassifier`](super::vertex_class::VertexClassifier)
+    /// (lands with task #17). Survives compact and inherits via `combine`
+    /// on collapse.
+    pub(super) vertex_class: Vec<VertexClass>,
     pub(super) free_vertices: Vec<VertexId>,
     pub(super) free_half_edges: Vec<HalfEdgeId>,
     pub(super) free_faces: Vec<FaceId>,
@@ -533,10 +539,12 @@ impl HalfEdgeMesh {
             }
         }
 
+        let vertex_class = vec![VertexClass::Interior; vertices.len()];
         let mut mesh_out = Self {
             vertices,
             half_edges,
             faces,
+            vertex_class,
             free_vertices: Vec::new(),
             free_half_edges: Vec::new(),
             free_faces: Vec::new(),
@@ -585,13 +593,15 @@ impl HalfEdgeMesh {
             return;
         }
 
-        // Build vertex remap.
+        // Build vertex remap. Compact vertex_class alongside vertices.
         let mut v_remap: Vec<u32> = vec![u32::MAX; self.vertices.len()];
         let mut new_vertices: Vec<VertexRecord> = Vec::with_capacity(self.vertex_count());
+        let mut new_vertex_class: Vec<VertexClass> = Vec::with_capacity(self.vertex_count());
         for (old, v) in self.vertices.iter().enumerate() {
             if !v.removed {
                 v_remap[old] = new_vertices.len() as u32;
                 new_vertices.push(v.clone());
+                new_vertex_class.push(self.vertex_class[old]);
             }
         }
 
@@ -638,11 +648,28 @@ impl HalfEdgeMesh {
         }
 
         self.vertices = new_vertices;
+        self.vertex_class = new_vertex_class;
         self.half_edges = new_half_edges;
         self.faces = new_faces;
         self.free_vertices.clear();
         self.free_half_edges.clear();
         self.free_faces.clear();
+    }
+
+    /// Returns the [`VertexClass`] of a vertex.
+    pub fn vertex_class(&self, v: VertexId) -> VertexClass {
+        self.vertex_class
+            .get(v.index())
+            .copied()
+            .unwrap_or(VertexClass::Interior)
+    }
+
+    /// Sets the [`VertexClass`] of a vertex. The classifier uses this when
+    /// pinning vertices manually; passes typically go through the classifier.
+    pub fn set_vertex_class(&mut self, v: VertexId, class: VertexClass) {
+        if let Some(slot) = self.vertex_class.get_mut(v.index()) {
+            *slot = class;
+        }
     }
 
     /// Emits a compacted [`IsoMesh`] from this half-edge mesh.
@@ -1107,6 +1134,40 @@ mod tests {
     fn is_manifold_true_for_single_triangle() {
         let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
         assert!(mesh.is_manifold());
+    }
+
+    #[test]
+    fn vertex_class_defaults_to_interior() {
+        let mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        for v in 0u32..3 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Interior);
+        }
+    }
+
+    #[test]
+    fn vertex_class_set_and_read_round_trip() {
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
+        mesh.set_vertex_class(VertexId(1), VertexClass::Fixed);
+        mesh.set_vertex_class(VertexId(2), VertexClass::Boundary);
+        assert_eq!(mesh.vertex_class(VertexId(1)), VertexClass::Fixed);
+        assert_eq!(mesh.vertex_class(VertexId(2)), VertexClass::Boundary);
+        assert_eq!(mesh.vertex_class(VertexId(0)), VertexClass::Interior);
+    }
+
+    #[test]
+    fn vertex_class_survives_compact() {
+        // Mark vertices, mark some removed, compact, check survivors keep class.
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&tetrahedron()).expect("construct");
+        mesh.set_vertex_class(VertexId(0), VertexClass::Fixed);
+        mesh.set_vertex_class(VertexId(2), VertexClass::Feature);
+        // Manually remove vertex 1 to force a compact remap.
+        mesh.vertices[1].removed = true;
+        mesh.free_vertices.push(VertexId(1));
+        mesh.compact();
+        // After compact: original vertex 0 is now at index 0, 2 is now at 1, 3 is at 2.
+        assert_eq!(mesh.vertex_class(VertexId(0)), VertexClass::Fixed);
+        assert_eq!(mesh.vertex_class(VertexId(1)), VertexClass::Feature);
+        assert_eq!(mesh.vertex_class(VertexId(2)), VertexClass::Interior);
     }
 
     #[test]

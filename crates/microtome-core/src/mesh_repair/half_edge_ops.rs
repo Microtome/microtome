@@ -130,8 +130,13 @@ impl HalfEdgeMesh {
             }
         }
 
-        // Move u to the chosen position.
+        // Move u to the chosen position; merged vertex inherits the stronger
+        // of the two endpoints' classes (Fixed > Boundary > Feature > Interior).
         self.vertices[u.index()].pos = pos;
+        self.vertex_class[u.index()] = super::vertex_class::VertexClass::combine(
+            self.vertex_class[u.index()],
+            self.vertex_class[v.index()],
+        );
 
         // Mark the two (or one) faces and their six (or three) half-edges removed.
         self.mark_half_edge_removed(he);
@@ -549,12 +554,15 @@ impl HalfEdgeMesh {
     }
 
     fn allocate_vertex(&mut self, pos: Vec3) -> VertexId {
+        // New vertices default to Interior; passes that synthesise vertices
+        // (e.g. FillSmallHoles centroids) override this immediately to Fixed.
         if let Some(v) = self.free_vertices.pop() {
             self.vertices[v.index()] = super::half_edge::VertexRecord {
                 pos,
                 he_out: HalfEdgeId::INVALID,
                 removed: false,
             };
+            self.vertex_class[v.index()] = super::vertex_class::VertexClass::Interior;
             v
         } else {
             let id = VertexId(self.vertices.len() as u32);
@@ -563,6 +571,8 @@ impl HalfEdgeMesh {
                 he_out: HalfEdgeId::INVALID,
                 removed: false,
             });
+            self.vertex_class
+                .push(super::vertex_class::VertexClass::Interior);
             id
         }
     }
