@@ -398,6 +398,95 @@ impl HalfEdgeMesh {
         Ok(())
     }
 
+    /// Fills a boundary loop by fanning from a new centroid vertex.
+    ///
+    /// Every half-edge in `loop_hes` must be a boundary half-edge
+    /// (`twin == INVALID`). The loop's order matters: the method reads
+    /// consecutive pairs to decide the shared-edge twin pairing between
+    /// successive fan triangles.
+    ///
+    /// Returns the new centroid [`VertexId`] and the [`FaceId`]s added
+    /// (one per boundary half-edge in the loop).
+    pub fn add_fan_over_boundary_loop(
+        &mut self,
+        loop_hes: &[HalfEdgeId],
+        center_pos: Vec3,
+    ) -> Result<(VertexId, Vec<FaceId>), HalfEdgeOpError> {
+        for &h in loop_hes {
+            if !self.half_edge_is_live(h) {
+                return Err(HalfEdgeOpError::InvalidHandle(h));
+            }
+            if self.he_twin(h).is_valid() {
+                return Err(HalfEdgeOpError::InvalidHandle(h));
+            }
+        }
+        let n = loop_hes.len();
+        if n < 3 {
+            return Err(HalfEdgeOpError::InvalidHandle(HalfEdgeId::INVALID));
+        }
+
+        let w = self.allocate_vertex(center_pos);
+
+        let mut faces: Vec<FaceId> = Vec::with_capacity(n);
+        let mut e_b_ids: Vec<HalfEdgeId> = Vec::with_capacity(n);
+        let mut e_c_ids: Vec<HalfEdgeId> = Vec::with_capacity(n);
+
+        for &h in loop_hes {
+            let u = self.he_tail(h);
+            let v = self.he_head(h);
+            let e_a = self.allocate_half_edge();
+            let e_b = self.allocate_half_edge();
+            let e_c = self.allocate_half_edge();
+            let f = self.allocate_face();
+
+            // e_a: v → u (twin of h)
+            self.half_edges[e_a.index()] = HalfEdgeRecord {
+                vertex: u,
+                face: f,
+                next: e_b,
+                twin: h,
+                removed: false,
+            };
+            // e_b: u → w
+            self.half_edges[e_b.index()] = HalfEdgeRecord {
+                vertex: w,
+                face: f,
+                next: e_c,
+                twin: HalfEdgeId::INVALID,
+                removed: false,
+            };
+            // e_c: w → v
+            self.half_edges[e_c.index()] = HalfEdgeRecord {
+                vertex: v,
+                face: f,
+                next: e_a,
+                twin: HalfEdgeId::INVALID,
+                removed: false,
+            };
+
+            self.half_edges[h.index()].twin = e_a;
+            self.faces[f.index()] = FaceRecord {
+                he: e_a,
+                removed: false,
+            };
+
+            faces.push(f);
+            e_b_ids.push(e_b);
+            e_c_ids.push(e_c);
+        }
+
+        // Pair shared u-w edges: T_i.e_b twins with T_{i-1}.e_c.
+        for (i, &e_b) in e_b_ids.iter().enumerate() {
+            let prev = if i == 0 { n - 1 } else { i - 1 };
+            let e_c = e_c_ids[prev];
+            self.half_edges[e_b.index()].twin = e_c;
+            self.half_edges[e_c.index()].twin = e_b;
+        }
+
+        self.rebuild_vertex_he_outs();
+        Ok((w, faces))
+    }
+
     /// Removes a face without rewiring.
     ///
     /// Marks the face and its three half-edges as removed, invalidates the
