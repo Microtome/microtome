@@ -13,6 +13,10 @@
 //! invoked once after construction and again after any pass that mutates
 //! connectivity (signalled via [`MeshRepairPass::reclassifies`](super::pass::MeshRepairPass::reclassifies)).
 
+use glam::Vec3;
+
+use super::half_edge::{FaceId, HalfEdgeMesh, VertexId};
+
 /// How a vertex should be treated by repair passes.
 ///
 /// Higher discriminants take priority on conflict (see
@@ -48,6 +52,131 @@ impl VertexClass {
     }
 }
 
+/// Populates the per-vertex class of a [`HalfEdgeMesh`] from mesh topology.
+///
+/// Boundary half-edges classify their endpoints as [`VertexClass::Boundary`];
+/// edges where the two adjacent face normals diverge by more than
+/// [`feature_dihedral_deg`](Self::feature_dihedral_deg) classify their
+/// endpoints as [`VertexClass::Feature`]. The `pin_*` flags upgrade those
+/// to [`VertexClass::Fixed`]. `user_pinned` vertices are always Fixed.
+///
+/// On conflict, the stronger class wins (see [`VertexClass::combine`]).
+#[derive(Debug, Clone)]
+pub struct VertexClassifier {
+    /// Dihedral threshold in degrees: edges with `acos(n1·n2) > threshold`
+    /// are flagged as feature creases. Default 45°.
+    pub feature_dihedral_deg: f32,
+    /// Promote `Boundary` classifications to `Fixed`. Default `true`.
+    pub pin_boundary: bool,
+    /// Promote `Feature` classifications to `Fixed`. Default `false` —
+    /// features should slide along their crease, not freeze.
+    pub pin_features: bool,
+    /// Vertices that are unconditionally pinned to `Fixed` regardless of
+    /// topology.
+    pub user_pinned: Vec<VertexId>,
+}
+
+impl Default for VertexClassifier {
+    fn default() -> Self {
+        Self {
+            feature_dihedral_deg: 45.0,
+            pin_boundary: true,
+            pin_features: false,
+            user_pinned: Vec::new(),
+        }
+    }
+}
+
+impl VertexClassifier {
+    /// Resets every live vertex to `Interior`, then walks topology to mark
+    /// `Boundary` and `Feature` classes, then applies pins.
+    pub fn classify(&self, mesh: &mut HalfEdgeMesh) {
+        // 1. Reset live vertices to Interior.
+        let n_verts = mesh.vertices.len();
+        for vi in 0..n_verts {
+            let vid = VertexId(vi as u32);
+            if mesh.vertex_is_live(vid) {
+                mesh.set_vertex_class(vid, VertexClass::Interior);
+            }
+        }
+
+        // 2. Feature edges (dihedral > threshold). Use acos(dot) directly:
+        // 0 for flat junctions, π for fully folded — so a 45° threshold is a
+        // 45° crease, regardless of which way the surface folds.
+        // Collect feature endpoints first so the immutable borrow on
+        // mesh.edge_iter ends before we mutate vertex_class.
+        let threshold_rad = self.feature_dihedral_deg.to_radians();
+        let mut feature_endpoints: Vec<VertexId> = Vec::new();
+        for h in mesh.edge_iter() {
+            let twin = mesh.he_twin(h);
+            if !twin.is_valid() {
+                continue; // boundary edge — handled in step 3
+            }
+            let n1 = face_normal(mesh, mesh.he_face(h));
+            let n2 = face_normal(mesh, mesh.he_face(twin));
+            let cos = n1.dot(n2).clamp(-1.0, 1.0);
+            let angle = cos.acos();
+            if angle > threshold_rad {
+                feature_endpoints.push(mesh.he_tail(h));
+                feature_endpoints.push(mesh.he_head(h));
+            }
+        }
+        for v in feature_endpoints {
+            set_at_least(mesh, v, VertexClass::Feature);
+        }
+
+        // 3. Boundary half-edges → mark both endpoints Boundary (overrides
+        // Feature via combine()).
+        for hi in 0..mesh.half_edges.len() {
+            let h_rec = &mesh.half_edges[hi];
+            if h_rec.removed || h_rec.twin.is_valid() {
+                continue;
+            }
+            let h = super::half_edge::HalfEdgeId(hi as u32);
+            let u = mesh.he_tail(h);
+            let v = mesh.he_head(h);
+            set_at_least(mesh, u, VertexClass::Boundary);
+            set_at_least(mesh, v, VertexClass::Boundary);
+        }
+
+        // 4. Promote per pinning flags.
+        if self.pin_boundary || self.pin_features {
+            for vi in 0..n_verts {
+                let vid = VertexId(vi as u32);
+                if !mesh.vertex_is_live(vid) {
+                    continue;
+                }
+                let cur = mesh.vertex_class(vid);
+                let promoted = match cur {
+                    VertexClass::Boundary if self.pin_boundary => VertexClass::Fixed,
+                    VertexClass::Feature if self.pin_features => VertexClass::Fixed,
+                    _ => cur,
+                };
+                if promoted != cur {
+                    mesh.set_vertex_class(vid, promoted);
+                }
+            }
+        }
+
+        // 5. User pins always win.
+        for &vid in &self.user_pinned {
+            if mesh.vertex_is_live(vid) {
+                mesh.set_vertex_class(vid, VertexClass::Fixed);
+            }
+        }
+    }
+}
+
+fn face_normal(mesh: &HalfEdgeMesh, f: FaceId) -> Vec3 {
+    let [p0, p1, p2] = mesh.face_positions(f);
+    (p1 - p0).cross(p2 - p0).normalize_or_zero()
+}
+
+fn set_at_least(mesh: &mut HalfEdgeMesh, v: VertexId, c: VertexClass) {
+    let combined = VertexClass::combine(mesh.vertex_class(v), c);
+    mesh.set_vertex_class(v, combined);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,6 +204,141 @@ mod tests {
             VertexClass::stronger(VertexClass::Feature, VertexClass::Interior),
             VertexClass::Feature
         );
+    }
+
+    use crate::isosurface::IsoMesh;
+    use glam::Vec3;
+
+    fn iso(positions: Vec<Vec3>, indices: Vec<u32>) -> IsoMesh {
+        let n = positions.len();
+        IsoMesh {
+            positions,
+            normals: vec![Vec3::Z; n],
+            indices,
+        }
+    }
+
+    fn cube() -> HalfEdgeMesh {
+        // Standard 8-vertex cube; six faces, each split into two triangles.
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(0.0, 1.0, 1.0),
+        ];
+        // CCW outward winding for all six faces.
+        #[rustfmt::skip]
+        let indices = vec![
+            0, 2, 1,  0, 3, 2, // -z bottom
+            0, 1, 5,  0, 5, 4, // -y front
+            1, 2, 6,  1, 6, 5, // +x right
+            2, 3, 7,  2, 7, 6, // +y back
+            3, 0, 4,  3, 4, 7, // -x left
+            4, 5, 6,  4, 6, 7, // +z top
+        ];
+        HalfEdgeMesh::from_iso_mesh(&iso(positions, indices)).expect("cube builds")
+    }
+
+    #[test]
+    fn classify_marks_cube_corners_as_features() {
+        let mut mesh = cube();
+        let classifier = VertexClassifier::default();
+        classifier.classify(&mut mesh);
+        // Cube edges all have 90° dihedral → > 45°, so every cube vertex is a
+        // feature. With pin_boundary=true (default), boundaries would override
+        // — but a closed cube has no boundary, so all 8 corners stay Feature.
+        for v in 0u32..8 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Feature);
+        }
+    }
+
+    #[test]
+    fn classify_marks_open_cube_face_boundary_as_fixed() {
+        // Cube with the +z face removed → 4 boundary vertices on the top.
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(0.0, 1.0, 1.0),
+        ];
+        #[rustfmt::skip]
+        let indices = vec![
+            0, 2, 1,  0, 3, 2,
+            0, 1, 5,  0, 5, 4,
+            1, 2, 6,  1, 6, 5,
+            2, 3, 7,  2, 7, 6,
+            3, 0, 4,  3, 4, 7,
+        ];
+        let mut mesh =
+            HalfEdgeMesh::from_iso_mesh(&iso(positions, indices)).expect("open cube builds");
+        let classifier = VertexClassifier::default();
+        classifier.classify(&mut mesh);
+        // Vertices 4..8 are on the +z boundary loop → Boundary, then Fixed
+        // because pin_boundary defaults to true.
+        for v in 4u32..8 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Fixed);
+        }
+        // Vertices 0..4 are interior corners (cube edges meeting only
+        // bottom/side faces) — they're feature corners.
+        for v in 0u32..4 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Feature);
+        }
+    }
+
+    #[test]
+    fn classify_user_pinned_overrides_topology() {
+        let mut mesh = cube();
+        let mut classifier = VertexClassifier::default();
+        classifier.user_pinned = vec![VertexId(0)];
+        classifier.classify(&mut mesh);
+        assert_eq!(mesh.vertex_class(VertexId(0)), VertexClass::Fixed);
+        assert_eq!(mesh.vertex_class(VertexId(1)), VertexClass::Feature);
+    }
+
+    #[test]
+    fn classify_smooth_sphere_has_no_features() {
+        // A coarse tetrahedron is the simplest closed surface, but its edges
+        // have dihedral > 45° (acute corners). We just check that with a high
+        // threshold (179°), nothing is flagged Feature.
+        let iso = iso(
+            vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ],
+            vec![0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3],
+        );
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&iso).expect("tet");
+        let classifier = VertexClassifier {
+            feature_dihedral_deg: 179.0,
+            ..VertexClassifier::default()
+        };
+        classifier.classify(&mut mesh);
+        for v in 0u32..4 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Interior);
+        }
+    }
+
+    #[test]
+    fn classify_pin_features_promotes_to_fixed() {
+        let mut mesh = cube();
+        let classifier = VertexClassifier {
+            pin_features: true,
+            ..VertexClassifier::default()
+        };
+        classifier.classify(&mut mesh);
+        for v in 0u32..8 {
+            assert_eq!(mesh.vertex_class(VertexId(v)), VertexClass::Fixed);
+        }
     }
 
     #[test]
