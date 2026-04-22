@@ -26,6 +26,7 @@ pub mod pipeline;
 pub mod quality;
 pub mod reprojection;
 pub mod vertex_class;
+pub mod vertex_quadric;
 
 pub use context::RepairContext;
 pub use error::{HalfEdgeOpError, PassError, RepairError, TopologyError};
@@ -36,3 +37,4 @@ pub use pipeline::{FailurePolicy, MeshRepairPipeline, RepairReport};
 pub use quality::{MeshQualityReport, QualityThresholds, TriangleQuality};
 pub use reprojection::{ProjectionResult, ReprojectionTarget, ScalarFieldTarget};
 pub use vertex_class::{VertexClass, VertexClassifier};
+pub use vertex_quadric::{QuadricWeights, VertexQuadric, accumulate_for_mesh};
