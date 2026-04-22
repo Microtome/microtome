@@ -23,6 +23,7 @@ pub mod pass;
 pub mod passes;
 pub mod pipeline;
 pub mod quality;
+pub mod reprojection;
 pub mod vertex_class;
 
 pub use error::{HalfEdgeOpError, PassError, RepairError, TopologyError};
@@ -31,4 +32,5 @@ pub use half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
 pub use pass::{MeshRepairPass, PassOutcome, PassStage, PassStats, PassWarning, PassWarningKind};
 pub use pipeline::{FailurePolicy, MeshRepairPipeline, RepairReport};
 pub use quality::{MeshQualityReport, QualityThresholds, TriangleQuality};
+pub use reprojection::{ProjectionResult, ReprojectionTarget, ScalarFieldTarget};
 pub use vertex_class::{VertexClass, VertexClassifier};
