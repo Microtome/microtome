@@ -1,3 +1,5 @@
 //! Concrete mesh repair passes.
-//!
-//! Submodules are populated by tasks #10–#13.
+
+pub mod weld_vertices;
+
+pub use weld_vertices::WeldVertices;
