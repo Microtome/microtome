@@ -2,6 +2,7 @@
 
 pub mod angle_relax;
 pub mod clean_mesh;
+pub mod detect_self_intersect;
 pub mod feature_smooth;
 pub mod fill_holes;
 pub mod isotropic_remesh;
@@ -13,6 +14,7 @@ pub mod weld_vertices;
 
 pub use angle_relax::AngleRelax;
 pub use clean_mesh::CleanMesh;
+pub use detect_self_intersect::DetectSelfIntersections;
 pub use feature_smooth::{FeatureSmooth, FeatureSmoothMethod};
 pub use fill_holes::{FillSmallHoles, HoleFillMethod};
 pub use isotropic_remesh::IsotropicRemesh;
