@@ -39,8 +39,8 @@ fn standard_pipeline_on_dc_sphere_runs_to_completion() {
             let normal_fn = |p: Vec3| sphere.normal(p);
             let (repaired, report) = mesh.repair(&pipeline, normal_fn).expect("repair");
 
-            // Pipeline ran all four passes.
-            assert_eq!(report.per_pass.len(), 4);
+            // Pipeline ran all five passes (CleanMesh + four v1 passes).
+            assert_eq!(report.per_pass.len(), 5);
 
             // Triangle count never grows under v1 (no remesh / split passes
             // run on a closed sphere).

@@ -66,6 +66,25 @@ pub enum TopologyError {
         /// Position in the index buffer where the conflict was detected.
         face_index: usize,
     },
+
+    /// Two adjacent triangles traverse the same edge in the same direction
+    /// (instead of opposite directions, as a proper 2-manifold demands).
+    /// Surfaces a winding inconsistency that
+    /// [`CleanMesh::fix_winding`](super::passes::CleanMesh) resolves when a
+    /// reprojection target is available.
+    #[error(
+        "edge ({u:?}, {v:?}) traversed in the same direction by faces {face_a_index} and {face_b_index} — winding inconsistent"
+    )]
+    InconsistentWinding {
+        /// Tail of the doubled directed edge.
+        u: VertexId,
+        /// Head of the doubled directed edge.
+        v: VertexId,
+        /// Index of the face that first claimed the directed edge.
+        face_a_index: usize,
+        /// Index of the face whose half-edge collides with face `a`.
+        face_b_index: usize,
+    },
 }
 
 /// A single half-edge operation refused to run safely.

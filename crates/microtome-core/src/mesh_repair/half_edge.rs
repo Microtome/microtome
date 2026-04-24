@@ -487,9 +487,11 @@ impl HalfEdgeMesh {
         let mut half_edges: Vec<HalfEdgeRecord> = Vec::with_capacity(tri_count * 3);
         let mut faces: Vec<FaceRecord> = Vec::with_capacity(tri_count);
 
-        // Twin-pairing map: canonical edge key (min, max) → the first half-edge
-        // we saw for that edge.
-        let mut edge_map: HashMap<(u32, u32), HalfEdgeId> = HashMap::with_capacity(tri_count * 2);
+        // Twin-pairing map: canonical edge key (min, max) → the half-edges
+        // seen so far for that edge (max 2 in a 2-manifold; a third triggers
+        // NonManifoldEdge).
+        let mut edge_map: HashMap<(u32, u32), Vec<HalfEdgeId>> =
+            HashMap::with_capacity(tri_count * 2);
 
         for (tri_i, tri) in mesh.indices.chunks_exact(3).enumerate() {
             let (i0, i1, i2) = (tri[0], tri[1], tri[2]);
@@ -551,24 +553,36 @@ impl HalfEdgeMesh {
                 } else {
                     (head, tail)
                 };
-                match edge_map.get(&key).copied() {
-                    None => {
-                        edge_map.insert(key, this_he);
-                    }
-                    Some(prev_he) => {
-                        if half_edges[prev_he.index()].twin != HalfEdgeId::INVALID {
-                            // A third face is trying to share this edge.
-                            return Err(TopologyError::NonManifoldEdge {
-                                u: VertexId(key.0),
-                                v: VertexId(key.1),
-                                face_count: 3,
-                                face_index: tri_i,
-                            });
-                        }
+                let entry = edge_map.entry(key).or_default();
+                if entry.len() >= 2 {
+                    // A third face is trying to share this edge.
+                    return Err(TopologyError::NonManifoldEdge {
+                        u: VertexId(key.0),
+                        v: VertexId(key.1),
+                        face_count: (entry.len() + 1) as u32,
+                        face_index: tri_i,
+                    });
+                }
+                if let Some(&prev_he) = entry.first() {
+                    // Verify that the two half-edges on this undirected
+                    // edge run in opposite directions. If both go
+                    // tail→head, the adjacent faces have inconsistent
+                    // winding — pairing them as twins corrupts every
+                    // downstream walk (one_ring, collapse, etc.). Leave
+                    // both half-edges with `twin == INVALID` so the edge
+                    // behaves as a phantom boundary; the local walk halts
+                    // cleanly at the inconsistency rather than wandering
+                    // into a mismatched face. Callers that need a
+                    // watertight half-edge graph should run a winding-
+                    // propagation pass first (CleanMesh::propagate_winding
+                    // or similar).
+                    let prev_head = half_edges[prev_he.index()].vertex.0;
+                    if prev_head == tail {
                         half_edges[prev_he.index()].twin = this_he;
                         half_edges[this_he.index()].twin = prev_he;
                     }
                 }
+                entry.push(this_he);
             }
         }
 

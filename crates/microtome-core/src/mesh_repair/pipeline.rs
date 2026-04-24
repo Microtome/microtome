@@ -119,9 +119,20 @@ impl MeshRepairPipeline {
     ///    and max-aspect-ratio 50.
     /// 4. [`TaubinSmooth`](super::passes::TaubinSmooth) with λ=0.33, μ=-0.34,
     ///    two iterations, boundary pinned.
+    ///
+    /// A no-target [`CleanMesh`](super::passes::CleanMesh) runs first to
+    /// dedup faces, drop orphan vertices, and topologically propagate
+    /// winding consistency — without it, DC / KD-tree outputs with
+    /// inconsistent winding produce phantom boundaries during half-edge
+    /// construction.
     pub fn standard() -> Self {
         let mut pipeline = Self::new();
         pipeline
+            .add(super::passes::CleanMesh {
+                fix_winding: false,
+                resolve_t_junctions: false,
+                ..super::passes::CleanMesh::default()
+            })
             .add(super::passes::WeldVertices::default())
             .add(super::passes::FillSmallHoles::default())
             .add(super::passes::RemoveSlivers::default())
@@ -475,17 +486,18 @@ mod tests {
 
     #[test]
     fn standard_pipeline_runs_on_single_triangle_without_error() {
-        // Single triangle: welder+hole fill (triangle is its own hole, 3 edges,
-        // within budget 8) + sliver removal (equilateral, not a sliver) + Taubin
-        // (boundary pinned → no-op). End-to-end smoke test for the standard chain.
+        // Single triangle through the full standard chain. CleanMesh runs
+        // first as a pre-construction scrub (winding propagation no-op on a
+        // single triangle), then welder + hole-fill + sliver removal + Taubin.
         let pipeline = MeshRepairPipeline::standard();
         let iso = single_triangle();
         let (_out, report) = pipeline.run(&iso, |_| Vec3::Z).expect("run");
-        assert_eq!(report.per_pass.len(), 4);
-        assert_eq!(report.per_pass[0].name, "weld_vertices");
-        assert_eq!(report.per_pass[1].name, "fill_small_holes");
-        assert_eq!(report.per_pass[2].name, "remove_slivers");
-        assert_eq!(report.per_pass[3].name, "taubin_smooth");
+        assert_eq!(report.per_pass.len(), 5);
+        assert_eq!(report.per_pass[0].name, "clean_mesh");
+        assert_eq!(report.per_pass[1].name, "weld_vertices");
+        assert_eq!(report.per_pass[2].name, "fill_small_holes");
+        assert_eq!(report.per_pass[3].name, "remove_slivers");
+        assert_eq!(report.per_pass[4].name, "taubin_smooth");
     }
 
     #[test]

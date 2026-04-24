@@ -8,7 +8,7 @@
 //! fan-triangulates each affected triangle so every T-vertex becomes a
 //! proper participating vertex.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use glam::Vec3;
 
@@ -25,6 +25,12 @@ pub struct CleanMesh {
     pub remove_duplicate_faces: bool,
     /// Drop vertices not referenced by any surviving triangle, remap indices.
     pub remove_orphan_vertices: bool,
+    /// Topologically propagate winding consistency: BFS over face adjacency
+    /// (via shared canonical edges), flipping any face that traverses a
+    /// shared edge in the same direction as its neighbour. Requires no
+    /// target. Runs before [`fix_winding`](Self::fix_winding) so that the
+    /// outward-normal check operates on a winding-consistent input.
+    pub propagate_winding: bool,
     /// Flip face winding when `face_normal · target.normal(centroid) < 0`.
     /// Requires `ctx.target = Some(...)`; emits a Skipped warning otherwise.
     pub fix_winding: bool,
@@ -43,6 +49,7 @@ impl Default for CleanMesh {
         Self {
             remove_duplicate_faces: true,
             remove_orphan_vertices: true,
+            propagate_winding: true,
             fix_winding: true,
             resolve_t_junctions: true,
             t_junction_tolerance: 1e-4,
@@ -71,6 +78,18 @@ impl MeshRepairPass for CleanMesh {
             iso = drop_duplicate_faces(iso);
             let post = iso.indices.len() / 3;
             outcome.stats.faces_removed += (pre - post) as u32;
+        }
+
+        if self.propagate_winding {
+            let flips = propagate_winding(&mut iso);
+            if flips > 0 {
+                outcome.warn(
+                    PassWarningKind::Clamped,
+                    format!(
+                        "propagate_winding flipped {flips} triangles for topological consistency"
+                    ),
+                );
+            }
         }
 
         if self.fix_winding {
@@ -285,6 +304,88 @@ fn edge_parameter_if_on_segment(
     } else {
         None
     }
+}
+
+/// Propagates winding consistency across the mesh by BFS over face
+/// adjacency. Two faces sharing a canonical edge {u, v} should traverse it
+/// in opposite directions; if they don't, one of them is flipped. Returns
+/// the number of triangles whose vertex order was reversed.
+///
+/// Behaviour on multi-component meshes: each connected component is BFS-ed
+/// independently, anchored on its lowest-indexed face (which keeps its
+/// original winding). Non-orientable surfaces would loop indefinitely in
+/// theory; we cap at one BFS pass per face to guarantee termination on
+/// pathological inputs.
+fn propagate_winding(iso: &mut IsoMesh) -> u32 {
+    let face_count = iso.indices.len() / 3;
+    if face_count <= 1 {
+        return 0;
+    }
+
+    // Build canonical-edge → list of (face_idx, directed_a, directed_b)
+    // entries. directed_a/directed_b are the actual indices in iso.indices
+    // for the directed edge (so we can detect direction).
+    type EdgeRef = (usize, u32, u32);
+    let mut edge_to_faces: HashMap<(u32, u32), Vec<EdgeRef>> =
+        HashMap::with_capacity(face_count * 2);
+    for f in 0..face_count {
+        let i0 = iso.indices[f * 3];
+        let i1 = iso.indices[f * 3 + 1];
+        let i2 = iso.indices[f * 3 + 2];
+        for (a, b) in [(i0, i1), (i1, i2), (i2, i0)] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            edge_to_faces.entry(key).or_default().push((f, a, b));
+        }
+    }
+
+    let mut visited = vec![false; face_count];
+    let mut flips = 0u32;
+    let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+
+    for seed in 0..face_count {
+        if visited[seed] {
+            continue;
+        }
+        visited[seed] = true;
+        queue.push_back(seed);
+        while let Some(f) = queue.pop_front() {
+            let (i0, i1, i2) = (
+                iso.indices[f * 3],
+                iso.indices[f * 3 + 1],
+                iso.indices[f * 3 + 2],
+            );
+            for (a, b) in [(i0, i1), (i1, i2), (i2, i0)] {
+                let key = if a < b { (a, b) } else { (b, a) };
+                let Some(neighbours) = edge_to_faces.get(&key) else {
+                    continue;
+                };
+                for &(g, ga, gb) in neighbours {
+                    if g == f || visited[g] {
+                        continue;
+                    }
+                    visited[g] = true;
+                    // f traverses edge as a→b. If g traverses it as ga→gb
+                    // and (ga, gb) == (a, b), they go same direction — flip g.
+                    if (ga, gb) == (a, b) {
+                        // Flip g by swapping its second and third indices.
+                        // Walk from i0 perspective: (i0,i1,i2) → (i0,i2,i1).
+                        iso.indices.swap(g * 3 + 1, g * 3 + 2);
+                        flips += 1;
+
+                        // The flip changed g's directed edges in
+                        // edge_to_faces. We don't need to update the map
+                        // because BFS only consults f's edges (the seed
+                        // for this neighbour), and g is now winding-
+                        // consistent with f. Subsequent BFS hops from g
+                        // will read iso.indices fresh.
+                    }
+                    queue.push_back(g);
+                }
+            }
+        }
+    }
+
+    flips
 }
 
 fn fix_winding(
