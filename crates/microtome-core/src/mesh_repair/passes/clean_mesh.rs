@@ -1,9 +1,12 @@
 //! Pre-construction mesh cleanup: duplicate-face removal, orphan-vertex
-//! removal, and (with a [`ReprojectionTarget`]) winding correction.
+//! removal, T-junction resolution, and (with a
+//! [`ReprojectionTarget`](super::super::reprojection::ReprojectionTarget))
+//! winding correction.
 //!
-//! T-junction resolution is intentionally deferred — it needs a spatial
-//! index plus careful edge splitting that's easier post-construction;
-//! v3 will tackle it.
+//! T-junction resolution uses the closest-point [`TriangleBvh`](super::super::spatial::TriangleBvh)
+//! to filter candidate vertices per triangle in O(V log F) average, then
+//! fan-triangulates each affected triangle so every T-vertex becomes a
+//! proper participating vertex.
 
 use std::collections::HashSet;
 
@@ -11,6 +14,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
+use super::super::spatial::{Aabb, TriangleBvh};
 use crate::isosurface::IsoMesh;
 use crate::mesh_repair::RepairContext;
 
@@ -24,6 +28,14 @@ pub struct CleanMesh {
     /// Flip face winding when `face_normal · target.normal(centroid) < 0`.
     /// Requires `ctx.target = Some(...)`; emits a Skipped warning otherwise.
     pub fix_winding: bool,
+    /// Detect T-junctions (vertex strictly interior to another triangle's
+    /// edge) and fan-triangulate the offending triangle so the T-vertex
+    /// becomes a proper vertex.
+    pub resolve_t_junctions: bool,
+    /// Perpendicular-distance tolerance (world units) for T-junction
+    /// detection. A vertex within this distance of an edge — and strictly
+    /// between the endpoints — is treated as on the edge. Default `1e-4`.
+    pub t_junction_tolerance: f32,
 }
 
 impl Default for CleanMesh {
@@ -32,6 +44,8 @@ impl Default for CleanMesh {
             remove_duplicate_faces: true,
             remove_orphan_vertices: true,
             fix_winding: true,
+            resolve_t_junctions: true,
+            t_junction_tolerance: 1e-4,
         }
     }
 }
@@ -72,6 +86,17 @@ impl MeshRepairPass for CleanMesh {
                 outcome.warn(
                     PassWarningKind::Skipped,
                     "fix_winding requires a ReprojectionTarget; skipped",
+                );
+            }
+        }
+
+        if self.resolve_t_junctions {
+            let (next, splits) = split_t_junctions(iso, self.t_junction_tolerance);
+            iso = next;
+            if splits > 0 {
+                outcome.warn(
+                    PassWarningKind::Clamped,
+                    format!("split {splits} T-junction triangles via fan triangulation"),
                 );
             }
         }
@@ -129,6 +154,136 @@ fn drop_orphan_vertices(iso: IsoMesh) -> IsoMesh {
         positions: new_positions,
         normals: new_normals,
         indices: new_indices,
+    }
+}
+
+/// Detects T-junctions (vertices strictly interior to another triangle's
+/// edge, within `tolerance`) and fan-triangulates each affected triangle so
+/// the T-vertex becomes a proper participating vertex. Returns the updated
+/// mesh and the count of triangles that were split.
+fn split_t_junctions(iso: IsoMesh, tolerance: f32) -> (IsoMesh, u32) {
+    if iso.indices.is_empty() || tolerance <= 0.0 {
+        return (iso, 0);
+    }
+    let triangles: Vec<[Vec3; 3]> = iso
+        .indices
+        .chunks_exact(3)
+        .map(|tri| {
+            [
+                iso.positions[tri[0] as usize],
+                iso.positions[tri[1] as usize],
+                iso.positions[tri[2] as usize],
+            ]
+        })
+        .collect();
+    let Some(bvh) = TriangleBvh::build(&triangles) else {
+        return (iso, 0);
+    };
+    let triangle_count = triangles.len();
+
+    // Per-triangle, per-edge: list of (parameter t, vertex index) pairs that
+    // sit on that edge. Edges are indexed 0=(i0→i1), 1=(i1→i2), 2=(i2→i0).
+    let mut per_tri_per_edge: Vec<[Vec<(f32, u32)>; 3]> = (0..triangle_count)
+        .map(|_| [Vec::new(), Vec::new(), Vec::new()])
+        .collect();
+
+    for v in 0..iso.positions.len() as u32 {
+        let pv = iso.positions[v as usize];
+        let query = Aabb {
+            min: pv - Vec3::splat(tolerance),
+            max: pv + Vec3::splat(tolerance),
+        };
+        bvh.visit_overlapping(query, |tri_idx| {
+            let i0 = iso.indices[tri_idx * 3];
+            let i1 = iso.indices[tri_idx * 3 + 1];
+            let i2 = iso.indices[tri_idx * 3 + 2];
+            if v == i0 || v == i1 || v == i2 {
+                return;
+            }
+            let edges = [(0, i0, i1), (1, i1, i2), (2, i2, i0)];
+            for (eidx, e_start, e_end) in edges {
+                if let Some(t) = edge_parameter_if_on_segment(
+                    pv,
+                    iso.positions[e_start as usize],
+                    iso.positions[e_end as usize],
+                    tolerance,
+                ) {
+                    per_tri_per_edge[tri_idx][eidx].push((t, v));
+                }
+            }
+        });
+    }
+
+    let mut new_indices: Vec<u32> = Vec::with_capacity(iso.indices.len());
+    let mut split_count = 0u32;
+    for (tri_idx, edges) in per_tri_per_edge.iter().enumerate().take(triangle_count) {
+        let i0 = iso.indices[tri_idx * 3];
+        let i1 = iso.indices[tri_idx * 3 + 1];
+        let i2 = iso.indices[tri_idx * 3 + 2];
+        let any_splits = edges.iter().any(|e| !e.is_empty());
+        if !any_splits {
+            new_indices.extend_from_slice(&[i0, i1, i2]);
+            continue;
+        }
+        let mut polygon: Vec<u32> =
+            Vec::with_capacity(3 + edges.iter().map(|e| e.len()).sum::<usize>());
+        polygon.push(i0);
+        push_sorted_edge_splits(&mut polygon, &edges[0]);
+        polygon.push(i1);
+        push_sorted_edge_splits(&mut polygon, &edges[1]);
+        polygon.push(i2);
+        push_sorted_edge_splits(&mut polygon, &edges[2]);
+        // Fan triangulation from polygon[0]; preserves CCW winding because
+        // polygon walks the original triangle's perimeter.
+        for i in 1..polygon.len() - 1 {
+            new_indices.extend_from_slice(&[polygon[0], polygon[i], polygon[i + 1]]);
+        }
+        split_count += 1;
+    }
+
+    (
+        IsoMesh {
+            positions: iso.positions,
+            normals: iso.normals,
+            indices: new_indices,
+        },
+        split_count,
+    )
+}
+
+fn push_sorted_edge_splits(polygon: &mut Vec<u32>, splits: &[(f32, u32)]) {
+    if splits.is_empty() {
+        return;
+    }
+    let mut sorted = splits.to_vec();
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    for (_, v) in sorted {
+        polygon.push(v);
+    }
+}
+
+/// If `pv` lies within `tolerance` of the segment `(p_start, p_end)` and
+/// strictly between the endpoints (parameter t in (0, 1)), returns t.
+fn edge_parameter_if_on_segment(
+    pv: Vec3,
+    p_start: Vec3,
+    p_end: Vec3,
+    tolerance: f32,
+) -> Option<f32> {
+    let ab = p_end - p_start;
+    let len_sq = ab.length_squared();
+    if len_sq < 1e-20 {
+        return None;
+    }
+    let t = (pv - p_start).dot(ab) / len_sq;
+    if t <= 0.0 || t >= 1.0 {
+        return None;
+    }
+    let foot = p_start + ab * t;
+    if (pv - foot).length() < tolerance {
+        Some(t)
+    } else {
+        None
     }
 }
 
@@ -255,6 +410,91 @@ mod tests {
                 .warnings
                 .iter()
                 .any(|w| matches!(w.kind, PassWarningKind::Skipped))
+        );
+    }
+
+    #[test]
+    fn clean_splits_simple_t_junction() {
+        // Triangle (0,1,2) with vertex 3 at midpoint of edge (1,2). The
+        // T-junction handler should fan the offending triangle into two
+        // triangles, both containing vertex 3.
+        //
+        // Layout (z=0):
+        //   2 (0,2)
+        //   |\
+        //   | \
+        //   3  \  <- midpoint of edge (1,2)
+        //   |   \
+        //   |    \
+        //   1 (2,0)
+        //   |
+        //   0 (0,0)
+        //
+        // Edge being split: (1, 2). Result: (0,1,3) + (0,3,2).
+        let input = iso(
+            vec![
+                Vec3::new(0.0, 0.0, 0.0), // 0
+                Vec3::new(2.0, 0.0, 0.0), // 1
+                Vec3::new(0.0, 2.0, 0.0), // 2
+                Vec3::new(1.0, 1.0, 0.0), // 3 — midpoint of (1,2)
+            ],
+            // Two disjoint triangles, the second exists only to keep vertex 3
+            // referenced and avoid the orphan-removal pass dropping it.
+            // Orient the first so vertex 3 falls on edge (1,2).
+            vec![0, 1, 2, /* keep-alive: */ 3, 1, 2],
+        );
+        let pass = CleanMesh {
+            // Don't dedup — the second triangle has the same sorted index
+            // tuple as the keep-alive use of vertex 3.
+            remove_duplicate_faces: false,
+            // Skip winding correction (no target).
+            fix_winding: false,
+            ..CleanMesh::default()
+        };
+        let ctx = RepairContext::noop();
+        let (out, outcome) = pass.pre_construction(input, &ctx).expect("clean");
+        // Expect a fan triangulation: original (0,1,2) replaced by 2
+        // triangles, plus the keep-alive triangle still split through 3 -
+        // so 4 total.
+        let split_warning = outcome
+            .warnings
+            .iter()
+            .any(|w| matches!(w.kind, PassWarningKind::Clamped));
+        assert!(split_warning, "should warn about the split");
+        assert!(
+            out.indices.len() / 3 >= 3,
+            "should have at least 3 triangles after split; got {}",
+            out.indices.len() / 3
+        );
+        // Vertex 3 must be referenced by the new index buffer.
+        assert!(out.indices.contains(&3));
+    }
+
+    #[test]
+    fn clean_no_t_junction_preserves_mesh() {
+        // Two adjacent triangles, no T-junction. Should be untouched by the
+        // T-junction pass.
+        let input = iso(
+            vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(1.0, 1.0, 0.0),
+            ],
+            vec![0, 1, 2, 1, 3, 2],
+        );
+        let pass = CleanMesh {
+            fix_winding: false,
+            ..CleanMesh::default()
+        };
+        let ctx = RepairContext::noop();
+        let (out, outcome) = pass.pre_construction(input, &ctx).expect("clean");
+        assert_eq!(out.indices.len() / 3, 2, "no splits should occur");
+        assert!(
+            !outcome
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("T-junction"))
         );
     }
 
