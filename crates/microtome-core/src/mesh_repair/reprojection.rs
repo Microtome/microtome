@@ -136,22 +136,22 @@ impl ReprojectionTarget for ScalarFieldTarget<'_> {
     }
 }
 
-/// Reprojection onto a reference triangle mesh via brute-force closest
-/// point search.
+/// Reprojection onto a reference triangle mesh.
 ///
-/// v2 first cut is O(n) per query (no BVH). For repair-time use cases
-/// this is acceptable up to a few thousand reference triangles. A
-/// BVH-accelerated variant lands with v2.5; the closest-point query
-/// would need a closest-point BVH separate from
-/// [`mesh_bvh`](crate::isosurface), which is specialised for winding
-/// queries.
+/// Builds a [`TriangleBvh`](super::spatial::TriangleBvh) once at construction
+/// and uses it to accelerate every closest-point query to O(log n) on
+/// well-balanced inputs (degenerates gracefully on pathological geometry —
+/// median-split BVHs aren't worst-case-optimal but are fine for the tens of
+/// thousands of triangles we typically reproject onto).
 pub struct MeshTarget<'a> {
     triangles: Vec<[Vec3; 3]>,
+    bvh: Option<super::spatial::TriangleBvh>,
     _mesh: std::marker::PhantomData<&'a IsoMesh>,
 }
 
 impl<'a> MeshTarget<'a> {
-    /// Wraps a reference [`IsoMesh`]; precomputes triangle vertex tuples.
+    /// Wraps a reference [`IsoMesh`]; precomputes triangle vertex tuples and
+    /// builds the closest-point BVH.
     pub fn new(mesh: &'a IsoMesh) -> Self {
         let mut triangles = Vec::with_capacity(mesh.indices.len() / 3);
         for tri in mesh.indices.chunks_exact(3) {
@@ -161,8 +161,10 @@ impl<'a> MeshTarget<'a> {
                 mesh.positions[tri[2] as usize],
             ]);
         }
+        let bvh = super::spatial::TriangleBvh::build(&triangles);
         Self {
             triangles,
+            bvh,
             _mesh: std::marker::PhantomData,
         }
     }
@@ -170,22 +172,14 @@ impl<'a> MeshTarget<'a> {
 
 impl ReprojectionTarget for MeshTarget<'_> {
     fn project(&self, p: Vec3, _hint_normal: Option<Vec3>) -> Option<ProjectionResult> {
-        if self.triangles.is_empty() {
-            return None;
-        }
-        let mut best: Option<(Vec3, f32, [Vec3; 3])> = None;
-        for tri in &self.triangles {
-            let q = closest_point_on_triangle(p, tri);
-            let d = (q - p).length();
-            if best.is_none_or(|(_, bd, _)| d < bd) {
-                best = Some((q, d, *tri));
-            }
-        }
-        let (position, distance, tri) = best?;
-        let n = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalize_or_zero();
+        let bvh = self.bvh.as_ref()?;
+        let triangles = &self.triangles;
+        let (idx, position, distance) = bvh.closest_point(p, |i| triangles[i])?;
+        let tri = triangles[idx];
+        let normal = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalize_or_zero();
         Some(ProjectionResult {
             position,
-            normal: n,
+            normal,
             distance,
         })
     }
@@ -193,52 +187,6 @@ impl ReprojectionTarget for MeshTarget<'_> {
     fn normal(&self, p: Vec3) -> Vec3 {
         self.project(p, None).map(|r| r.normal).unwrap_or(Vec3::Z)
     }
-}
-
-/// Closest point on a triangle (Ericson, Real-Time Collision Detection §5.1.5).
-fn closest_point_on_triangle(p: Vec3, tri: &[Vec3; 3]) -> Vec3 {
-    let a = tri[0];
-    let b = tri[1];
-    let c = tri[2];
-    let ab = b - a;
-    let ac = c - a;
-    let ap = p - a;
-    let d1 = ab.dot(ap);
-    let d2 = ac.dot(ap);
-    if d1 <= 0.0 && d2 <= 0.0 {
-        return a;
-    }
-    let bp = p - b;
-    let d3 = ab.dot(bp);
-    let d4 = ac.dot(bp);
-    if d3 >= 0.0 && d4 <= d3 {
-        return b;
-    }
-    let vc = d1 * d4 - d3 * d2;
-    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
-        let v = d1 / (d1 - d3);
-        return a + v * ab;
-    }
-    let cp = p - c;
-    let d5 = ab.dot(cp);
-    let d6 = ac.dot(cp);
-    if d6 >= 0.0 && d5 <= d6 {
-        return c;
-    }
-    let vb = d5 * d2 - d1 * d6;
-    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
-        let w = d2 / (d2 - d6);
-        return a + w * ac;
-    }
-    let va = d3 * d6 - d5 * d4;
-    if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
-        let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-        return b + w * (c - b);
-    }
-    let denom = 1.0 / (va + vb + vc);
-    let v = vb * denom;
-    let w = vc * denom;
-    a + ab * v + ac * w
 }
 
 #[cfg(test)]
