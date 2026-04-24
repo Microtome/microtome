@@ -25,6 +25,7 @@ pub mod passes;
 pub mod pipeline;
 pub mod quality;
 pub mod reprojection;
+pub mod tangent;
 pub mod vertex_class;
 pub mod vertex_quadric;
 
