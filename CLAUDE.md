@@ -57,6 +57,11 @@ cargo fmt --check && cargo clippy -- -D warnings -D clippy::unwrap_used -D clipp
 - Follow Rust naming conventions (snake_case for functions/variables, CamelCase for types)
 - Keep functions focused and small — extract when complexity grows
 
+## Tests
+
+- **Never delete a failing test.** If the underlying work is being deferred, mark it `#[ignore = "<specific reason>"]` and record the investigation in the active plan. The reason must describe what's broken, what was tried, and what would unblock — not just "deferred." Deleting a test silently shrinks coverage for a known weak spot; an `#[ignore]` keeps the failure visible and forces the next person to confront the original assertion.
+- Don't rewrite a file's module-level doc comment to pretend a deleted/ignored case was always intentional design.
+
 ## Development Workflow
 
 1. Write code for a single feature or logical change
