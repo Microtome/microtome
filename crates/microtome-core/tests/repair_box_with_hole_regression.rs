@@ -5,6 +5,11 @@
 //! pipeline should knock the sliver count down. This test locks in that
 //! behaviour so future changes don't regress without us noticing.
 //!
+//! Gated behind `kdtree_simplification` because the producer it exercises
+//! is a buggy / opt-in feature; see Cargo.toml for context.
+
+#![cfg(feature = "kdtree_simplification")]
+//!
 //! ## Known v1 limitations validated by this test
 //!
 //! - On larger meshes (depth 6+), v1 ops can produce a non-manifold

@@ -87,7 +87,9 @@ pub struct Args {
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum StructureArg {
     Octree,
+    #[cfg(feature = "kdtree_simplification")]
     Kdtree,
+    #[cfg(feature = "kdtree_simplification")]
     KdtreeV2,
 }
 
@@ -95,7 +97,9 @@ impl From<StructureArg> for Structure {
     fn from(s: StructureArg) -> Self {
         match s {
             StructureArg::Octree => Self::Octree,
+            #[cfg(feature = "kdtree_simplification")]
             StructureArg::Kdtree => Self::KdTree,
+            #[cfg(feature = "kdtree_simplification")]
             StructureArg::KdtreeV2 => Self::KdTreeV2,
         }
     }
@@ -105,7 +109,9 @@ impl From<Structure> for StructureArg {
     fn from(s: Structure) -> Self {
         match s {
             Structure::Octree => Self::Octree,
+            #[cfg(feature = "kdtree_simplification")]
             Structure::KdTree => Self::Kdtree,
+            #[cfg(feature = "kdtree_simplification")]
             Structure::KdTreeV2 => Self::KdtreeV2,
         }
     }
@@ -116,7 +122,9 @@ impl StructureArg {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Octree => "octree",
+            #[cfg(feature = "kdtree_simplification")]
             Self::Kdtree => "kdtree",
+            #[cfg(feature = "kdtree_simplification")]
             Self::KdtreeV2 => "kdtree-v2",
         }
     }

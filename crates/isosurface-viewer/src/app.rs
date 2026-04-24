@@ -5,13 +5,17 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
 
-use glam::{IVec3, Vec3};
+#[cfg(feature = "kdtree_simplification")]
+use glam::IVec3;
+use glam::Vec3;
 use wgpu::util::DeviceExt;
 
 use microtome_core::isosurface::{
-    Aabb, Cylinder, Difference, IsoMesh, KdTreeNode, KdTreeV2Node, OctreeNode, PositionCode,
-    ScalarField, ScannedMeshField, SignMode,
+    Aabb, Cylinder, Difference, IsoMesh, OctreeNode, PositionCode, ScalarField, ScannedMeshField,
+    SignMode,
 };
+#[cfg(feature = "kdtree_simplification")]
+use microtome_core::isosurface::{KdTreeNode, KdTreeV2Node};
 use microtome_core::{MeshData, MicrotomeError};
 
 use crate::camera::OrbitCamera;
@@ -25,8 +29,10 @@ pub enum Structure {
     /// Octree-based dual contouring.
     Octree,
     /// K-d tree based dual contouring (C++ port with bug-compatible abs).
+    #[cfg(feature = "kdtree_simplification")]
     KdTree,
     /// K-d tree v2 with corrected binary search (paper algorithm).
+    #[cfg(feature = "kdtree_simplification")]
     KdTreeV2,
 }
 
@@ -34,7 +40,9 @@ impl std::fmt::Display for Structure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Octree => write!(f, "Octree"),
+            #[cfg(feature = "kdtree_simplification")]
             Self::KdTree => write!(f, "KdTree"),
+            #[cfg(feature = "kdtree_simplification")]
             Self::KdTreeV2 => write!(f, "KdTree v2"),
         }
     }
@@ -288,9 +296,15 @@ impl IsosurfaceApp {
         threshold: f32,
         unit_size: f32,
     ) -> Option<IsoMesh> {
+        #[cfg(feature = "kdtree_simplification")]
         let size_code = IVec3::splat(1 << (depth - 1));
+        #[cfg(not(feature = "kdtree_simplification"))]
+        let _ = depth; // size_code unused without kdtree variants
 
+        #[cfg(feature = "kdtree_simplification")]
         let as_mipmap = matches!(structure, Structure::KdTree | Structure::KdTreeV2);
+        #[cfg(not(feature = "kdtree_simplification"))]
+        let as_mipmap = false;
         let mut octree =
             OctreeNode::build_with_scalar_field(min_code, depth, field, as_mipmap, unit_size)?;
 
@@ -299,6 +313,7 @@ impl IsosurfaceApp {
                 OctreeNode::simplify(&mut octree, threshold);
                 Some(OctreeNode::extract_mesh(&mut octree, field, unit_size))
             }
+            #[cfg(feature = "kdtree_simplification")]
             Structure::KdTree => {
                 let mut kdtree = KdTreeNode::build_from_octree(
                     &octree,
@@ -315,6 +330,7 @@ impl IsosurfaceApp {
                     unit_size,
                 ))
             }
+            #[cfg(feature = "kdtree_simplification")]
             Structure::KdTreeV2 => {
                 let mut kdtree = KdTreeV2Node::build_from_octree(
                     &octree,
@@ -555,12 +571,14 @@ impl eframe::App for IsosurfaceApp {
                             {
                                 changed = true;
                             }
+                            #[cfg(feature = "kdtree_simplification")]
                             if ui
                                 .selectable_value(&mut self.structure, Structure::KdTree, "KdTree")
                                 .changed()
                             {
                                 changed = true;
                             }
+                            #[cfg(feature = "kdtree_simplification")]
                             if ui
                                 .selectable_value(
                                     &mut self.structure,

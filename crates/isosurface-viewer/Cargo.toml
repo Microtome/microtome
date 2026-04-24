@@ -7,6 +7,10 @@ edition = "2024"
 default = ["wayland", "x11"]
 wayland = ["eframe/wayland"]
 x11 = ["eframe/x11"]
+# Surface KD-tree DC simplification options in the viewer. Off by default
+# because the algorithm produces long-edge sliver triangles on flat faces;
+# see microtome-core/Cargo.toml for the full story.
+kdtree_simplification = ["microtome-core/kdtree_simplification"]
 
 [dependencies]
 microtome-core = { path = "../microtome-core" }

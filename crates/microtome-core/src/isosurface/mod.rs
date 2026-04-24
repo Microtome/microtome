@@ -3,8 +3,13 @@
 //! Port of the KdtreeISO library: discrete k-d tree hierarchy for isosurface extraction.
 
 pub mod indicators;
+// KD-tree DC simplification is gated behind the `kdtree_simplification`
+// feature: the algorithm produces long-edge sliver triangles on flat faces,
+// matching the C++ reference but unusable without post-cleanup.
+#[cfg(feature = "kdtree_simplification")]
 #[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod kdtree;
+#[cfg(feature = "kdtree_simplification")]
 pub mod kdtree_v2;
 mod mesh_bvh;
 pub mod mesh_output;
@@ -26,7 +31,9 @@ pub mod vertex;
 pub mod volume_data;
 
 pub use indicators::PositionCode;
+#[cfg(feature = "kdtree_simplification")]
 pub use kdtree::KdTreeNode;
+#[cfg(feature = "kdtree_simplification")]
 pub use kdtree_v2::KdTreeV2Node;
 pub use mesh_output::IsoMesh;
 pub use mesh_scan::{ScannedMeshField, SignMode};

@@ -3,6 +3,17 @@ name = "microtome-core"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+# KD-tree DC simplification (kdtree.rs / kdtree_v2.rs) is buggy: produces
+# spurious long-edge "sliver" triangles on flat faces. The behaviour matches
+# the C++ reference (verified head-to-head against KdtreeISO-master), so it
+# is *algorithmic*, not a porting defect — see specs/broken-kd*.png and
+# specs/weird-tris-kd*.png. The feature stays off by default until the
+# clustering algorithm is improved or post-pass cleanup absorbs the
+# artifacts.
+kdtree_simplification = []
+
 [dependencies]
 wgpu.workspace = true
 glam.workspace = true
