@@ -40,8 +40,8 @@ fn standard_v2_runs_to_completion_on_dc_sphere() {
 
             // Pipeline ran 5 passes: clean, weld, fill, feature_smooth, reproject.
             assert_eq!(report.per_pass.len(), 5);
-            assert_eq!(report.per_pass[0].name, "clean_mesh");
-            assert_eq!(report.per_pass[1].name, "weld_vertices");
+            assert_eq!(report.per_pass[0].name, "weld_vertices");
+            assert_eq!(report.per_pass[1].name, "clean_mesh");
             assert_eq!(report.per_pass[2].name, "fill_small_holes");
             assert_eq!(report.per_pass[3].name, "feature_smooth");
             assert_eq!(report.per_pass[4].name, "reproject_to_surface");

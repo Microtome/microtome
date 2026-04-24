@@ -38,18 +38,19 @@ fn simplify_then_reproject_keeps_vertices_near_sphere() {
             let nf = |p: Vec3| sphere.normal(p);
             let ctx = RepairContext::new(&nf).with_target(&target);
 
-            // CleanMesh (with topological winding propagation) +
-            // WeldVertices give the half-edge mesh a properly closed
-            // 2-manifold to operate on. Without CleanMesh, DC's
+            // WeldVertices first to canonicalise the vertex set, then
+            // CleanMesh (with topological winding propagation + non-
+            // manifold-face drop) gives the half-edge mesh a properly
+            // closed 2-manifold to operate on. Without this prefix, DC's
             // inconsistent winding leaves phantom-boundary edges that
             // drive the link-condition rejection rate to 100 %.
             let half = (pre_count as u32 / 2).max(1);
             let mut pipeline = MeshRepairPipeline::new();
+            pipeline.add(WeldVertices::default());
             pipeline.add(CleanMesh {
                 resolve_t_junctions: false,
                 ..CleanMesh::default()
             });
-            pipeline.add(WeldVertices::default());
             pipeline.add(SimplifyQuadric {
                 target_triangle_count: Some(half),
                 volume_tolerance: 0.0,
@@ -216,8 +217,8 @@ fn bilateral_kernel_v2_chain_runs_to_completion_on_dc_sphere() {
 
             // Reproduce standard_v2 but swap the HC kernel for Bilateral.
             let mut pipeline = MeshRepairPipeline::new();
-            pipeline.add(CleanMesh::default());
             pipeline.add(WeldVertices::default());
+            pipeline.add(CleanMesh::default());
             pipeline.add(FillSmallHoles::default());
             pipeline.add(FeatureSmooth {
                 iterations: 1,

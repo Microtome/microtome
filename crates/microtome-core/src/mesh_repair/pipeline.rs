@@ -120,20 +120,22 @@ impl MeshRepairPipeline {
     /// 4. [`TaubinSmooth`](super::passes::TaubinSmooth) with λ=0.33, μ=-0.34,
     ///    two iterations, boundary pinned.
     ///
-    /// A no-target [`CleanMesh`](super::passes::CleanMesh) runs first to
-    /// dedup faces, drop orphan vertices, and topologically propagate
-    /// winding consistency — without it, DC / KD-tree outputs with
-    /// inconsistent winding produce phantom boundaries during half-edge
-    /// construction.
+    /// `WeldVertices` runs *first* so coincident vertices collapse before
+    /// any topology check; a no-target [`CleanMesh`](super::passes::CleanMesh)
+    /// then drops the surplus on any non-manifold edges produced by the
+    /// weld, dedups faces, drops orphan vertices, and topologically
+    /// propagates winding consistency — without that fixup, DC / KD-tree
+    /// outputs with inconsistent winding produce phantom boundaries
+    /// during half-edge construction.
     pub fn standard() -> Self {
         let mut pipeline = Self::new();
         pipeline
+            .add(super::passes::WeldVertices::default())
             .add(super::passes::CleanMesh {
                 fix_winding: false,
                 resolve_t_junctions: false,
                 ..super::passes::CleanMesh::default()
             })
-            .add(super::passes::WeldVertices::default())
             .add(super::passes::FillSmallHoles::default())
             .add(super::passes::RemoveSlivers::default())
             .add(super::passes::TaubinSmooth::default());
@@ -143,10 +145,11 @@ impl MeshRepairPipeline {
     /// Builds the v2 "standard" repair chain. Targets DC output with a
     /// reprojection target available.
     ///
-    /// 1. [`CleanMesh`](super::passes::CleanMesh) (pre-construction):
-    ///    duplicate-face / orphan-vertex removal, optional winding fix.
-    /// 2. [`WeldVertices`](super::passes::WeldVertices) (pre-construction):
+    /// 1. [`WeldVertices`](super::passes::WeldVertices) (pre-construction):
     ///    coincidence-induced non-manifold cleanup.
+    /// 2. [`CleanMesh`](super::passes::CleanMesh) (pre-construction):
+    ///    duplicate-face / orphan-vertex removal, surplus-face drop on
+    ///    non-manifold edges, winding propagation, optional fix_winding.
     /// 3. [`FillSmallHoles`](super::passes::FillSmallHoles): close small
     ///    boundary loops.
     /// 4. [`FeatureSmooth`](super::passes::FeatureSmooth) (HC-Laplacian):
@@ -161,8 +164,8 @@ impl MeshRepairPipeline {
     pub fn standard_v2() -> Self {
         let mut pipeline = Self::new();
         pipeline
-            .add(super::passes::CleanMesh::default())
             .add(super::passes::WeldVertices::default())
+            .add(super::passes::CleanMesh::default())
             .add(super::passes::FillSmallHoles::default())
             .add(super::passes::FeatureSmooth::default())
             .add(super::passes::ReprojectToSurface::default());
@@ -486,15 +489,14 @@ mod tests {
 
     #[test]
     fn standard_pipeline_runs_on_single_triangle_without_error() {
-        // Single triangle through the full standard chain. CleanMesh runs
-        // first as a pre-construction scrub (winding propagation no-op on a
-        // single triangle), then welder + hole-fill + sliver removal + Taubin.
+        // Single triangle through the full standard chain.
+        // weld → clean (no-op on a single triangle) → fill → slivers → taubin.
         let pipeline = MeshRepairPipeline::standard();
         let iso = single_triangle();
         let (_out, report) = pipeline.run(&iso, |_| Vec3::Z).expect("run");
         assert_eq!(report.per_pass.len(), 5);
-        assert_eq!(report.per_pass[0].name, "clean_mesh");
-        assert_eq!(report.per_pass[1].name, "weld_vertices");
+        assert_eq!(report.per_pass[0].name, "weld_vertices");
+        assert_eq!(report.per_pass[1].name, "clean_mesh");
         assert_eq!(report.per_pass[2].name, "fill_small_holes");
         assert_eq!(report.per_pass[3].name, "remove_slivers");
         assert_eq!(report.per_pass[4].name, "taubin_smooth");

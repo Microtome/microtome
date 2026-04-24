@@ -25,6 +25,13 @@ pub struct CleanMesh {
     pub remove_duplicate_faces: bool,
     /// Drop vertices not referenced by any surviving triangle, remap indices.
     pub remove_orphan_vertices: bool,
+    /// Drop the surplus faces from any canonical edge shared by ≥3 faces.
+    /// Keeps the first two encountered. The remaining edge becomes
+    /// 2-manifold; downstream half-edge construction can proceed.
+    /// Heuristic — picks faces by encounter order, not by area or normal
+    /// consistency — but adequate for DC output where the third face is
+    /// typically an M-T tie-break artifact.
+    pub drop_non_manifold_faces: bool,
     /// Topologically propagate winding consistency: BFS over face adjacency
     /// (via shared canonical edges), flipping any face that traverses a
     /// shared edge in the same direction as its neighbour. Requires no
@@ -49,6 +56,7 @@ impl Default for CleanMesh {
         Self {
             remove_duplicate_faces: true,
             remove_orphan_vertices: true,
+            drop_non_manifold_faces: true,
             propagate_winding: true,
             fix_winding: true,
             resolve_t_junctions: true,
@@ -116,6 +124,23 @@ impl MeshRepairPass for CleanMesh {
                 outcome.warn(
                     PassWarningKind::Clamped,
                     format!("split {splits} T-junction triangles via fan triangulation"),
+                );
+            }
+        }
+
+        // Run last so any non-manifold edges created by t-junction
+        // splitting (or already present on input) are surfaced before
+        // half-edge construction.
+        if self.drop_non_manifold_faces {
+            let (next, dropped) = drop_non_manifold_faces(iso);
+            iso = next;
+            if dropped > 0 {
+                outcome.stats.faces_removed += dropped;
+                outcome.warn(
+                    PassWarningKind::Clamped,
+                    format!(
+                        "dropped {dropped} surplus faces on canonical edges shared by ≥3 faces"
+                    ),
                 );
             }
         }
@@ -304,6 +329,62 @@ fn edge_parameter_if_on_segment(
     } else {
         None
     }
+}
+
+/// Drops the surplus faces from any canonical edge shared by ≥3 faces.
+/// Keeps the first two faces encountered; subsequent faces on the same
+/// non-manifold edge are dropped. Returns the updated mesh and the count
+/// of faces removed.
+fn drop_non_manifold_faces(iso: IsoMesh) -> (IsoMesh, u32) {
+    let face_count = iso.indices.len() / 3;
+    if face_count == 0 {
+        return (iso, 0);
+    }
+    let mut edge_keepers: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut to_drop: HashSet<usize> = HashSet::new();
+    for f in 0..face_count {
+        if to_drop.contains(&f) {
+            continue;
+        }
+        let i0 = iso.indices[f * 3];
+        let i1 = iso.indices[f * 3 + 1];
+        let i2 = iso.indices[f * 3 + 2];
+        let mut would_break = false;
+        for (a, b) in [(i0, i1), (i1, i2), (i2, i0)] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            let count = *edge_keepers.get(&key).unwrap_or(&0);
+            if count >= 2 {
+                would_break = true;
+                break;
+            }
+        }
+        if would_break {
+            to_drop.insert(f);
+            continue;
+        }
+        for (a, b) in [(i0, i1), (i1, i2), (i2, i0)] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            *edge_keepers.entry(key).or_insert(0) += 1;
+        }
+    }
+    if to_drop.is_empty() {
+        return (iso, 0);
+    }
+    let mut new_indices = Vec::with_capacity(iso.indices.len());
+    for f in 0..face_count {
+        if !to_drop.contains(&f) {
+            new_indices.extend_from_slice(&iso.indices[f * 3..f * 3 + 3]);
+        }
+    }
+    let removed = to_drop.len() as u32;
+    (
+        IsoMesh {
+            positions: iso.positions,
+            normals: iso.normals,
+            indices: new_indices,
+        },
+        removed,
+    )
 }
 
 /// Propagates winding consistency across the mesh by BFS over face
