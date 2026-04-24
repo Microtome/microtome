@@ -106,6 +106,18 @@ pub enum HalfEdgeOpError {
     /// Merging them would collapse two holes into one.
     #[error("cannot collapse: both endpoints are on different boundary loops")]
     BoundaryMergeForbidden,
+
+    /// A pre-check rejected the operation because the change in local
+    /// signed volume exceeded the configured fractional tolerance.
+    #[error(
+        "operation would change local volume by {delta} (fraction exceeds tolerance {tolerance})"
+    )]
+    WouldExceedVolumeTolerance {
+        /// Magnitude of the volume change relative to total local volume.
+        delta: f32,
+        /// Fraction-of-volume threshold the operation exceeded.
+        tolerance: f32,
+    },
 }
 
 /// A mesh repair pass failed to run.

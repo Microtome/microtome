@@ -4,21 +4,17 @@
 //! constraints), enumerates undirected edges, computes a collapse cost
 //! per edge as `(Q_u + Q_v).evaluate(p_opt)` where `p_opt` is the QEF
 //! optimum, and processes edges cheapest-first via a priority queue with
-//! lazy deletion.
-//!
-//! v2 first cut:
-//! - Volume tolerance check is implemented as "skip if the post-collapse
-//!   one-ring contains a triangle whose normal flips relative to its pre-
-//!   collapse normal" — a simpler proxy that catches the worst cases.
-//! - Continues until both budgets are met or no candidate edge can be
-//!   collapsed.
+//! lazy deletion. Each candidate is pre-checked for normal flips and
+//! local volume change before the collapse is committed; pre-checks that
+//! reject leave the mesh untouched and bump the edge's generation so
+//! re-pushing later picks up the new configuration.
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
 use glam::Vec3;
 
-use super::super::error::PassError;
+use super::super::error::{HalfEdgeOpError, PassError};
 use super::super::half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
 use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
 use super::super::vertex_class::VertexClass;
@@ -36,6 +32,10 @@ pub struct SimplifyQuadric {
     pub weights: QuadricWeights,
     /// Reject collapses whose `p_opt` would flip an incident face normal.
     pub forbid_normal_flip: bool,
+    /// Reject collapses where the absolute local volume change exceeds
+    /// this fraction of the pre-collapse local |volume|. Set to 0 to
+    /// disable the check. Default `0.05` (5 %).
+    pub volume_tolerance: f32,
 }
 
 impl Default for SimplifyQuadric {
@@ -45,6 +45,7 @@ impl Default for SimplifyQuadric {
             target_error: None,
             weights: QuadricWeights::default(),
             forbid_normal_flip: true,
+            volume_tolerance: 0.05,
         }
     }
 }
@@ -128,38 +129,28 @@ impl MeshRepairPass for SimplifyQuadric {
             combined.combine(&quadrics[v.index()]);
             let (p_opt, _err) = combined.solve();
 
-            // Pre-collapse face normals on the survivor's one-ring (used to
-            // detect normal flips post-collapse).
-            let pre_normals: Vec<(FaceId, Vec3)> = if self.forbid_normal_flip {
-                gather_one_ring_face_normals(mesh, u, v)
-            } else {
-                Vec::new()
-            };
+            // Pre-check: simulate the collapse and reject if it would flip
+            // an incident face normal or exceed the volume tolerance. Both
+            // checks read current geometry only, so a rejection leaves the
+            // mesh untouched.
+            if let Err(reason) = precheck_collapse(
+                mesh,
+                he,
+                p_opt,
+                self.forbid_normal_flip,
+                self.volume_tolerance,
+            ) {
+                outcome.warn(
+                    PassWarningKind::Skipped,
+                    format!("collapse rejected by pre-check: {reason}"),
+                );
+                bump_gen(&mut generation, key);
+                continue;
+            }
 
             // Attempt collapse.
             match mesh.collapse_edge_to(he, p_opt) {
                 Ok(survivor) => {
-                    // Normal-flip check: any incident face whose normal
-                    // reversed direction → reject + bail (we can't undo).
-                    if self.forbid_normal_flip {
-                        for (fid, n_pre) in &pre_normals {
-                            if !mesh.face_is_live(*fid) {
-                                continue;
-                            }
-                            let [p0, p1, p2] = mesh.face_positions(*fid);
-                            let n_post = (p1 - p0).cross(p2 - p0);
-                            if n_post.dot(*n_pre) < 0.0 {
-                                outcome.warn(
-                                    PassWarningKind::Skipped,
-                                    format!(
-                                        "post-collapse normal flip on face {fid:?} (collapse kept)"
-                                    ),
-                                );
-                                break;
-                            }
-                        }
-                    }
-
                     // Merge the quadric.
                     quadrics[survivor.index()] = combined;
 
@@ -174,15 +165,6 @@ impl MeshRepairPass for SimplifyQuadric {
                     }
 
                     outcome.stats.edges_collapsed += 1;
-                    // Interior collapse removes 2 faces; boundary 1.
-                    let removed = if mesh.face_count() < pre_normals.len() / 2 + 2 {
-                        // Conservative — just count via the heap iteration's
-                        // before/after diff would be exact, but expensive.
-                        0u32
-                    } else {
-                        0u32
-                    };
-                    let _ = removed;
                 }
                 Err(_) => {
                     outcome.warn(
@@ -273,43 +255,115 @@ fn find_he_for_edge(mesh: &HalfEdgeMesh, key: (u32, u32)) -> Option<HalfEdgeId> 
     None
 }
 
-fn gather_one_ring_face_normals(
+/// Pre-collapse safety check. Walks every face incident to `u` or `v` and
+/// simulates the post-collapse geometry by replacing endpoint positions
+/// with `p_opt`. Returns an error if any face's normal would flip
+/// (when `forbid_normal_flip`) or if the absolute change in summed signed
+/// volume of the affected faces exceeds `volume_tolerance` × pre-volume
+/// magnitude (when `volume_tolerance > 0`). The two faces that vanish in
+/// the collapse contribute their pre-collapse signed volume to the
+/// difference (post = 0).
+fn precheck_collapse(
     mesh: &HalfEdgeMesh,
-    u: VertexId,
-    v: VertexId,
-) -> Vec<(FaceId, Vec3)> {
-    let mut out = Vec::new();
+    he: HalfEdgeId,
+    p_opt: Vec3,
+    forbid_normal_flip: bool,
+    volume_tolerance: f32,
+) -> Result<(), HalfEdgeOpError> {
+    let u = mesh.he_tail(he);
+    let v = mesh.he_head(he);
+    let face_l = mesh.he_face(he);
+    let twin = mesh.he_twin(he);
+    let face_r = if twin.is_valid() {
+        mesh.he_face(twin)
+    } else {
+        FaceId::INVALID
+    };
+
+    let mut total_pre = 0.0_f32;
+    let mut total_post = 0.0_f32;
+    let mut total_abs = 0.0_f32;
     let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+
     for endpoint in [u, v] {
-        for n in mesh.vertex_one_ring(endpoint) {
-            // For each one-ring neighbour, collect the incident faces of
-            // endpoint that touch that neighbour. Simpler: walk all live
-            // faces of endpoint via he_out chain.
-            let _ = n;
-        }
-        // Walk endpoint's incident faces via the one-ring chain.
         let he_out = mesh.vertex_he_out(endpoint);
         if !he_out.is_valid() {
             continue;
         }
         let start = he_out;
         let mut cur = start;
+        let mut first = true;
         loop {
             let face = mesh.he_face(cur);
             if mesh.face_is_live(face) && seen.insert(face.0) {
+                let tri = mesh.face_triangle(face);
                 let [p0, p1, p2] = mesh.face_positions(face);
+                let pre_vol = signed_volume(p0, p1, p2);
+                total_abs += pre_vol.abs();
+
+                if face == face_l || face == face_r {
+                    // Collapse removes this face; pre contributes, post is zero.
+                    total_pre += pre_vol;
+                    continue;
+                }
+
+                let q0 = post_collapse_position(mesh, tri[0], u, v, p_opt);
+                let q1 = post_collapse_position(mesh, tri[1], u, v, p_opt);
+                let q2 = post_collapse_position(mesh, tri[2], u, v, p_opt);
                 let n_pre = (p1 - p0).cross(p2 - p0);
-                out.push((face, n_pre));
+                let n_post = (q1 - q0).cross(q2 - q0);
+
+                if forbid_normal_flip && n_pre.dot(n_post) < 0.0 {
+                    return Err(HalfEdgeOpError::WouldFlipNormal);
+                }
+                total_pre += pre_vol;
+                total_post += signed_volume(q0, q1, q2);
             }
             let prev = mesh.he_prev(cur);
             let prev_twin = mesh.he_twin(prev);
-            if !prev_twin.is_valid() || prev_twin == start {
+            if !prev_twin.is_valid() {
+                break;
+            }
+            if !first && prev_twin == start {
                 break;
             }
             cur = prev_twin;
+            first = false;
         }
     }
-    out
+
+    if volume_tolerance > 0.0 {
+        let delta = (total_post - total_pre).abs();
+        let denom = total_abs.max(1e-9);
+        let frac = delta / denom;
+        if frac > volume_tolerance {
+            return Err(HalfEdgeOpError::WouldExceedVolumeTolerance {
+                delta: frac,
+                tolerance: volume_tolerance,
+            });
+        }
+    }
+    Ok(())
+}
+
+#[inline]
+fn post_collapse_position(
+    mesh: &HalfEdgeMesh,
+    vid: VertexId,
+    u: VertexId,
+    v: VertexId,
+    p_opt: Vec3,
+) -> Vec3 {
+    if vid == u || vid == v {
+        p_opt
+    } else {
+        mesh.vertex_position(vid)
+    }
+}
+
+#[inline]
+fn signed_volume(p0: Vec3, p1: Vec3, p2: Vec3) -> f32 {
+    p0.dot(p1.cross(p2)) / 6.0
 }
 
 #[cfg(test)]
@@ -393,6 +447,47 @@ mod tests {
             2, 0, 5,  1, 2, 5,  3, 1, 5,  0, 3, 5,
         ];
         HalfEdgeMesh::from_iso_mesh(&iso(positions, indices)).expect("octa")
+    }
+
+    #[test]
+    fn simplify_volume_tolerance_blocks_aggressive_collapse_on_thin_pyramid() {
+        // Thin pyramid: triangular base at z=0 with apex at z=10. Collapsing
+        // the apex into the base would change local volume by ~100 % of the
+        // four incident triangles' summed |signed volume|. With tolerance
+        // 0.01 every collapse touching the apex is blocked. With tolerance
+        // 1.0 (effectively off) collapses proceed.
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),  // 0
+            Vec3::new(1.0, 0.0, 0.0),  // 1
+            Vec3::new(0.5, 1.0, 0.0),  // 2
+            Vec3::new(0.5, 0.5, 10.0), // 3 apex
+        ];
+        let indices = vec![0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3];
+        let iso_mesh = iso(positions, indices);
+        let mut mesh_strict = HalfEdgeMesh::from_iso_mesh(&iso_mesh).expect("pyramid");
+        let pass_strict = SimplifyQuadric {
+            target_triangle_count: Some(0), // unbounded budget
+            volume_tolerance: 0.01,
+            ..SimplifyQuadric::default()
+        };
+        let ctx = RepairContext::noop();
+        pass_strict.apply(&mut mesh_strict, &ctx).expect("simplify");
+
+        let mut mesh_loose = HalfEdgeMesh::from_iso_mesh(&iso_mesh).expect("pyramid");
+        let pass_loose = SimplifyQuadric {
+            target_triangle_count: Some(0),
+            volume_tolerance: 1.5,
+            forbid_normal_flip: false,
+            ..SimplifyQuadric::default()
+        };
+        pass_loose.apply(&mut mesh_loose, &ctx).expect("simplify");
+
+        assert!(
+            mesh_strict.face_count() > mesh_loose.face_count(),
+            "tight tolerance should block more collapses: strict={} loose={}",
+            mesh_strict.face_count(),
+            mesh_loose.face_count()
+        );
     }
 
     #[test]
