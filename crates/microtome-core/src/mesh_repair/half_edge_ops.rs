@@ -75,12 +75,21 @@ impl HalfEdgeMesh {
         let v = self.he_head(he);
         self.check_link_condition(he, u, v, twin)?;
 
-        // NB: the spec's `BoundaryMergeForbidden` check — rejecting an
-        // interior collapse between two boundary vertices — is deferred to
-        // v2 because the simple "both endpoints boundary" heuristic flags
-        // legitimate collapses within a single loop (e.g. the diamond's
-        // central edge). A correct implementation needs boundary-loop
-        // identity, which arrives with the vertex classifier in v2.
+        // BoundaryMergeForbidden: an *interior* edge whose endpoints sit on
+        // *different* boundary loops would, on collapse, fuse two holes
+        // into one — non-manifold pinch the link condition can't catch on
+        // its own. Same-loop collapses (boundary edge proper, or interior
+        // edge between two adjacent boundary vertices on one loop) are
+        // legitimate and stay allowed.
+        if twin.is_valid() {
+            let u_loop = self.boundary_loop_id(u);
+            let v_loop = self.boundary_loop_id(v);
+            if let (Some(uid), Some(vid)) = (u_loop, v_loop)
+                && uid != vid
+            {
+                return Err(HalfEdgeOpError::BoundaryMergeForbidden);
+            }
+        }
 
         // Gather the left-face half-edges and their neighbours.
         let he_rec = self.half_edges[he.index()].clone();
@@ -821,5 +830,102 @@ mod tests {
         let mut mesh = HalfEdgeMesh::from_iso_mesh(&single_triangle()).expect("construct");
         let err = mesh.flip_edge(HalfEdgeId::INVALID).unwrap_err();
         assert!(matches!(err, HalfEdgeOpError::InvalidHandle(_)));
+    }
+
+    #[test]
+    fn collapse_interior_edge_between_two_loops_forbidden_on_annulus() {
+        // Square annulus: outer ring (0,1,2,3) at corners of a 3×3 square,
+        // inner ring (4,5,6,7) at corners of a centred 1×1 square. Eight
+        // triangles fill the ring. Outer boundary loop and inner boundary
+        // loop are distinct.
+        //
+        //   3───────2
+        //   │\     /│
+        //   │ 7───6 │
+        //   │ │   │ │
+        //   │ 4───5 │
+        //   │/     \│
+        //   0───────1
+        //
+        // Edge (0,5) is interior (shared by triangles (0,1,5) and (0,5,4)).
+        // Endpoint 0 is on the outer loop; endpoint 5 is on the inner loop.
+        // Collapse must be rejected with BoundaryMergeForbidden.
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 0.0), // 0 outer
+            Vec3::new(3.0, 0.0, 0.0), // 1 outer
+            Vec3::new(3.0, 3.0, 0.0), // 2 outer
+            Vec3::new(0.0, 3.0, 0.0), // 3 outer
+            Vec3::new(1.0, 1.0, 0.0), // 4 inner
+            Vec3::new(2.0, 1.0, 0.0), // 5 inner
+            Vec3::new(2.0, 2.0, 0.0), // 6 inner
+            Vec3::new(1.0, 2.0, 0.0), // 7 inner
+        ];
+        // CCW from outside (normal +z): outer goes 0→1→2→3, inner goes
+        // 4→7→6→5 (reverse, so it's a hole).
+        let indices = vec![
+            0, 1, 5, 0, 5, 4, // bottom strip
+            1, 2, 6, 1, 6, 5, // right strip
+            2, 3, 7, 2, 7, 6, // top strip
+            3, 0, 4, 3, 4, 7, // left strip
+        ];
+        let iso = IsoMesh {
+            positions,
+            normals: vec![Vec3::Z; 8],
+            indices,
+        };
+        let mut mesh = HalfEdgeMesh::from_iso_mesh(&iso).expect("annulus construct");
+        // Sanity-check: the two loops have distinct ids.
+        let loop_outer = mesh.boundary_loop_id(VertexId(0)).expect("0 on a loop");
+        let loop_inner = mesh.boundary_loop_id(VertexId(5)).expect("5 on a loop");
+        assert_ne!(loop_outer, loop_inner, "outer ≠ inner");
+
+        // Find the half-edge that goes 0 → 5 (interior, between the loops).
+        let bridge_he = (0..mesh.half_edge_count() as u32)
+            .map(HalfEdgeId)
+            .find(|&h| {
+                mesh.half_edge_is_live(h)
+                    && mesh.he_tail(h) == VertexId(0)
+                    && mesh.he_head(h) == VertexId(5)
+            })
+            .expect("interior bridge edge 0→5 exists");
+        assert!(
+            mesh.he_twin(bridge_he).is_valid(),
+            "edge 0→5 must be interior (twin valid) for the test to mean anything"
+        );
+
+        let err = mesh.collapse_edge(bridge_he).unwrap_err();
+        assert!(
+            matches!(err, HalfEdgeOpError::BoundaryMergeForbidden),
+            "expected BoundaryMergeForbidden, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn boundary_loop_id_distinguishes_two_holes() {
+        // Two coplanar quads, each formed of two triangles, with NO shared
+        // edge. Each quad has its own boundary loop. Distinct loop IDs
+        // expected.
+        let positions = vec![
+            // Left quad
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            // Right quad
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(3.0, 0.0, 0.0),
+            Vec3::new(3.0, 1.0, 0.0),
+            Vec3::new(2.0, 1.0, 0.0),
+        ];
+        let indices = vec![0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+        let iso = IsoMesh {
+            positions,
+            normals: vec![Vec3::Z; 8],
+            indices,
+        };
+        let mesh = HalfEdgeMesh::from_iso_mesh(&iso).expect("construct");
+        let id_left = mesh.boundary_loop_id(VertexId(0)).expect("left on loop");
+        let id_right = mesh.boundary_loop_id(VertexId(4)).expect("right on loop");
+        assert_ne!(id_left, id_right, "distinct quads → distinct loop ids");
     }
 }

@@ -354,6 +354,32 @@ impl HalfEdgeMesh {
         loops
     }
 
+    /// Returns a stable identifier for the boundary loop containing `v`, or
+    /// `None` if `v` isn't on a boundary. The identifier is the lowest
+    /// half-edge index in the loop, which survives any number of collapses
+    /// that don't connect distinct loops (which is exactly the merge case
+    /// this identifier exists to forbid).
+    pub fn boundary_loop_id(&self, v: VertexId) -> Option<u32> {
+        let start = self.vertices[v.index()].he_out;
+        if !start.is_valid() || self.half_edges[start.index()].twin.is_valid() {
+            return None;
+        }
+        let mut min_id = start.0;
+        let mut current = start;
+        let bound = self.half_edges.len() + 1;
+        for _ in 0..bound {
+            let next = self.next_boundary_he(current);
+            if next.0 < min_id {
+                min_id = next.0;
+            }
+            if next == start {
+                return Some(min_id);
+            }
+            current = next;
+        }
+        None
+    }
+
     /// Given a boundary half-edge (twin == INVALID), returns the next boundary
     /// half-edge in the loop. Walks around `he_head(h)` via `next` / `twin`
     /// pivots until the next boundary-adjacent outgoing is found.
