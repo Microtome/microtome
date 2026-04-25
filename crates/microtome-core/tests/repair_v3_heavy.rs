@@ -32,12 +32,18 @@ fn specs_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// True if every index of triangle `f` is in range. Defends helpers
-/// against stale `INVALID` sentinels that occasionally leak through
-/// IsotropicRemesh output (a known v3 follow-up).
-fn triangle_indices_valid(iso: &IsoMesh, f: usize) -> bool {
+/// Asserts every index in `iso` references a real vertex slot.
+/// Originally a defensive filter (the v3-era IsotropicRemesh output
+/// occasionally contained `u32::MAX` sentinels); now an assertion so
+/// any regression of that bug fails the test loudly.
+fn assert_indices_in_range(iso: &IsoMesh) {
     let n = iso.positions.len() as u32;
-    iso.indices[f * 3] < n && iso.indices[f * 3 + 1] < n && iso.indices[f * 3 + 2] < n
+    for (i, &idx) in iso.indices.iter().enumerate() {
+        assert!(
+            idx < n,
+            "iso.indices[{i}] = {idx} (n_pos = {n}) — INVALID-index leak"
+        );
+    }
 }
 
 /// Counts edges of `iso` whose dihedral exceeds `threshold_deg`. Operates
@@ -47,9 +53,6 @@ fn count_feature_edges_iso(iso: &IsoMesh, threshold_deg: f32) -> usize {
     let face_count = iso.indices.len() / 3;
     let mut edge_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
     for f in 0..face_count {
-        if !triangle_indices_valid(iso, f) {
-            continue;
-        }
         let i0 = iso.indices[f * 3];
         let i1 = iso.indices[f * 3 + 1];
         let i2 = iso.indices[f * 3 + 2];
@@ -82,15 +85,11 @@ fn face_normal(iso: &IsoMesh, f: usize) -> Vec3 {
 }
 
 /// Edge length stats from raw IsoMesh — works regardless of manifoldness.
-/// Skips triangles with stale `INVALID` indices.
 fn edge_length_stats(iso: &IsoMesh) -> (f32, f32) {
     let face_count = iso.indices.len() / 3;
     let mut lens: Vec<f32> = Vec::with_capacity(face_count * 3);
     let mut seen: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     for f in 0..face_count {
-        if !triangle_indices_valid(iso, f) {
-            continue;
-        }
         let i0 = iso.indices[f * 3];
         let i1 = iso.indices[f * 3 + 1];
         let i2 = iso.indices[f * 3 + 2];
@@ -190,6 +189,7 @@ fn gear_rail_features_survive_standard_v2() {
 
             let pipeline = MeshRepairPipeline::standard_v2();
             let (out, _report) = pipeline.run_with(&dc, &ctx).expect("pipeline runs");
+            assert_indices_in_range(&out);
 
             let post_features = count_feature_edges_iso(&out, 45.0);
             // The pipeline shouldn't blunt creases below ~50 % of the input
@@ -232,6 +232,7 @@ fn bunny_isotropic_remesh_uniformises_edge_length() {
                 iterations: 2,
             });
             let (out, _report) = pipeline.run_with(&dc, &ctx).expect("pipeline runs");
+            assert_indices_in_range(&out);
 
             let (post_mean, post_stddev) = edge_length_stats(&out);
             assert!(post_mean > 0.0);
