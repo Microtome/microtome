@@ -82,14 +82,17 @@ impl MeshRepairPipeline {
         self
     }
 
-    /// Sets the failure policy.
-    pub fn with_policy(mut self, p: FailurePolicy) -> Self {
+    /// Sets the failure policy. Mutable builder to match
+    /// [`add`](Self::add) — chain on a `let mut pipeline` or call in
+    /// sequence.
+    pub fn with_policy(&mut self, p: FailurePolicy) -> &mut Self {
         self.policy = p;
         self
     }
 
     /// Sets the quality thresholds used for pre/post quality reports.
-    pub fn with_quality_thresholds(mut self, t: QualityThresholds) -> Self {
+    /// Mutable builder.
+    pub fn with_quality_thresholds(&mut self, t: QualityThresholds) -> &mut Self {
         self.quality_thresholds = t;
         self
     }
@@ -465,7 +468,8 @@ mod tests {
 
     #[test]
     fn stop_on_first_error_aborts() {
-        let mut pipeline = MeshRepairPipeline::new().with_policy(FailurePolicy::StopOnFirstError);
+        let mut pipeline = MeshRepairPipeline::new();
+        pipeline.with_policy(FailurePolicy::StopOnFirstError);
         pipeline.add(FailingPass);
         pipeline.add(CountingPass);
         let err = pipeline
