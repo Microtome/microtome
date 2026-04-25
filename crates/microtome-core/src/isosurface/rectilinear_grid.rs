@@ -166,11 +166,8 @@ impl RectilinearGrid {
         qef.solve(&mut pos, &mut error);
         // C++: auto extends = codeToPos(maxCode - minCode, ...) * 0.5f;
         let extends = code_to_pos(max_code - min_code, unit_size) * 0.5;
-        // C++: const auto min = codeToPos(minCode, ...) - extends;
         let min_pos = code_to_pos(min_code, unit_size) - extends;
-        // C++: const auto max = codeToPos(maxCode, ...) + extends;
         let max_pos = code_to_pos(max_code, unit_size) + extends;
-        // C++: if (p.x < min.x || p.x > max.x || ...)
         if pos.x < min_pos.x
             || pos.x > max_pos.x
             || pos.y < min_pos.y
@@ -178,15 +175,7 @@ impl RectilinearGrid {
             || pos.z < min_pos.z
             || pos.z > max_pos.z
         {
-            // C++: p = qef.massPointSum / (float)qef.pointCount;
             pos = qef.mass_point();
-            // Recompute the QEF residual at the *clamped* position. The
-            // C++ source kept the SVD-solution residual here, which is
-            // misleadingly low — collapse-thresholds (kdtree_v2.rs:65,
-            // kdtree.rs:84) read this field to decide simplification, so
-            // an underreport of the actual fitted-vertex error causes
-            // overeager collapse and visible gouges around features
-            // where the SVD pushes the solution out of bounds.
             error = qef.get_error_at(pos);
         }
 
@@ -1322,17 +1311,6 @@ mod tests {
     impl ScalarField for TestSphere {
         fn value(&self, p: Vec3) -> f32 {
             p.length() - self.radius
-        }
-    }
-
-    /// Trivial HasGrid wrapper for testing.
-    struct GridHolder {
-        grid: RectilinearGrid,
-    }
-
-    impl HasGrid for GridHolder {
-        fn grid(&self) -> &RectilinearGrid {
-            &self.grid
         }
     }
 

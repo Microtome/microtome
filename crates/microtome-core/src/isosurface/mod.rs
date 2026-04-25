@@ -16,9 +16,7 @@ pub mod mesh_output;
 pub mod mesh_scan;
 pub mod octree;
 mod polymender;
-#[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod qef;
-#[allow(unused, clippy::all, clippy::unwrap_used, clippy::expect_used)]
 pub mod rectilinear_grid;
 pub mod scalar_field;
 // sign_gen.rs was a previous, unfinished attempt at PolyMender-style
