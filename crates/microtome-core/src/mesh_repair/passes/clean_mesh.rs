@@ -18,6 +18,27 @@ use super::super::spatial::{Aabb, TriangleBvh};
 use crate::isosurface::IsoMesh;
 use crate::mesh_repair::RepairContext;
 
+/// How [`CleanMesh`] handles winding correction. The two strategies
+/// were previously two independent `bool` fields (`propagate_winding`
+/// and `fix_winding`); collapsing them into an enum prevents the
+/// "default config + missing target → silent skip" trap.
+///
+/// `PropagateAndFix` requires a [`ReprojectionTarget`](super::super::reprojection::ReprojectionTarget)
+/// in the [`RepairContext`]; the pass errors at apply-time if absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WindingMode {
+    /// Don't touch face winding.
+    Off,
+    /// Topologically propagate winding consistency: BFS over face
+    /// adjacency, flipping any face that traverses a shared edge in
+    /// the same direction as its neighbour. No target needed.
+    #[default]
+    Propagate,
+    /// Run [`Propagate`](Self::Propagate), then flip any face whose
+    /// normal opposes `target.normal(centroid)`. Requires a target.
+    PropagateAndFix,
+}
+
 /// Cheap mesh cleanup operations that don't need half-edge topology.
 #[derive(Debug, Clone)]
 pub struct CleanMesh {
@@ -32,15 +53,8 @@ pub struct CleanMesh {
     /// consistency — but adequate for DC output where the third face is
     /// typically an M-T tie-break artifact.
     pub drop_non_manifold_faces: bool,
-    /// Topologically propagate winding consistency: BFS over face adjacency
-    /// (via shared canonical edges), flipping any face that traverses a
-    /// shared edge in the same direction as its neighbour. Requires no
-    /// target. Runs before [`fix_winding`](Self::fix_winding) so that the
-    /// outward-normal check operates on a winding-consistent input.
-    pub propagate_winding: bool,
-    /// Flip face winding when `face_normal · target.normal(centroid) < 0`.
-    /// Requires `ctx.target = Some(...)`; emits a Skipped warning otherwise.
-    pub fix_winding: bool,
+    /// Winding-correction strategy. See [`WindingMode`].
+    pub winding: WindingMode,
     /// Detect T-junctions (vertex strictly interior to another triangle's
     /// edge) and fan-triangulate the offending triangle so the T-vertex
     /// becomes a proper vertex.
@@ -57,8 +71,9 @@ impl Default for CleanMesh {
             remove_duplicate_faces: true,
             remove_orphan_vertices: true,
             drop_non_manifold_faces: true,
-            propagate_winding: true,
-            fix_winding: true,
+            // Propagate by default — no target required. Callers who have a
+            // target and want the outward-normal fix opt up to PropagateAndFix.
+            winding: WindingMode::Propagate,
             resolve_t_junctions: true,
             t_junction_tolerance: 1e-4,
         }
@@ -88,32 +103,43 @@ impl MeshRepairPass for CleanMesh {
             outcome.stats.faces_removed += (pre - post) as u32;
         }
 
-        if self.propagate_winding {
-            let flips = propagate_winding(&mut iso);
-            if flips > 0 {
-                outcome.warn(
-                    PassWarningKind::Clamped,
-                    format!(
-                        "propagate_winding flipped {flips} triangles for topological consistency"
-                    ),
-                );
+        match self.winding {
+            WindingMode::Off => {}
+            WindingMode::Propagate => {
+                let flips = propagate_winding(&mut iso);
+                if flips > 0 {
+                    outcome.warn(
+                        PassWarningKind::Clamped,
+                        format!(
+                            "propagate_winding flipped {flips} triangles for topological consistency"
+                        ),
+                    );
+                }
             }
-        }
-
-        if self.fix_winding {
-            if let Some(target) = ctx.target {
+            WindingMode::PropagateAndFix => {
+                let prop_flips = propagate_winding(&mut iso);
+                if prop_flips > 0 {
+                    outcome.warn(
+                        PassWarningKind::Clamped,
+                        format!(
+                            "propagate_winding flipped {prop_flips} triangles for topological consistency"
+                        ),
+                    );
+                }
+                let target = ctx.target.ok_or_else(|| {
+                    PassError::PreConstruction(
+                        "WindingMode::PropagateAndFix requires a RepairContext target — \
+                         set ctx.target or downgrade to WindingMode::Propagate"
+                            .into(),
+                    )
+                })?;
                 let flips = fix_winding(&mut iso, target);
                 if flips > 0 {
                     outcome.warn(
                         PassWarningKind::Clamped,
-                        format!("flipped winding on {flips} triangles"),
+                        format!("flipped winding on {flips} triangles vs target normal"),
                     );
                 }
-            } else {
-                outcome.warn(
-                    PassWarningKind::Skipped,
-                    "fix_winding requires a ReprojectionTarget; skipped",
-                );
             }
         }
 
@@ -544,11 +570,10 @@ mod tests {
     }
 
     #[test]
-    fn clean_fix_winding_flips_inverted_triangle() {
+    fn clean_propagate_and_fix_flips_inverted_triangle() {
         // Sphere centered at origin; inward-facing triangle at +x outside.
-        // Set up: triangle near (1,0,0) wound clockwise as viewed from +x
-        // (i.e. its normal points -x). The target's outward normal is +x;
-        // we expect a flip.
+        // Triangle near (1,0,0) wound so its normal points -x. The target's
+        // outward normal is +x; PropagateAndFix flips the winding.
         let input = iso(
             vec![
                 Vec3::new(2.0, -1.0, -1.0),
@@ -560,11 +585,13 @@ mod tests {
         );
         let sphere = Sphere::with_center(1.0, Vec3::ZERO);
         let target = ScalarFieldTarget::new(&sphere);
-        let pass = CleanMesh::default();
+        let pass = CleanMesh {
+            winding: WindingMode::PropagateAndFix,
+            ..CleanMesh::default()
+        };
         let nf = |_p: Vec3| Vec3::ZERO;
         let ctx = RepairContext::new(&nf).with_target(&target);
         let (out, outcome) = pass.pre_construction(input, &ctx).expect("clean");
-        // After flip, indices should be (0, 1, 2) — winding reversed.
         assert_eq!(&out.indices[..3], &[0, 1, 2]);
         assert!(
             outcome
@@ -575,7 +602,11 @@ mod tests {
     }
 
     #[test]
-    fn clean_fix_winding_skipped_without_target() {
+    fn clean_propagate_and_fix_errors_without_target() {
+        // PropagateAndFix without a target now errors loudly instead of
+        // silently emitting a Skipped warning. Catches the regression where
+        // a default config in a target-less pipeline lost outward-normal
+        // correction without anyone noticing.
         let input = iso(
             vec![
                 Vec3::new(0.0, 0.0, 0.0),
@@ -584,14 +615,15 @@ mod tests {
             ],
             vec![0, 1, 2],
         );
-        let pass = CleanMesh::default();
+        let pass = CleanMesh {
+            winding: WindingMode::PropagateAndFix,
+            ..CleanMesh::default()
+        };
         let ctx = RepairContext::noop();
-        let (_out, outcome) = pass.pre_construction(input, &ctx).expect("clean");
+        let err = pass.pre_construction(input, &ctx).unwrap_err();
         assert!(
-            outcome
-                .warnings
-                .iter()
-                .any(|w| matches!(w.kind, PassWarningKind::Skipped))
+            matches!(err, PassError::PreConstruction(ref msg) if msg.contains("target")),
+            "expected PreConstruction(target) error, got {err:?}"
         );
     }
 
@@ -630,7 +662,7 @@ mod tests {
             // tuple as the keep-alive use of vertex 3.
             remove_duplicate_faces: false,
             // Skip winding correction (no target).
-            fix_winding: false,
+            winding: WindingMode::Propagate,
             ..CleanMesh::default()
         };
         let ctx = RepairContext::noop();
@@ -666,7 +698,7 @@ mod tests {
             vec![0, 1, 2, 1, 3, 2],
         );
         let pass = CleanMesh {
-            fix_winding: false,
+            winding: WindingMode::Propagate,
             ..CleanMesh::default()
         };
         let ctx = RepairContext::noop();

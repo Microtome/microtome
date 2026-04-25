@@ -132,7 +132,9 @@ impl MeshRepairPipeline {
         pipeline
             .add(super::passes::WeldVertices::default())
             .add(super::passes::CleanMesh {
-                fix_winding: false,
+                // Standard v1 pipeline runs without a target, so stick to
+                // topological propagation; PropagateAndFix would error.
+                winding: super::passes::clean_mesh::WindingMode::Propagate,
                 resolve_t_junctions: false,
                 ..super::passes::CleanMesh::default()
             })
@@ -165,7 +167,12 @@ impl MeshRepairPipeline {
         let mut pipeline = Self::new();
         pipeline
             .add(super::passes::WeldVertices::default())
-            .add(super::passes::CleanMesh::default())
+            .add(super::passes::CleanMesh {
+                // Standard v2 expects a target — opt up to the
+                // outward-normal correction.
+                winding: super::passes::clean_mesh::WindingMode::PropagateAndFix,
+                ..super::passes::CleanMesh::default()
+            })
             .add(super::passes::FillSmallHoles::default())
             .add(super::passes::FeatureSmooth::default())
             .add(super::passes::ReprojectToSurface::default());
