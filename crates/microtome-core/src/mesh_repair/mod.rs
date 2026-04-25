@@ -6,14 +6,46 @@
 //! runs an ordered chain of [`MeshRepairPass`](pass::MeshRepairPass)
 //! implementations, and re-emits an `IsoMesh`.
 //!
-//! v1 passes:
-//! - [`WeldVertices`](passes::WeldVertices) — merges coincident vertices (pre-construction).
+//! ## Pre-construction passes
+//!
+//! Run on the [`IsoMesh`] before half-edge construction:
+//!
+//! - [`WeldVertices`](passes::WeldVertices) — merges coincident vertices.
+//! - [`CleanMesh`](passes::CleanMesh) — duplicate-face dedup, orphan removal,
+//!   T-junction split, surplus-face drop on non-manifold edges, winding
+//!   propagation, and (with a target) outward-normal winding fix.
+//!
+//! ## Half-edge passes
+//!
+//! Run after construction; receive the [`HalfEdgeMesh`] and a
+//! [`RepairContext`]:
+//!
 //! - [`FillSmallHoles`](passes::FillSmallHoles) — triangulates small boundary loops.
 //! - [`RemoveSlivers`](passes::RemoveSlivers) — collapses or flips low-quality triangles.
 //! - [`TaubinSmooth`](passes::TaubinSmooth) — volume-preserving Laplacian smoothing.
+//! - [`FeatureSmooth`](passes::FeatureSmooth) — class-aware HC-Laplacian /
+//!   Bilateral smoothing that respects [`VertexClass`].
+//! - [`AngleRelax`](passes::AngleRelax) — tangential angle-equalising relaxation.
+//! - [`ReprojectToSurface`](passes::ReprojectToSurface) — pulls vertices back
+//!   onto a [`ReprojectionTarget`], tangent-constrained for `Feature` /
+//!   `Boundary` classes.
+//! - [`SimplifyQuadric`](passes::SimplifyQuadric) — Garland-Heckbert quadric
+//!   edge-collapse simplification with normal-flip + volume-tolerance pre-checks.
+//! - [`IsotropicRemesh`](passes::IsotropicRemesh) — composite split / collapse /
+//!   flip / relax / reproject pass for uniform triangle size.
+//! - [`DetectSelfIntersections`](passes::DetectSelfIntersections) — query-only
+//!   self-intersection detection (BVH-accelerated).
+//! - [`RepairSelfIntersections`](passes::RepairSelfIntersections) — drops faces
+//!   participating in any self-intersection so [`FillSmallHoles`] can patch.
 //!
-//! See the plan at `/home/djoyce/.claude/plans/stateful-sauteeing-wave.md`
-//! for the full design, including v2 passes not yet implemented.
+//! ## Cross-cutting types
+//!
+//! - [`RepairContext`] — per-run shared state (normal_fn, target, classifier,
+//!   features) passed to every pass.
+//! - [`VertexClassifier`] / [`VertexClass`] — feature / boundary detection by
+//!   dihedral threshold + caller-supplied [`FeatureSet`] creases.
+//! - [`MeshRepairPipeline`] — orchestrates passes, runs the classifier between
+//!   connectivity-changing passes, emits a [`RepairReport`].
 
 pub mod context;
 pub mod error;

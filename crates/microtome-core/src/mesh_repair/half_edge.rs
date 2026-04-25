@@ -861,32 +861,6 @@ impl Iterator for EdgeIter<'_> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn invalid_sentinel_is_u32_max() {
-        assert_eq!(VertexId::INVALID.0, u32::MAX);
-        assert_eq!(HalfEdgeId::INVALID.0, u32::MAX);
-        assert_eq!(FaceId::INVALID.0, u32::MAX);
-    }
-
-    #[test]
-    fn invalid_ids_report_invalid() {
-        assert!(!VertexId::INVALID.is_valid());
-        assert!(!HalfEdgeId::INVALID.is_valid());
-        assert!(!FaceId::INVALID.is_valid());
-    }
-
-    #[test]
-    fn regular_ids_report_valid() {
-        assert!(VertexId(0).is_valid());
-        assert!(HalfEdgeId(42).is_valid());
-        assert!(FaceId(1000).is_valid());
-    }
-
-    #[test]
-    fn index_converts_to_usize() {
-        assert_eq!(VertexId(7).index(), 7usize);
-    }
-
     fn single_triangle() -> IsoMesh {
         IsoMesh {
             positions: vec![

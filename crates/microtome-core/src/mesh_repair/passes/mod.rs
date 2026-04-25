@@ -17,7 +17,7 @@ pub use angle_relax::AngleRelax;
 pub use clean_mesh::CleanMesh;
 pub use detect_self_intersect::DetectSelfIntersections;
 pub use feature_smooth::{FeatureSmooth, FeatureSmoothMethod};
-pub use fill_holes::{FillSmallHoles, HoleFillMethod};
+pub use fill_holes::FillSmallHoles;
 pub use isotropic_remesh::IsotropicRemesh;
 pub use remove_slivers::RemoveSlivers;
 pub use repair_self_intersect::RepairSelfIntersections;

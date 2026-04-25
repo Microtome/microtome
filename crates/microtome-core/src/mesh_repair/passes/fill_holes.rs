@@ -13,33 +13,23 @@ use super::super::half_edge::{HalfEdgeId, HalfEdgeMesh};
 use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
 use crate::mesh_repair::RepairContext;
 
-/// How to triangulate a boundary loop.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HoleFillMethod {
-    /// Add a new centroid vertex and fan-triangulate.
-    CentroidFan,
-    /// Ear-clip in the best-fit plane. v1 falls back to `CentroidFan`.
-    EarClip,
-    /// Pick `CentroidFan` for loops of length ≤ 4, `EarClip` otherwise.
-    /// v1 always uses `CentroidFan` because ear-clipping lands in v2.
-    Auto,
-}
-
 /// Fills boundary loops up to a configurable perimeter budget.
+///
+/// Triangulation strategy: fan from a new centroid vertex. The original
+/// `HoleFillMethod` enum (CentroidFan / EarClip / Auto) was removed
+/// because only CentroidFan was ever wired up; if ear-clipping lands
+/// later it gets a separate pass rather than a method-selector field.
 #[derive(Debug, Clone)]
 pub struct FillSmallHoles {
     /// Maximum boundary-loop length (count of half-edges) to attempt to
     /// close. Larger loops emit a `BudgetExceeded` warning and are left.
     pub max_boundary_length: u32,
-    /// Which triangulation method to use.
-    pub method: HoleFillMethod,
 }
 
 impl Default for FillSmallHoles {
     fn default() -> Self {
         Self {
             max_boundary_length: 8,
-            method: HoleFillMethod::Auto,
         }
     }
 }
@@ -75,8 +65,6 @@ impl MeshRepairPass for FillSmallHoles {
                 );
                 continue;
             }
-            // v1: always centroid-fan. Method enum exists for v2 ear-clip.
-            let _ = self.method;
             let centroid = loop_centroid(mesh, loop_hes);
             match mesh.add_fan_over_boundary_loop(loop_hes, centroid) {
                 Ok((_w, faces)) => {
@@ -160,7 +148,6 @@ mod tests {
         // The hole has 4 edges. Budget of 3 forces a skip.
         let pass = FillSmallHoles {
             max_boundary_length: 3,
-            method: HoleFillMethod::Auto,
         };
         let outcome = pass
             .apply(&mut mesh, &crate::mesh_repair::RepairContext::noop())

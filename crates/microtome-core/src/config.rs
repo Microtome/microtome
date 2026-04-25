@@ -175,22 +175,22 @@ mod tests {
     }
 
     #[test]
-    fn printer_config_serde_round_trip() {
-        let config = sample_printer_config();
-        let json = serde_json::to_string_pretty(&config).unwrap();
-        let deserialized: PrinterConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.name, config.name);
-        assert_eq!(deserialized.projector.x_res_px, 2560);
-        assert!((deserialized.volume.width_mm - 120.0).abs() < f64::EPSILON);
-    }
+    fn config_serde_round_trip_preserves_values() {
+        // Single test covering both config types — round-trips and checks a
+        // representative field on each so a broken `#[serde]` attribute on
+        // either struct surfaces here.
+        let printer = sample_printer_config();
+        let printer_json = serde_json::to_string_pretty(&printer).unwrap();
+        let printer_back: PrinterConfig = serde_json::from_str(&printer_json).unwrap();
+        assert_eq!(printer_back.name, printer.name);
+        assert_eq!(printer_back.projector.x_res_px, 2560);
+        assert!((printer_back.volume.width_mm - 120.0).abs() < f64::EPSILON);
 
-    #[test]
-    fn job_config_serde_round_trip() {
-        let config = sample_job_config();
-        let json = serde_json::to_string(&config).unwrap();
-        let deserialized: PrintJobConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.name, "Default Job");
-        assert_eq!(deserialized.steps_per_layer, 20);
-        assert!((deserialized.raft_outset_mm - 0.5).abs() < f64::EPSILON);
+        let job = sample_job_config();
+        let job_json = serde_json::to_string(&job).unwrap();
+        let job_back: PrintJobConfig = serde_json::from_str(&job_json).unwrap();
+        assert_eq!(job_back.name, "Default Job");
+        assert_eq!(job_back.steps_per_layer, 20);
+        assert!((job_back.raft_outset_mm - 0.5).abs() < f64::EPSILON);
     }
 }

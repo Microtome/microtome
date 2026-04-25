@@ -446,9 +446,9 @@ mod tests {
     #[test]
     fn solve_finds_zero_crossing() {
         let s = Sphere::new(1.0);
-        let result = s.solve(Vec3::ZERO, Vec3::new(2.0, 0.0, 0.0));
-        assert!(result.is_some());
-        let p = result.unwrap_or(Vec3::ZERO);
+        let p = s
+            .solve(Vec3::ZERO, Vec3::new(2.0, 0.0, 0.0))
+            .expect("solver converges between inside and outside endpoints");
         assert!((p.x - 1.0).abs() < 0.01, "p.x = {}", p.x);
     }
 
