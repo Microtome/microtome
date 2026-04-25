@@ -59,6 +59,7 @@ pub mod quality;
 pub mod reprojection;
 pub mod spatial;
 pub mod tangent;
+pub mod tri_intersection;
 pub mod vertex_class;
 pub mod vertex_quadric;
 
