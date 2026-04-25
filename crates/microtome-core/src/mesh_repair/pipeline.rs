@@ -191,7 +191,7 @@ impl MeshRepairPipeline {
         normal_fn: impl Fn(Vec3) -> Vec3,
     ) -> Result<(IsoMesh, RepairReport), RepairError> {
         let nf = move |p| normal_fn(p);
-        let ctx = RepairContext::normal_only(&nf);
+        let ctx = RepairContext::new(&nf);
         self.run_with(iso, &ctx)
     }
 
@@ -539,7 +539,7 @@ mod tests {
         let mut pipeline = MeshRepairPipeline::new();
         pipeline.add(CountingPass);
         let nf = |_p: Vec3| Vec3::Z;
-        let ctx = RepairContext::normal_only(&nf);
+        let ctx = RepairContext::new(&nf);
         let report = pipeline.run_in_place(&mut mesh, &ctx).expect("in-place");
         assert_eq!(report.pre_quality.triangle_count, 1);
         assert_eq!(report.post_quality.triangle_count, 1);

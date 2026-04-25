@@ -14,10 +14,11 @@ use super::vertex_class::VertexClassifier;
 
 /// Shared per-run state available to every pass.
 ///
-/// Construction is field-by-field: pick the parts you have, leave the rest at
-/// their defaults via [`new`](Self::new) / [`normal_only`](Self::normal_only).
+/// Construct via [`new`](Self::new) with a normal closure, then chain
 /// [`with_target`](Self::with_target), [`with_classifier`](Self::with_classifier),
-/// and [`with_features`](Self::with_features) provide builder-style chaining.
+/// and [`with_features`](Self::with_features) to attach the optional pieces.
+/// Tests that don't care about any of it can use [`noop`](Self::noop) for
+/// a static-lifetime zero-normal context.
 pub struct RepairContext<'a> {
     /// Closure invoked at writeback time to populate per-vertex normals.
     /// `|p| Vec3::ZERO` is fine if the caller follows up with
@@ -54,14 +55,10 @@ impl RepairContext<'static> {
 }
 
 impl<'a> RepairContext<'a> {
-    /// Builds a context with only a normal function — no target, no extra
-    /// features, default classifier.
-    pub fn normal_only(normal_fn: &'a dyn Fn(Vec3) -> Vec3) -> Self {
-        Self::new(normal_fn)
-    }
-
-    /// Same as [`normal_only`](Self::normal_only); kept as the canonical
-    /// constructor name.
+    /// Canonical constructor. The returned context has no target and no
+    /// feature set, and uses the default [`VertexClassifier`]. Chain
+    /// [`with_target`](Self::with_target) / [`with_classifier`](Self::with_classifier)
+    /// / [`with_features`](Self::with_features) to populate the rest.
     pub fn new(normal_fn: &'a dyn Fn(Vec3) -> Vec3) -> Self {
         Self {
             normal_fn,
@@ -95,9 +92,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normal_only_defaults_target_and_features_to_none() {
+    fn new_defaults_target_and_features_to_none() {
         let nf = |_p: Vec3| Vec3::Z;
-        let ctx = RepairContext::normal_only(&nf);
+        let ctx = RepairContext::new(&nf);
         assert!(ctx.target.is_none());
         assert!(ctx.features.is_none());
     }

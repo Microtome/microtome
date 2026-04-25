@@ -198,7 +198,7 @@ mod tests {
         let pass = NoopPass;
         let mut mesh = HalfEdgeMesh::new();
         let nf = |_p: glam::Vec3| glam::Vec3::Z;
-        let ctx = RepairContext::normal_only(&nf);
+        let ctx = RepairContext::new(&nf);
         let outcome = pass.apply(&mut mesh, &ctx).expect("noop");
         assert_eq!(outcome.name, "noop");
         assert_eq!(outcome.stats, PassStats::default());
@@ -210,7 +210,7 @@ mod tests {
         let iso = IsoMesh::new();
         let pre_len = iso.indices.len();
         let nf = |_p: glam::Vec3| glam::Vec3::Z;
-        let ctx = RepairContext::normal_only(&nf);
+        let ctx = RepairContext::new(&nf);
         let (out_iso, outcome) = pass.pre_construction(iso, &ctx).expect("noop");
         assert_eq!(out_iso.indices.len(), pre_len);
         assert_eq!(outcome.name, "noop");
