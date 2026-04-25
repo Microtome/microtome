@@ -24,4 +24,4 @@ pub use repair_self_intersect::RepairSelfIntersections;
 pub use reproject::ReprojectToSurface;
 pub use simplify_quadric::SimplifyQuadric;
 pub use taubin_smooth::TaubinSmooth;
-pub use weld_vertices::WeldVertices;
+pub use weld_vertices::{EpsilonMode, WeldVertices};

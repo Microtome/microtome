@@ -15,14 +15,22 @@ use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use crate::isosurface::IsoMesh;
 use crate::mesh_repair::RepairContext;
 
-/// Merges spatially-coincident vertices within `epsilon`.
+/// Merge tolerance for [`WeldVertices`]. The two variants are mutually
+/// exclusive; encoding them as an enum prevents the
+/// "named-constructor sets one bool and a caller flips it back" footgun
+/// the previous public-fields layout had.
+#[derive(Debug, Clone, Copy)]
+pub enum EpsilonMode {
+    /// Absolute world-space distance.
+    Absolute(f32),
+    /// Fraction of the input mesh's bbox diagonal.
+    Relative(f32),
+}
+
+/// Merges spatially-coincident vertices within an [`EpsilonMode`] threshold.
 #[derive(Debug, Clone)]
 pub struct WeldVertices {
-    /// Merge tolerance. When `bbox_relative` is `true`, this is a fraction
-    /// of the bbox diagonal; otherwise an absolute world-space distance.
-    pub epsilon: f32,
-    /// Treat `epsilon` as a fraction of the input mesh's bbox diagonal.
-    pub bbox_relative: bool,
+    epsilon: EpsilonMode,
 }
 
 impl Default for WeldVertices {
@@ -30,27 +38,25 @@ impl Default for WeldVertices {
         // 1e-6 × bbox_diag is tighter than DC ever produces unintentionally
         // and looser than the float precision of any reasonable mesh.
         Self {
-            epsilon: 1e-6,
-            bbox_relative: true,
+            epsilon: EpsilonMode::Relative(1e-6),
         }
     }
 }
 
 impl WeldVertices {
-    /// Constructs a pass with absolute `epsilon` (no bbox scaling).
-    pub fn absolute(epsilon: f32) -> Self {
-        Self {
-            epsilon,
-            bbox_relative: false,
-        }
+    /// Constructs a pass with the given epsilon mode.
+    pub fn new(epsilon: EpsilonMode) -> Self {
+        Self { epsilon }
     }
 
-    /// Constructs a pass with bbox-relative `epsilon`.
+    /// Constructs a pass with an absolute world-space epsilon.
+    pub fn absolute(epsilon: f32) -> Self {
+        Self::new(EpsilonMode::Absolute(epsilon))
+    }
+
+    /// Constructs a pass with a bbox-relative epsilon.
     pub fn relative(epsilon: f32) -> Self {
-        Self {
-            epsilon,
-            bbox_relative: true,
-        }
+        Self::new(EpsilonMode::Relative(epsilon))
     }
 }
 
@@ -75,12 +81,13 @@ impl MeshRepairPass for WeldVertices {
         }
 
         // Compute effective epsilon.
-        let eps = if self.bbox_relative {
-            let (min, max) = bbox(&iso.positions);
-            let diag = (max - min).length().max(f32::MIN_POSITIVE);
-            self.epsilon * diag
-        } else {
-            self.epsilon
+        let eps = match self.epsilon {
+            EpsilonMode::Relative(frac) => {
+                let (min, max) = bbox(&iso.positions);
+                let diag = (max - min).length().max(f32::MIN_POSITIVE);
+                frac * diag
+            }
+            EpsilonMode::Absolute(eps) => eps,
         };
         if eps <= 0.0 {
             return Err(PassError::InvalidConfig(format!(
