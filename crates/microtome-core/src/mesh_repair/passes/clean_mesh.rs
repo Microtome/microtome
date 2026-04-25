@@ -117,15 +117,17 @@ impl MeshRepairPass for CleanMesh {
                 }
             }
             WindingMode::PropagateAndFix => {
-                let prop_flips = propagate_winding(&mut iso);
-                if prop_flips > 0 {
-                    outcome.warn(
-                        PassWarningKind::Clamped,
-                        format!(
-                            "propagate_winding flipped {prop_flips} triangles for topological consistency"
-                        ),
-                    );
-                }
+                // Propagate first to put the mesh into a winding-consistent
+                // baseline. Then fix_winding flips any faces whose normals
+                // disagree with the target. Then propagate AGAIN, because
+                // fix_winding can introduce same-direction edges between
+                // newly-flipped neighbours: e.g. F1=(a,b,c) and F2=(b,a,d)
+                // were a proper twin pair (one a→b, one b→a); if fix flips
+                // F1 to (a,c,b), now F1 traverses {a,b} as b→a, same as F2.
+                // The second propagate restores edge consistency, possibly
+                // re-flipping a face fix had aligned. Without it the bad
+                // edge becomes a phantom boundary that FillSmallHoles
+                // fan-fills into a 3-face non-manifold edge downstream.
                 let target = ctx.target.ok_or_else(|| {
                     PassError::PreConstruction(
                         "WindingMode::PropagateAndFix requires a RepairContext target — \
@@ -133,11 +135,16 @@ impl MeshRepairPass for CleanMesh {
                             .into(),
                     )
                 })?;
-                let flips = fix_winding(&mut iso, target);
-                if flips > 0 {
+                let pre_flips = propagate_winding(&mut iso);
+                let fix_flips = fix_winding(&mut iso, target);
+                let post_flips = propagate_winding(&mut iso);
+                let total = pre_flips + fix_flips + post_flips;
+                if total > 0 {
                     outcome.warn(
                         PassWarningKind::Clamped,
-                        format!("flipped winding on {flips} triangles vs target normal"),
+                        format!(
+                            "winding correction: propagate1={pre_flips} fix={fix_flips} propagate2={post_flips} (total {total})"
+                        ),
                     );
                 }
             }

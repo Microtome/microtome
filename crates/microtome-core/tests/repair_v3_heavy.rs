@@ -46,6 +46,18 @@ fn assert_indices_in_range(iso: &IsoMesh) {
     }
 }
 
+/// Asserts that `iso` round-trips through `HalfEdgeMesh::from_iso_mesh`
+/// without errors — i.e. the output is a 2-manifold (modulo legitimate
+/// boundary loops). v4 #3 was about the `fix_winding` step in CleanMesh
+/// silently introducing phantom boundaries that `FillSmallHoles` then
+/// turned into non-manifold edges; the assertion locks that fix in.
+fn assert_round_trips(iso: &IsoMesh) {
+    use microtome_core::mesh_repair::HalfEdgeMesh;
+    if let Err(e) = HalfEdgeMesh::from_iso_mesh(iso) {
+        panic!("output IsoMesh failed half-edge round-trip: {e}");
+    }
+}
+
 /// Counts edges of `iso` whose dihedral exceeds `threshold_deg`. Operates
 /// directly on the index buffer so the count works even when the mesh has
 /// residual non-manifold edges that would prevent half-edge construction.
@@ -190,6 +202,7 @@ fn gear_rail_features_survive_standard_v2() {
             let pipeline = MeshRepairPipeline::standard_v2();
             let (out, _report) = pipeline.run_with(&dc, &ctx).expect("pipeline runs");
             assert_indices_in_range(&out);
+            assert_round_trips(&out);
 
             let post_features = count_feature_edges_iso(&out, 45.0);
             // The pipeline shouldn't blunt creases below ~50 % of the input
@@ -233,6 +246,7 @@ fn bunny_isotropic_remesh_uniformises_edge_length() {
             });
             let (out, _report) = pipeline.run_with(&dc, &ctx).expect("pipeline runs");
             assert_indices_in_range(&out);
+            assert_round_trips(&out);
 
             let (post_mean, post_stddev) = edge_length_stats(&out);
             assert!(post_mean > 0.0);
