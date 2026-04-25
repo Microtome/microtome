@@ -69,7 +69,6 @@ impl MeshRepairPass for ReprojectToSurface {
         let mut outcome = PassOutcome::noop(self.name());
         let median = median_edge_length(mesh);
         let max_disp = self.max_distance * median;
-        let dihedral_threshold = ctx.classifier.feature_dihedral_deg;
 
         for _ in 0..self.iterations {
             let count = mesh.vertices.len();
@@ -109,7 +108,7 @@ impl MeshRepairPass for ReprojectToSurface {
                         Some(t) => project_onto_tangent(raw_disp, t),
                         None => continue,
                     },
-                    VertexClass::Feature => match feature_tangent(mesh, vid, dihedral_threshold) {
+                    VertexClass::Feature => match feature_tangent(mesh, vid, &ctx.classifier) {
                         Some(t) => project_onto_tangent(raw_disp, t),
                         None => continue,
                     },

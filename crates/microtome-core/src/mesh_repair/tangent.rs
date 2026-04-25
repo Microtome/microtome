@@ -9,6 +9,7 @@
 use glam::Vec3;
 
 use super::half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
+use super::vertex_class::VertexClassifier;
 
 /// Returns the unit tangent along the boundary loop at `v`, or `None` if `v`
 /// is not on a boundary or the local boundary is degenerate (sharp 180°
@@ -29,15 +30,17 @@ pub fn boundary_tangent(mesh: &HalfEdgeMesh, v: VertexId) -> Option<Vec3> {
 /// Returns the unit tangent along the feature crease at `v`, or `None` if `v`
 /// has !=2 incident feature edges (corner with 3+, dangling with 1, or non-feature).
 ///
-/// `dihedral_threshold_deg` should match the classifier's threshold so the
-/// edges flagged here agree with the per-vertex classification.
+/// Reads the dihedral threshold from `classifier` so the edges flagged here
+/// always agree with the per-vertex classification — the previous loose-float
+/// parameter let callers pass a stale threshold and silently disagree with
+/// the classifier.
 pub fn feature_tangent(
     mesh: &HalfEdgeMesh,
     v: VertexId,
-    dihedral_threshold_deg: f32,
+    classifier: &VertexClassifier,
 ) -> Option<Vec3> {
     let pos_v = mesh.vertex_position(v);
-    let threshold_rad = dihedral_threshold_deg.to_radians();
+    let threshold_rad = classifier.feature_dihedral_deg.to_radians();
     let mut crease_neighbours: Vec<Vec3> = Vec::new();
     visit_outgoing(mesh, v, |h| {
         let twin = mesh.he_twin(h);
@@ -219,7 +222,7 @@ mod tests {
         let mesh = HalfEdgeMesh::from_iso_mesh(&iso(positions, indices)).expect("crease");
         // Reach into VertexClassifier so we use its threshold (45° default).
         let classifier = VertexClassifier::default();
-        let t = feature_tangent(&mesh, VertexId(1), classifier.feature_dihedral_deg)
+        let t = feature_tangent(&mesh, VertexId(1), &classifier)
             .expect("vertex 1 has two feature edges along the crease (y direction)");
         assert!(
             t.x.abs() < 1e-3 && t.z.abs() < 1e-3,

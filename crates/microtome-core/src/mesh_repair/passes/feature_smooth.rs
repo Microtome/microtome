@@ -27,7 +27,7 @@ use super::super::error::PassError;
 use super::super::half_edge::{FaceId, HalfEdgeMesh, VertexId};
 use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use super::super::tangent::{boundary_tangent, feature_tangent, project_onto_tangent};
-use super::super::vertex_class::VertexClass;
+use super::super::vertex_class::{VertexClass, VertexClassifier};
 use crate::mesh_repair::RepairContext;
 
 /// Smoothing kernel choice.
@@ -131,7 +131,7 @@ impl MeshRepairPass for FeatureSmooth {
                     self.iterations,
                     sigma_spatial,
                     sigma_normal,
-                    ctx.classifier.feature_dihedral_deg,
+                    &ctx.classifier,
                     &mut outcome,
                 );
             }
@@ -222,7 +222,7 @@ fn bilateral_iterations(
     iterations: u32,
     sigma_spatial: f32,
     sigma_normal: f32,
-    dihedral_threshold_deg: f32,
+    classifier: &VertexClassifier,
     outcome: &mut PassOutcome,
 ) {
     let n_verts = mesh.vertices.len();
@@ -269,7 +269,7 @@ fn bilateral_iterations(
                     Some(t) => project_onto_tangent(raw_disp, t),
                     None => continue,
                 },
-                VertexClass::Feature => match feature_tangent(mesh, vid, dihedral_threshold_deg) {
+                VertexClass::Feature => match feature_tangent(mesh, vid, classifier) {
                     Some(t) => project_onto_tangent(raw_disp, t),
                     None => continue,
                 },
