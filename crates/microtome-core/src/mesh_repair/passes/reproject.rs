@@ -10,7 +10,7 @@
 
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
 use super::super::tangent::{boundary_tangent, feature_tangent, project_onto_tangent};
 use super::super::vertex_class::VertexClass;
 use crate::mesh_repair::RepairContext;
@@ -51,6 +51,10 @@ impl Default for ReprojectToSurface {
 impl MeshRepairPass for ReprojectToSurface {
     fn name(&self) -> &'static str {
         "reproject_to_surface"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

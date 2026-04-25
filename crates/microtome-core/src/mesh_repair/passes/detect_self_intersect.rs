@@ -15,7 +15,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::half_edge::{FaceId, HalfEdgeMesh};
-use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
 use super::super::spatial::{Aabb, TriangleBvh};
 use super::super::tri_intersection::tri_tri_intersect;
 use crate::mesh_repair::RepairContext;
@@ -37,6 +37,10 @@ impl Default for DetectSelfIntersections {
 impl MeshRepairPass for DetectSelfIntersections {
     fn name(&self) -> &'static str {
         "detect_self_intersections"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn requires_manifold(&self) -> bool {

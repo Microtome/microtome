@@ -25,7 +25,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::half_edge::{FaceId, HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use super::super::tangent::{boundary_tangent, feature_tangent, project_onto_tangent};
 use super::super::vertex_class::VertexClass;
 use crate::mesh_repair::RepairContext;
@@ -85,6 +85,10 @@ impl Default for FeatureSmooth {
 impl MeshRepairPass for FeatureSmooth {
     fn name(&self) -> &'static str {
         "feature_smooth"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

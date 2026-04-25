@@ -10,7 +10,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeId, HalfEdgeMesh};
-use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
 use crate::mesh_repair::RepairContext;
 
 /// Fills boundary loops up to a configurable perimeter budget.
@@ -37,6 +37,10 @@ impl Default for FillSmallHoles {
 impl MeshRepairPass for FillSmallHoles {
     fn name(&self) -> &'static str {
         "fill_small_holes"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

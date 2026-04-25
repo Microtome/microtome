@@ -13,7 +13,7 @@
 
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeId, HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use super::super::vertex_class::VertexClass;
 use super::angle_relax::AngleRelax;
 use super::reproject::ReprojectToSurface;
@@ -40,6 +40,10 @@ impl Default for IsotropicRemesh {
 impl MeshRepairPass for IsotropicRemesh {
     fn name(&self) -> &'static str {
         "isotropic_remesh"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn reclassifies(&self) -> bool {

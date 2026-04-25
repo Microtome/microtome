@@ -16,7 +16,7 @@ use glam::Vec3;
 
 use super::super::error::{HalfEdgeOpError, PassError};
 use super::super::half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
 use super::super::vertex_class::VertexClass;
 use super::super::vertex_quadric::{QuadricWeights, VertexQuadric, accumulate_for_mesh};
 use crate::mesh_repair::RepairContext;
@@ -53,6 +53,10 @@ impl Default for SimplifyQuadric {
 impl MeshRepairPass for SimplifyQuadric {
     fn name(&self) -> &'static str {
         "simplify_quadric"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn reclassifies(&self) -> bool {

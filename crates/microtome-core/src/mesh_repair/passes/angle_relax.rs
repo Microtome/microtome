@@ -10,7 +10,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use super::super::vertex_class::VertexClass;
 use crate::mesh_repair::RepairContext;
 
@@ -37,6 +37,10 @@ impl Default for AngleRelax {
 impl MeshRepairPass for AngleRelax {
     fn name(&self) -> &'static str {
         "angle_relax"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

@@ -7,7 +7,7 @@
 
 use super::super::error::PassError;
 use super::super::half_edge::{FaceId, HalfEdgeId, HalfEdgeMesh};
-use super::super::pass::{MeshRepairPass, PassOutcome, PassWarningKind};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage, PassWarningKind};
 use super::super::quality::QualityThresholds;
 use crate::mesh_repair::RepairContext;
 
@@ -39,6 +39,10 @@ impl Default for RemoveSlivers {
 impl MeshRepairPass for RemoveSlivers {
     fn name(&self) -> &'static str {
         "remove_slivers"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

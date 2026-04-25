@@ -54,10 +54,11 @@ pub trait MeshRepairPass: Send + Sync {
         Ok((iso, PassOutcome::noop(self.name())))
     }
 
-    /// Returns which pipeline stage this pass runs in.
-    fn stage(&self) -> PassStage {
-        PassStage::HalfEdge
-    }
+    /// Returns which pipeline stage this pass runs in. Implementations
+    /// must declare this explicitly: a missing override used to default to
+    /// `HalfEdge` and silently mismatch with a `pre_construction` override,
+    /// which produced runtime no-ops instead of compile-time errors.
+    fn stage(&self) -> PassStage;
 
     /// Whether this pass requires its input to be manifold.
     ///
@@ -163,10 +164,13 @@ mod tests {
         fn name(&self) -> &'static str {
             "noop"
         }
+        fn stage(&self) -> PassStage {
+            PassStage::HalfEdge
+        }
     }
 
     #[test]
-    fn default_stage_is_halfedge() {
+    fn declared_stage_is_halfedge() {
         let pass = NoopPass;
         assert_eq!(pass.stage(), PassStage::HalfEdge);
     }

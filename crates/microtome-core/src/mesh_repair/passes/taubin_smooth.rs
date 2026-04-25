@@ -9,7 +9,7 @@ use glam::Vec3;
 
 use super::super::error::PassError;
 use super::super::half_edge::{HalfEdgeMesh, VertexId};
-use super::super::pass::{MeshRepairPass, PassOutcome};
+use super::super::pass::{MeshRepairPass, PassOutcome, PassStage};
 use crate::mesh_repair::RepairContext;
 
 /// Taubin-style Laplacian smoothing.
@@ -40,6 +40,10 @@ impl Default for TaubinSmooth {
 impl MeshRepairPass for TaubinSmooth {
     fn name(&self) -> &'static str {
         "taubin_smooth"
+    }
+
+    fn stage(&self) -> PassStage {
+        PassStage::HalfEdge
     }
 
     fn apply(

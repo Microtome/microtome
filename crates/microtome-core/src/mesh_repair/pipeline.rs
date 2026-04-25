@@ -419,6 +419,9 @@ mod tests {
         fn name(&self) -> &'static str {
             "failing"
         }
+        fn stage(&self) -> PassStage {
+            PassStage::HalfEdge
+        }
         fn apply(
             &self,
             _mesh: &mut HalfEdgeMesh,
@@ -435,6 +438,9 @@ mod tests {
     impl MeshRepairPass for CountingPass {
         fn name(&self) -> &'static str {
             "counting"
+        }
+        fn stage(&self) -> PassStage {
+            PassStage::HalfEdge
         }
         fn apply(
             &self,
